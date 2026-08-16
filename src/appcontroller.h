@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QScopedPointer>
 #include <QStringList>
@@ -10,6 +11,8 @@
 #include "config.h"
 #include "history.h"
 #include "vault.h"
+
+class QEvent;
 
 // Everything the interface talks to: the database list, the open vault, the
 // filtered entries and the transient status line. The QML side holds no
@@ -40,6 +43,10 @@ class AppController : public QObject {
 
 public:
     explicit AppController(const AppConfig &config, QObject *parent = nullptr);
+
+    // Application-wide activity watch for the auto-lock timer below: every
+    // key/mouse event, anywhere in the app, counts as "still in use".
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
     QString stage() const { return m_stage; }
     bool busy() const { return m_busy; }
@@ -113,9 +120,18 @@ private:
     void applyEntryFilter();
     void openVault(const DbRef &ref, const Secret &secret);
     void showClipboardMessage(const QString &text);
+    void lock();
 
     AppConfig m_config;
     History m_history;
+
+    // Auto-lock by inactivity: `m_config.lockMinutes` unset disables it
+    // entirely (event filter never installed, timer never started).
+    // `m_lastActivity` restarts on every key/mouse event app-wide (see
+    // eventFilter); `m_lockTimer` periodically compares it against the
+    // configured timeout.
+    QElapsedTimer m_lastActivity;
+    QTimer m_lockTimer;
 
     QString m_stage = QStringLiteral("databases");
     bool m_busy = false;

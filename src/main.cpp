@@ -15,6 +15,7 @@
 #include "i18n.h"
 #include "kdbx2pass.h"
 #include "palette.h"
+#include "sessionlock.h"
 #include "systemtheme.h"
 
 namespace {
@@ -126,6 +127,13 @@ int main(int argc, char *argv[]) {
     applyInterfaceFont(systemTheme.textScale());
     QObject::connect(&systemTheme, &SystemTheme::textScaleChanged, &app,
                      [applyInterfaceFont](qreal textScale) { applyInterfaceFont(textScale); });
+
+    // Closes omapass entirely when the desktop session locks — an unlocked
+    // vault should never sit behind the lock screen. Auto-lock by
+    // inactivity (AppController) instead returns to the database list, a
+    // softer response for a machine nobody else can reach.
+    SessionLockWatcher sessionLock(&app);
+    QObject::connect(&sessionLock, &SessionLockWatcher::locked, &app, &QGuiApplication::quit);
 
     AppController controller(config);
     Strings strings;
