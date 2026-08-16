@@ -5,12 +5,19 @@
 #include "i18n.h"
 #include "passstore.h"
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QRect>
 #include <QSettings>
 
 namespace {
+
+// Como o timer só precisa perceber o estouro do timeout dentro de uma folga
+// perceptível (o padrão é de minutos), não há necessidade de checar a cada
+// segundo — 5s mantém o custo irrelevante sem atrasar visivelmente o lock.
+constexpr int lockCheckIntervalMs = 5000;
 
 const auto windowGeometrySetting = QStringLiteral("window/geometry");
 
@@ -42,6 +49,46 @@ AppController::AppController(const AppConfig &config, QObject *parent)
     // its unlock prompt.
     if (m_databases.size() == 1)
         selectDatabase(0);
+
+    if (m_config.lockMinutes) {
+        m_lastActivity.start();
+        qApp->installEventFilter(this);
+
+        m_lockTimer.setInterval(lockCheckIntervalMs);
+        connect(&m_lockTimer, &QTimer::timeout, this, [this]() {
+            if (m_lastActivity.hasExpired(qint64(*m_config.lockMinutes) * 60 * 1000))
+                lock();
+        });
+        m_lockTimer.start();
+    }
+}
+
+bool AppController::eventFilter(QObject *watched, QEvent *event) {
+    switch (event->type()) {
+    case QEvent::KeyPress:
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseMove:
+    case QEvent::Wheel:
+    case QEvent::TouchBegin:
+        m_lastActivity.restart();
+        break;
+    default:
+        break;
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void AppController::lock() {
+    if (m_vault.isNull())
+        return; // nada desbloqueado — nada a travar (tela de bancos, por exemplo)
+
+    m_vault.reset();
+    m_query.clear();
+    refreshEntries();
+
+    m_stage = QStringLiteral("databases");
+    emit stageChanged();
+    refreshDatabases();
 }
 
 QVariantList AppController::databases() const {

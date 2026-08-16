@@ -16,6 +16,7 @@ HEADERS += \
     src/passstore.h \
     src/process.h \
     src/secret.h \
+    src/sessionlock.h \
     src/systemtheme.h \
     src/vault.h
 
@@ -32,6 +33,7 @@ SOURCES += \
     src/passstore.cpp \
     src/process.cpp \
     src/secret.cpp \
+    src/sessionlock.cpp \
     src/systemtheme.cpp \
     src/vault.cpp
 

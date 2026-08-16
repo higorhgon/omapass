@@ -136,12 +136,14 @@ texto puro durante o processo.
 - Senhas e passphrases circulam em um tipo `Secret`, que mantém uma cópia própria e sobrescreve a memória ao ser destruído. A exceção inevitável é o campo de senha do formulário de edição: um campo editável precisa do texto em claro enquanto está na tela.
 - Ao copiar uma senha, o conteúdo é marcado como sensível para o `wl-clipboard` (mime `x-kde-passwordManagerHint`, que gerenciadores como o cliphist respeitam para não gravar no histórico) e o clipboard é limpo automaticamente após 10 segundos, com contagem regressiva visível na interface.
 - **`~/.config/omapass/history`** guarda só HMACs (com chave aleatória local em `.history_key`, 0600) e timestamps de uso, nunca o conteúdo das entradas — mas ainda revela para outro usuário local com acesso ao arquivo quantas entradas existem e o padrão de uso.
+- **Auto-lock por inatividade**: por padrão, 10 minutos sem uso travam o banco desbloqueado — o `Vault` (senha/passphrase incluída) é descartado da memória e a interface volta pra tela de bancos, pedindo pra desbloquear de novo. Ajustável (ou desativável) via `lock_minutes` no `config.toml` (veja [Configuração](#configuração)).
+- **Fecha ao travar a tela do sistema**: quando a sessão do desktop é bloqueada, o omapass fecha por completo (não só trava) — não fica um banco desbloqueado exposto atrás da tela de bloqueio. Reage tanto ao sinal `Lock` do logind (GNOME, KDE, qualquer setup com `loginctl lock-session`) quanto, especificamente no Hyprland/Omarchy — que não passa pelo logind pra travar a tela — sondando `omarchy-hyprland-session-locked` a cada 2s. Sem nenhum dos dois disponíveis, esse fechamento automático simplesmente não acontece (o auto-lock por inatividade acima continua funcionando normalmente).
 
 ## Configuração
 
 Arquivos em `~/.config/omapass/`:
 
-- `config.toml` — caminho de busca, recency, tema ativo e idioma
+- `config.toml` — caminho de busca, recency, tema ativo, idioma e tempo de auto-lock
 - `themes/*.toml` — sobreposições de cores
 
 > **Vindo do fpass:** se `~/.config/omapass` não existir e `~/.config/fpass`
@@ -161,7 +163,10 @@ path = "~/docs/keepass"
 recency = true
 theme = "default"
 language = "pt-BR"
+lock_minutes = 10
 ```
+
+`lock_minutes` define, em minutos, quanto tempo de inatividade até o banco desbloqueado ser travado (a interface volta pra tela de bancos, pedindo a senha de novo). Ausente, o padrão é 10; `lock_minutes = false` desativa o auto-lock por completo, voltando ao comportamento de sempre desbloqueado enquanto o omapass está aberto.
 
 ### Cores
 

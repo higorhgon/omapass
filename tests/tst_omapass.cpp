@@ -73,6 +73,27 @@ private slots:
         QCOMPARE(values.value(QStringLiteral("colors.Title")), QStringLiteral("#00AAAA"));
     }
 
+    void lockMinutesDefaultsToTenWhenAbsent() {
+        QCOMPARE(Config::parseLockMinutes(QString()), std::optional<int>(10));
+    }
+
+    void lockMinutesFalseDisablesAutoLock() {
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("false")), std::optional<int>());
+    }
+
+    void lockMinutesAcceptsAPositiveInteger() {
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("30")), std::optional<int>(30));
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("1")), std::optional<int>(1));
+    }
+
+    void lockMinutesFallsBackToDefaultOnInvalidValues() {
+        const std::optional<int> tenMinutes(10);
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("0")), tenMinutes);
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("-5")), tenMinutes);
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("true")), tenMinutes);
+        QCOMPARE(Config::parseLockMinutes(QStringLiteral("nunca")), tenMinutes);
+    }
+
     void translationsInterpolateArguments() {
         const QString text = I18n::t(QStringLiteral("cli.version"), QStringLiteral("version"),
                                      QStringLiteral("9.9.9"));

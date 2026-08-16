@@ -83,6 +83,21 @@ QHash<QString, QString> readFlatToml(const QString &path) {
     return values;
 }
 
+std::optional<int> parseLockMinutes(const QString &raw) {
+    constexpr int defaultMinutes = 10;
+    if (raw.isEmpty())
+        return defaultMinutes;
+    if (raw == QStringLiteral("false"))
+        return std::nullopt;
+
+    bool ok = false;
+    const int minutes = raw.toInt(&ok);
+    if (ok && minutes > 0)
+        return minutes;
+
+    return defaultMinutes;
+}
+
 QString resolveLanguage(const QString &configured, const QString &langEnv, const QString &lcAllEnv) {
     if (configured == QStringLiteral("en") || configured == QStringLiteral("pt-BR"))
         return configured;
@@ -116,7 +131,10 @@ void ensureConfigExists() {
         << "path = \"~/\"\n"
         << "recency = true\n"
         << "theme = \"default\"\n"
-        << "language = \"auto\"\n";
+        << "language = \"auto\"\n"
+        << "# Minutes of inactivity before the open vault is locked (back to the\n"
+        << "# database list, asking to unlock again). \"false\" disables auto-lock.\n"
+        << "lock_minutes = 10\n";
 }
 
 AppConfig load() {
@@ -143,6 +161,8 @@ AppConfig load() {
     config.language = resolveLanguage(raw.value(QStringLiteral("general.language")),
                                       qEnvironmentVariable("LANG"),
                                       qEnvironmentVariable("LC_ALL"));
+
+    config.lockMinutes = parseLockMinutes(raw.value(QStringLiteral("general.lock_minutes")));
 
     if (config.themeName == QStringLiteral("default"))
         return config;
