@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Omapass
+GenericName=Password Manager
+Comment=Password manager for KeePassXC and pass
+Exec=omapass
+Icon=omapass
+Terminal=false
+Categories=Utility;Security;
+Keywords=password;pass;keepassxc;kdbx;vault;secrets;
+StartupWMClass=omapass

@@ -1,6 +1,9 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR := $(DESTDIR)$(PREFIX)/bin
+DATADIR := $(DESTDIR)$(PREFIX)/share
+DESKTOPDIR := $(DATADIR)/applications
+ICONDIR := $(DATADIR)/icons/hicolor/scalable/apps
 
 TARGET := omapass
 BUILD_DIR := build
@@ -18,10 +21,14 @@ test:
 
 install: build
 	install -Dm755 $(BUILD_DIR)/$(TARGET) $(BINDIR)/$(TARGET)
+	install -Dm644 $(TARGET).desktop $(DESKTOPDIR)/$(TARGET).desktop
+	install -Dm644 icons/$(TARGET).svg $(ICONDIR)/$(TARGET).svg
 	@echo "omapass instalado em $(BINDIR)/$(TARGET)"
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
+	rm -f $(DESKTOPDIR)/$(TARGET).desktop
+	rm -f $(ICONDIR)/$(TARGET).svg
 	@echo "omapass removido de $(BINDIR)/$(TARGET)"
 
 clean:
