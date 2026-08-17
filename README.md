@@ -51,10 +51,24 @@ quando não está instalado.
 ```bash
 git clone https://github.com/<usuario>/omapass.git
 cd omapass
-./bin/build
+make
 ```
 
-O binário fica em `build/omapass`. Os testes rodam com `./bin/test`.
+O binário fica em `build/omapass`. Os testes rodam com `make test`.
+
+Para instalar no sistema (padrão `PREFIX=/usr/local`):
+
+```bash
+sudo make install
+```
+
+Para desinstalar:
+
+```bash
+sudo make uninstall
+```
+
+`PREFIX` e `DESTDIR` são configuráveis, por exemplo `make install PREFIX=/usr DESTDIR="$pkgdir"` para empacotamento.
 
 ## Uso
 
