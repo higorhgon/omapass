@@ -13,12 +13,28 @@ else
   exit 1
 fi
 
+if ! command -v cmake >/dev/null 2>&1; then
+  echo "cmake is required to build the vendored keepassxc-cli." >&2
+  exit 1
+fi
+
 JOBS="$(nproc 2>/dev/null || echo 1)"
 
+if [ ! -f "$ROOT/vendor/keepassxc/CMakeLists.txt" ]; then
+  git -C "$ROOT" submodule update --init vendor/keepassxc
+fi
+
+KEEPASSXC_CLI_BUILD_DIR="$BUILD_DIR/vendor-keepassxc"
+cmake -S "$ROOT/vendor/keepassxc" -B "$KEEPASSXC_CLI_BUILD_DIR" \
+  -DKPXC_CLI_ONLY=ON -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF -DKPXC_FEATURE_DOCS=OFF
+cmake --build "$KEEPASSXC_CLI_BUILD_DIR" -j"$JOBS" --target keepassxc-cli
+
 mkdir -p "$BUILD_DIR"
+cp "$KEEPASSXC_CLI_BUILD_DIR/src/cli/keepassxc-cli" "$BUILD_DIR/keepassxc-cli"
+
 cd "$BUILD_DIR"
 
 "$QMAKE" "$ROOT/omapass.pro"
 make -j"$JOBS"
 
-echo "Built $BUILD_DIR/omapass"
+echo "Built $BUILD_DIR/omapass and $BUILD_DIR/keepassxc-cli"

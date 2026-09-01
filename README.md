@@ -34,7 +34,8 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 
 Para bancos **KeePassXC**:
 
-- [KeePassXC](https://keepassxc.org/) com `keepassxc-cli` disponível no PATH
+- `./bin/build` já compila um `keepassxc-cli` a partir do submodule vendorizado em `vendor/keepassxc` (um fork somente-CLI do KeePassXC) e `sudo make install` o deixa no PATH junto do `omapass` — não é preciso instalar o KeePassXC completo. Isso exige, na máquina que compila: `cmake`, Botan, ZLIB, Minizip, PCSC, libusb, readline e Qt 6 (Core/Concurrent/Gui/Test).
+- Alternativamente, qualquer `keepassxc-cli` (do pacote oficial do KeePassXC, por exemplo) já disponível no PATH também funciona.
 
 Para bancos **pass**:
 
@@ -49,18 +50,26 @@ quando não está instalado.
 ## Instalação
 
 ```bash
-git clone https://github.com/<usuario>/omapass.git
+git clone --recurse-submodules https://github.com/<usuario>/omapass.git
 cd omapass
 make
 ```
 
-O binário fica em `build/omapass`. Os testes rodam com `make test`.
+(Se já clonou sem `--recurse-submodules`, rode `git submodule update --init` antes de `make`.)
+
+O binário fica em `build/omapass`, e o `keepassxc-cli` compilado do submodule em
+`build/keepassxc-cli`. Os testes rodam com `make test`.
 
 Para instalar no sistema (padrão `PREFIX=/usr/local`):
 
 ```bash
 sudo make install
 ```
+
+Isso também instala o `keepassxc-cli` compilado do submodule em `$(BINDIR)`; se
+o KeePassXC completo já estiver instalado no sistema, essa cópia pode
+sombreá-lo no PATH dependendo da ordem de `$PATH` — é o comportamento
+pretendido (usar a variante somente-CLI no lugar da instalação completa).
 
 Para desinstalar:
 
