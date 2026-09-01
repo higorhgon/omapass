@@ -1,2 +1,7 @@
 build/
 build-tests/
+
+# Submodules em vendor/ (dependências de build) seguem rastreados normalmente
+# via .gitmodules; isto só evita que buscas/exploradores baseados em ripgrep
+# (VS Code, `rg`) varram e listem o conteúdo deles.
+vendor/
