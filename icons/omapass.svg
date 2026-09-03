@@ -2,7 +2,7 @@
   <rect width="128" height="128" rx="24" fill="#101010"/>
   <circle cx="48" cy="64" r="22" fill="#f5f1e8"/>
   <circle cx="48" cy="64" r="9" fill="#101010"/>
-  <rect x="68" y="58" width="34" height="12" rx="3" fill="#f5f1e8"/>
-  <rect x="86" y="70" width="8" height="10" fill="#f5f1e8"/>
-  <rect x="98" y="70" width="8" height="14" fill="#f5f1e8"/>
+  <rect x="68" y="58" width="42" height="12" rx="3" fill="#f5f1e8"/>
+  <path d="M86,70 H94 V75 A2,2 0 0 1 92,77 H88 A2,2 0 0 1 86,75 Z" fill="#f5f1e8"/>
+  <path d="M98,70 H106 V78 A2,2 0 0 1 104,80 H100 A2,2 0 0 1 98,78 Z" fill="#f5f1e8"/>
 </svg>
