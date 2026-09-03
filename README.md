@@ -66,6 +66,12 @@ Para instalar no sistema (padrão `PREFIX=/usr/local`):
 sudo make install
 ```
 
+ou para instalar em `~/.local`:
+
+```bash
+make install PREFIX="$HOME/.local"
+```
+
 Isso também instala o `keepassxc-cli` compilado do submodule em `$(BINDIR)`; se
 o KeePassXC completo já estiver instalado no sistema, essa cópia pode
 sombreá-lo no PATH dependendo da ordem de `$PATH` — é o comportamento
