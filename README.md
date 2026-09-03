@@ -50,7 +50,7 @@ quando não está instalado.
 ## Instalação
 
 ```bash
-git clone --recurse-submodules https://github.com/<usuario>/omapass.git
+git clone --recurse-submodules https://github.com/higorhgon/omapass.git
 cd omapass
 make
 ```
