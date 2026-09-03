@@ -1,4 +1,4 @@
 [submodule "vendor/keepassxc"]
 	path = vendor/keepassxc
-	url = git@github.com:higorhgon/keepassxc-cli.git
+	url = https://github.com/higorhgon/keepassxc-cli.git
 	branch = cli-only
