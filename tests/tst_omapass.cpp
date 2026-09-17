@@ -6,6 +6,7 @@
 #include "bwcrypto.h"
 #include "config.h"
 #include "filter.h"
+#include "generator.h"
 #include "history.h"
 #include "i18n.h"
 #include "kdbx2pass.h"
@@ -584,6 +585,86 @@ private slots:
         QVERIFY(BwPin::weakWarning(QStringLiteral("123456")).isEmpty());
         // Nothing flashes up while a PIN is still being typed.
         QVERIFY(BwPin::weakWarning(QStringLiteral("12")).isEmpty());
+    }
+
+    void generatorArgumentsFollowTheOptions() {
+        GeneratorOptions options;
+        options.length = 24;
+        options.special = false;
+        options.excludeSimilar = true;
+        options.exclude = QStringLiteral("aeiou");
+
+        const QStringList args = Generator::arguments(options, QString());
+        QCOMPARE(args.first(), QStringLiteral("generate"));
+        QVERIFY(args.contains(QStringLiteral("-L")));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-L")) + 1), QStringLiteral("24"));
+        QVERIFY(args.contains(QStringLiteral("-l")));
+        QVERIFY(args.contains(QStringLiteral("-U")));
+        QVERIFY(args.contains(QStringLiteral("-n")));
+        QVERIFY(!args.contains(QStringLiteral("-s")));
+        QVERIFY(args.contains(QStringLiteral("--exclude-similar")));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-x")) + 1), QStringLiteral("aeiou"));
+    }
+
+    void generatorCustomSetReplacesTheClasses() {
+        GeneratorOptions options;
+        options.custom = QStringLiteral("abc123");
+
+        const QStringList args = Generator::arguments(options, QString());
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-c")) + 1), QStringLiteral("abc123"));
+        QVERIFY(!args.contains(QStringLiteral("-l")));
+        QVERIFY(!args.contains(QStringLiteral("-U")));
+    }
+
+    void generatorPassphraseAsksForWordsAndWordlist() {
+        GeneratorOptions options;
+        options.passphrase = true;
+        options.words = 7;
+
+        const QStringList args = Generator::arguments(options, QStringLiteral("/tmp/eff.wordlist"));
+        QCOMPARE(args.first(), QStringLiteral("diceware"));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-W")) + 1), QStringLiteral("7"));
+        QCOMPARE(args.at(args.indexOf(QStringLiteral("-w")) + 1), QStringLiteral("/tmp/eff.wordlist"));
+    }
+
+    void generatorWordlistFollowsConfigAndLanguage() {
+        const QString english = QStringLiteral("eff_large.wordlist");
+
+        // "auto": the interface language first, English behind it.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("auto"), QStringLiteral("pt-BR")),
+                 QStringList({QStringLiteral("pt-BR.wordlist"), english}));
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("auto"), QStringLiteral("en")),
+                 QStringList({english}));
+
+        // A named list still falls back to English; "en" is the English one.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("pt-BR"), QStringLiteral("en")),
+                 QStringList({QStringLiteral("pt-BR.wordlist"), english}));
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("en"), QStringLiteral("pt-BR")),
+                 QStringList({english}));
+
+        // A path is taken as it is, with nothing behind it.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("/tmp/minha.txt"), QStringLiteral("pt-BR")),
+                 QStringList({QStringLiteral("/tmp/minha.txt")}));
+
+        QVERIFY(!Generator::wordlistDirectories().isEmpty());
+    }
+
+    void generatorOptionsAreBounded() {
+        GeneratorOptions options;
+        options.length = 2;
+        options.words = 99;
+        options.lower = options.upper = options.numbers = options.special = false;
+
+        const GeneratorOptions bounded = Generator::normalize(options);
+        QCOMPARE(bounded.length, 4);
+        QCOMPARE(bounded.words, 16);
+        // Nothing selected would leave keepassxc-cli with no characters.
+        QVERIFY(bounded.lower);
+
+        GeneratorOptions custom;
+        custom.custom = QStringLiteral("xyz");
+        custom.lower = custom.upper = custom.numbers = custom.special = false;
+        QVERIFY(!Generator::normalize(custom).lower);
     }
 
     void secretsWipeTheirOwnStorage() {

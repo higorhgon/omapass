@@ -5,7 +5,8 @@
         <file alias="EntriesPage.qml">EntriesPage.qml</file>
         <file alias="ListPane.qml">ListPane.qml</file>
         <file alias="PinSetupModal.qml">PinSetupModal.qml</file>
-        <file alias="RevealBox.qml">RevealBox.qml</file>
+        <file alias="CheckOption.qml">CheckOption.qml</file>
+        <file alias="GeneratorModal.qml">GeneratorModal.qml</file>
         <file alias="Modal.qml">Modal.qml</file>
         <file alias="Field.qml">Field.qml</file>
         <file alias="SuggestionList.qml">SuggestionList.qml</file>
