@@ -1,15 +1,14 @@
 import QtQuick
 import QtQuick.Controls
 
-// The "show the secret" tick used next to password and PIN fields: the
-// Basic style's own checkbox is drawn against its palette instead of the
-// Omarchy one, so the indicator is drawn here.
+// A tick box in the Omarchy palette — the Basic style draws its own against
+// its palette instead. Used for "show the secret" next to password fields
+// and for the generator's options.
 CheckBox {
     id: root
 
     readonly property real s: systemTheme.textScale
 
-    text: i18n.t("ui.show_password")
     font.pixelSize: Math.round(12 * s)
     // Never steals the Tab order from the fields around it.
     focusPolicy: Qt.NoFocus

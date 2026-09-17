@@ -10,11 +10,12 @@ INCLUDEPATH += ../src
 SOURCES += \
     tst_omapass.cpp \
     ../src/bitwardenjson.cpp \
-    ../src/bwcache.cpp \
     ../src/bwcrypto.cpp \
     ../src/bwpin.cpp \
+    ../src/bwcache.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
+    ../src/generator.cpp \
     ../src/history.cpp \
     ../src/i18n.cpp \
     ../src/kdbx2pass.cpp \
@@ -29,6 +30,7 @@ HEADERS += \
     ../src/bwpin.h \
     ../src/config.h \
     ../src/filter.h \
+    ../src/generator.h \
     ../src/history.h \
     ../src/i18n.h \
     ../src/kdbx2pass.h \

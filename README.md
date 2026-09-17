@@ -22,6 +22,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Modal integrado para desbloqueio de banco com validação de senha/passphrase
 - Criação de bancos pela própria interface: KeePassXC (nome + senha), pass (diretório com autocomplete + escolha de chave GPG existente) ou conta Bitwarden (login)
 - Listagem, adição, edição, exclusão e renomeação de grupos/entradas
+- Gerador de senhas e de frases (diceware) em modal próprio, que copia ou preenche o campo Senha do formulário
 - Modal de ajuda com todos os atalhos (`Ctrl+?`)
 - Motor de frecency (frequência + recência) para ordenação inteligente
 - Cores vindas do tema do Omarchy, com sobreposição opcional por tema próprio em TOML
@@ -217,6 +218,27 @@ senha mestra uma única vez. Username/URL/Notas viram metadados nas linhas
 seguintes à senha, no formato convencional do pass; nada é gravado em disco em
 texto puro durante o processo.
 
+### Gerando senhas
+
+Com um banco aberto, `Ctrl+G` (ou **Gerar senha** no menu de ações) abre o gerador. Ele tem
+dois modos:
+
+- **Senha** — tamanho, maiúsculas, minúsculas, números, símbolos, evitar caracteres parecidos
+  (`l/1/I`, `O/0`), excluir caracteres específicos e um conjunto personalizado, que substitui
+  as classes.
+- **Frase** — número de palavras e separador, sorteadas da lista EFF (7.772 palavras).
+
+A senha é gerada de novo a cada ajuste, e `Ctrl+R` sorteia outra sem mudar nada. `Enter` copia
+para a área de transferência, com a mesma limpeza automática de 10 segundos das entradas. Dentro
+do formulário de entrada, `Ctrl+G` sobre o campo Senha abre o mesmo gerador e `Enter` preenche o
+campo em vez de copiar. As escolhas ficam guardadas para a próxima vez.
+
+O gerador é sempre o `keepassxc-cli`, mesmo em bancos do pass ou do Bitwarden: ele responde em
+cerca de 10 ms, enquanto o `bw generate` leva uns 2,5 s por senha (é um programa Node) e o
+`pass generate` não gera sem criar uma entrada. O modo frase precisa da lista de palavras, que o
+`make install` copia para `$(PREFIX)/share/omapass/wordlists`; rodando direto de `build/`, ela é
+lida do submodule. Sem a lista, o modo frase não aparece.
+
 ## Segurança
 
 - **Backend KeePassXC**: a senha da entrada é sempre passada ao `keepassxc-cli` via stdin, mas `keepassxc-cli` não aceita usuário/URL/notas por stdin — esses campos vão como argumentos (`-u`, `--url`, `--notes`) em `add`/`edit`. Isso é uma limitação do `keepassxc-cli`, não do omapass: durante a execução do processo, outro usuário local com acesso a `/proc/<pid>/cmdline` (ou `ps aux`) pode ler esses valores. A senha em si nunca passa por argv. O backend **pass** não tem essa limitação — toda a entrada (senha e metadados) é enviada por stdin ao `gpg`/`pass insert`.
@@ -315,6 +337,7 @@ Lista completa disponível a qualquer momento com `Ctrl+?`. Os mais essenciais:
 | `Tab` | Ver detalhes da entrada |
 | `Espaço` | Menu de ações |
 | `Ctrl+A` / `Ctrl+E` / `Ctrl+X` | Adicionar / editar / excluir (na tela de bancos, `Ctrl+X` sai de uma conta Bitwarden) |
+| `Ctrl+G` | Gerar senha (na lista, ou sobre o campo Senha do formulário) |
 | `ESC` / `q` | Cancelar / Sair |
 | `Ctrl+Q` | Sair do programa |
 | `Ctrl+C` | Sair do programa (fora de campos de texto, onde copia) |

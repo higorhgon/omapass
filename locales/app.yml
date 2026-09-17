@@ -31,6 +31,70 @@ cli.kdbx2pass_usage:
   pt-BR: "Uso: omapass --kdbx2pass <banco.kdbx> <KEYID1> [KEYID2...]"
   en: "Usage: omapass --kdbx2pass <database.kdbx> <KEYID1> [KEYID2...]"
 
+generator.title:
+  pt-BR: " Gerar Senha "
+  en: " Generate Password "
+generator.mode_password:
+  pt-BR: "Senha"
+  en: "Password"
+generator.mode_passphrase:
+  pt-BR: "Gerar frase de palavras"
+  en: "Generate a passphrase"
+generator.length_label:
+  pt-BR: " Tamanho "
+  en: " Length "
+generator.words_label:
+  pt-BR: " Palavras "
+  en: " Words "
+generator.separator_label:
+  pt-BR: " Separador "
+  en: " Separator "
+generator.separator_space:
+  pt-BR: "espaço"
+  en: "space"
+generator.lower:
+  pt-BR: "Minúsculas (a-z)"
+  en: "Lowercase (a-z)"
+generator.upper:
+  pt-BR: "Maiúsculas (A-Z)"
+  en: "Uppercase (A-Z)"
+generator.numbers:
+  pt-BR: "Números (0-9)"
+  en: "Numbers (0-9)"
+generator.special:
+  pt-BR: "Símbolos (!@#$…)"
+  en: "Symbols (!@#$…)"
+generator.exclude_similar:
+  pt-BR: "Evitar caracteres parecidos (l/1/I, O/0)"
+  en: "Avoid look-alike characters (l/1/I, O/0)"
+generator.exclude_label:
+  pt-BR: " Excluir caracteres "
+  en: " Exclude characters "
+generator.custom_label:
+  pt-BR: " Conjunto personalizado (substitui as classes) "
+  en: " Custom set (replaces the classes above) "
+generator.footer_copy:
+  pt-BR: "ENTER: Copiar | CTRL+R: Gerar outra | TAB: Navegar | ESC: Fechar"
+  en: "ENTER: Copy | CTRL+R: Generate another | TAB: Move | ESC: Close"
+generator.footer_use:
+  pt-BR: "ENTER: Usar na entrada | CTRL+R: Gerar outra | TAB: Navegar | ESC: Cancelar"
+  en: "ENTER: Use in the entry | CTRL+R: Generate another | TAB: Move | ESC: Cancel"
+generator.copied:
+  pt-BR: "Senha gerada copiada!"
+  en: "Generated password copied!"
+generator.error:
+  pt-BR: "Não foi possível gerar a senha."
+  en: "Could not generate the password."
+generator.no_wordlist:
+  pt-BR: "Lista de palavras não encontrada; o modo frase está indisponível."
+  en: "Wordlist not found; passphrase mode is unavailable."
+generator.help:
+  pt-BR: "Gerar senha"
+  en: "Generate a password"
+generator.context_generate:
+  pt-BR: "Gerar senha"
+  en: "Generate a password"
+
 app.empty_group:
   pt-BR: "Isso é um grupo vazio!"
   en: "That's an empty group!"
