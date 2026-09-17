@@ -173,12 +173,32 @@ FocusScope {
         }
 
         Item {
+            id: listArea
             anchors.top: searchRow.bottom
             anchors.bottom: footer.top
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.topMargin: Math.round(14 * pane.s)
             anchors.bottomMargin: Math.round(14 * pane.s)
+
+            // One handler for the whole list area, rows included: the empty
+            // part has to open the menu as well (with nothing in the list
+            // there is no row to aim at), and a handler per row would fire
+            // alongside this one and ask for the menu twice.
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onSingleTapped: function(eventPoint) {
+                    const inList = listArea.mapToItem(list, eventPoint.position.x,
+                                                      eventPoint.position.y);
+                    const index = list.indexAt(list.contentX + inList.x, list.contentY + inList.y);
+                    if (index >= 0)
+                        list.currentIndex = index;
+
+                    const scenePoint = listArea.mapToItem(pane, eventPoint.position.x,
+                                                          eventPoint.position.y);
+                    pane.menuRequested(scenePoint.x, scenePoint.y);
+                }
+            }
 
             ListView {
                 id: list
@@ -255,15 +275,6 @@ FocusScope {
                         }
                     }
 
-                    TapHandler {
-                        acceptedButtons: Qt.RightButton
-                        onSingleTapped: function(eventPoint) {
-                            list.currentIndex = index;
-                            const scenePoint = row.mapToItem(pane, eventPoint.position.x,
-                                                             eventPoint.position.y);
-                            pane.menuRequested(scenePoint.x, scenePoint.y);
-                        }
-                    }
                 }
             }
         }

@@ -144,39 +144,8 @@ Modal {
         onPreviousRequested: root.focusPrevious(passwordField)
     }
 
-    CheckBox {
+    RevealBox {
         id: revealPassword
-        text: i18n.t("ui.show_password")
-        font.pixelSize: Math.round(12 * root.s)
-        // Never steals the Tab order from the fields around it.
-        focusPolicy: Qt.NoFocus
-
-        indicator: Rectangle {
-            implicitWidth: Math.round(16 * root.s)
-            implicitHeight: Math.round(16 * root.s)
-            y: (revealPassword.height - height) / 2
-            radius: Math.round(3 * root.s)
-            color: "transparent"
-            border.width: Math.max(1, Math.round(root.s))
-            border.color: revealPassword.checked ? theme.annotation : theme.guidance
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: parent.width / 2
-                height: parent.height / 2
-                radius: Math.round(2 * root.s)
-                visible: revealPassword.checked
-                color: theme.annotation
-            }
-        }
-
-        contentItem: Text {
-            text: revealPassword.text
-            color: theme.guidance
-            leftPadding: revealPassword.indicator.width + Math.round(6 * root.s)
-            verticalAlignment: Text.AlignVCenter
-            font: revealPassword.font
-        }
     }
 
     Field {
