@@ -117,19 +117,49 @@ FocusScope {
     ActionsMenu {
         id: actionsMenu
         parent: page
-        options: [i18n.t("ui.context_add_new"), i18n.t("ui.context_edit"),
-                  i18n.t("ui.context_delete")]
+        // The PIN entry only exists for Bitwarden, so the menu is built
+        // rather than fixed, and the handler goes by the action it picked.
+        readonly property var actions: {
+            const list = ["add", "edit", "delete"];
+            if (controller.bitwardenBackend)
+                list.push(controller.pinConfigured ? "disablePin" : "enablePin");
+            return list;
+        }
+        readonly property var labels: ({
+            "add": i18n.t("ui.context_add_new"),
+            "edit": i18n.t("ui.context_edit"),
+            "delete": i18n.t("ui.context_delete"),
+            "enablePin": i18n.t("bitwarden.pin_enable_action"),
+            "disablePin": i18n.t("bitwarden.pin_disable_action")
+        })
+        options: actions.map(function(action) { return labels[action]; })
 
         onChosen: function(index) {
             close();
-            if (index === 0)
+            const action = actions[index];
+            if (action === "add")
                 page.openAddForm();
-            else if (index === 1)
+            else if (action === "edit")
                 page.editSelected();
-            else
+            else if (action === "delete")
                 page.confirmDelete();
+            else if (action === "enablePin")
+                page.mode = "pin";
+            else
+                controller.disableBitwardenPin();
         }
         onClosed: pane.claimKeyboard()
+    }
+
+    PinSetupModal {
+        visible: page.mode === "pin"
+        busy: controller.busy
+
+        onSubmitted: function(masterPassword, pin) {
+            controller.enableBitwardenPin(masterPassword, pin);
+            page.mode = "list";
+        }
+        onDismissed: page.mode = "list"
     }
 
     EntryFormModal {
@@ -192,6 +222,8 @@ FocusScope {
                           ["CTRL-A", i18n.t("ui.help_add_entry")],
                           ["CTRL-E", i18n.t("ui.help_edit_entry")],
                           ["CTRL-X", i18n.t("ui.help_delete_entry")]]
+                    .concat(controller.bitwardenBackend
+                            ? [[i18n.t("common.space_key"), i18n.t("bitwarden.pin_help")]] : [])
             },
             {
                 "title": i18n.t("help.search_section"),

@@ -2,6 +2,7 @@
 
 #include "bitwardenjson.h"
 #include "bwcache.h"
+#include "bwpin.h"
 #include "bwcrypto.h"
 #include "config.h"
 #include "filter.h"
@@ -408,6 +409,30 @@ private slots:
         QVERIFY(!BwCrypto::decryptString(QStringLiteral("garbage"), *key));
     }
 
+    void bitwardenEncryptRoundTripsAndSaltsEachTime() {
+        const std::optional<BwKey> key = BwCrypto::keyFromBytes(BwCrypto::randomBytes(64));
+        QVERIFY(key);
+
+        const QByteArray plaintext = QByteArrayLiteral("senha mestra com acentuação");
+        const std::optional<QString> first = BwCrypto::encrypt(plaintext, *key);
+        const std::optional<QString> second = BwCrypto::encrypt(plaintext, *key);
+        QVERIFY(first && second);
+        QVERIFY(first->startsWith(QLatin1String("2.")));
+        // A fresh IV every time, so the same text never looks the same twice.
+        QVERIFY(*first != *second);
+
+        QCOMPARE(BwCrypto::decryptString(*first, *key),
+                 std::optional<QString>(QString::fromUtf8(plaintext)));
+
+        QString tampered = *first;
+        const int macStart = tampered.lastIndexOf(QLatin1Char('|')) + 1;
+        tampered[macStart] = tampered[macStart] == QLatin1Char('A') ? QLatin1Char('B') : QLatin1Char('A');
+        QVERIFY(!BwCrypto::decryptString(tampered, *key));
+
+        const std::optional<BwKey> otherKey = BwCrypto::keyFromBytes(BwCrypto::randomBytes(64));
+        QVERIFY(!BwCrypto::decryptString(*first, *otherKey));
+    }
+
     void bitwardenMasterPasswordUnwrapsTheUserKey() {
         const QJsonObject v = bwFixture("vectors.json");
         const QJsonObject wrapped = v.value("userKeyArgon2id").toObject();
@@ -522,6 +547,43 @@ private slots:
         write(root);
         QCOMPARE(BwCache::load(path)->decrypt(Secret(password), &items, &folders), BwCache::Result::Unsupported);
         QVERIFY(items.isEmpty());
+    }
+
+    void bitwardenPinBlobRoundTrips() {
+        const BwPin::Blob blob{QStringLiteral("c2FsdA=="), 600000,
+                               QStringLiteral("2.aXY=|Y3Q=|bWFj")};
+        const QString text = BwPin::buildBlob(blob);
+        QVERIFY(text.startsWith(QLatin1String("omapass-pin.v1|")));
+
+        const std::optional<BwPin::Blob> parsed = BwPin::parseBlob(text);
+        QVERIFY(parsed);
+        QCOMPARE(parsed->salt, blob.salt);
+        QCOMPARE(parsed->iterations, blob.iterations);
+        // The EncString has separators of its own; they survive the parse.
+        QCOMPARE(parsed->encrypted, blob.encrypted);
+
+        // Another version, a missing field or a body that is not an EncString
+        // leave the PIN unused rather than half understood.
+        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v2|c2FsdA==|600000|2.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000")));
+        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|0|2.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000|7.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!BwPin::parseBlob(QString()));
+    }
+
+    void bitwardenPinValidationAndWeakWarning() {
+        QVERIFY(BwPin::validate(QStringLiteral("123456")).isEmpty());
+        QVERIFY(!BwPin::validate(QStringLiteral("123")).isEmpty());
+        QVERIFY(!BwPin::validate(QStringLiteral("12ab")).isEmpty());
+        QVERIFY(BwPin::validate(QStringLiteral("1234"), QStringLiteral("1234")).isEmpty());
+        QVERIFY(!BwPin::validate(QStringLiteral("1234"), QStringLiteral("4321")).isEmpty());
+
+        // Four and five digits are accepted, but said out loud.
+        QVERIFY(BwPin::weakWarning(QStringLiteral("1234")).contains(QStringLiteral("4")));
+        QVERIFY(!BwPin::weakWarning(QStringLiteral("12345")).isEmpty());
+        QVERIFY(BwPin::weakWarning(QStringLiteral("123456")).isEmpty());
+        // Nothing flashes up while a PIN is still being typed.
+        QVERIFY(BwPin::weakWarning(QStringLiteral("12")).isEmpty());
     }
 
     void secretsWipeTheirOwnStorage() {

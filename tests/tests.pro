@@ -12,6 +12,7 @@ SOURCES += \
     ../src/bitwardenjson.cpp \
     ../src/bwcache.cpp \
     ../src/bwcrypto.cpp \
+    ../src/bwpin.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/history.cpp \
@@ -25,6 +26,7 @@ HEADERS += \
     ../src/bitwardenjson.h \
     ../src/bwcache.h \
     ../src/bwcrypto.h \
+    ../src/bwpin.h \
     ../src/config.h \
     ../src/filter.h \
     ../src/history.h \

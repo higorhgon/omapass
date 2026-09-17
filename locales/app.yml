@@ -206,6 +206,72 @@ bitwarden.method_yubikey:
 bitwarden.logout_confirm:
   pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
   en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
+bitwarden.pin_title:
+  pt-BR: " Desbloqueio por PIN "
+  en: " PIN Unlock "
+bitwarden.pin_label:
+  pt-BR: " PIN "
+  en: " PIN "
+bitwarden.pin_confirm_label:
+  pt-BR: " Repita o PIN "
+  en: " Repeat PIN "
+bitwarden.pin_footer:
+  pt-BR: "ENTER: Desbloquear | TAB: Usar a senha mestra | ESC: Cancelar"
+  en: "ENTER: Unlock | TAB: Use the master password | ESC: Cancel"
+bitwarden.pin_wrong:
+  pt-BR: "PIN incorreto! Restam %{left} tentativa(s)."
+  en: "Wrong PIN! %{left} attempt(s) left."
+bitwarden.pin_blocked:
+  pt-BR: "PIN incorreto demais vezes: o PIN foi removido. Use a senha mestra."
+  en: "Too many wrong PINs: the PIN was removed. Use the master password."
+bitwarden.pin_missing:
+  pt-BR: "Nenhum PIN guardado para esta conta."
+  en: "No PIN stored for this account."
+bitwarden.pin_stale:
+  pt-BR: "A senha guardada com o PIN não vale mais; o PIN foi removido."
+  en: "The password kept with the PIN is no longer valid; the PIN was removed."
+bitwarden.pin_too_short:
+  pt-BR: "O PIN precisa ter pelo menos %{min} dígitos."
+  en: "The PIN must have at least %{min} digits."
+bitwarden.pin_only_digits:
+  pt-BR: "O PIN só pode conter dígitos."
+  en: "The PIN may only contain digits."
+bitwarden.pin_mismatch:
+  pt-BR: "Os PINs não coincidem."
+  en: "The PINs do not match."
+bitwarden.pin_weak:
+  pt-BR: "Um PIN de %{digits} dígitos são só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline. Use %{recommended} ou mais."
+  en: "A %{digits}-digit PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing. Use %{recommended} or more."
+bitwarden.pin_show:
+  pt-BR: "Mostrar PIN"
+  en: "Show PIN"
+bitwarden.pin_no_keyring:
+  pt-BR: "Chaveiro do sistema indisponível (instale o libsecret/secret-tool)."
+  en: "System keyring unavailable (install libsecret/secret-tool)."
+bitwarden.pin_store_error:
+  pt-BR: "Não foi possível guardar o PIN."
+  en: "Could not store the PIN."
+bitwarden.pin_enabled:
+  pt-BR: "Desbloqueio por PIN ativado."
+  en: "PIN unlock enabled."
+bitwarden.pin_disabled:
+  pt-BR: "Desbloqueio por PIN desativado."
+  en: "PIN unlock disabled."
+bitwarden.pin_setup_title:
+  pt-BR: " Ativar Desbloqueio por PIN "
+  en: " Enable PIN Unlock "
+bitwarden.pin_setup_footer:
+  pt-BR: "A senha mestra fica guardada no chaveiro, cifrada pelo PIN | ENTER: Confirmar | ESC: Cancelar"
+  en: "The master password is kept in the keyring, encrypted with the PIN | ENTER: Confirm | ESC: Cancel"
+bitwarden.pin_enable_action:
+  pt-BR: "Ativar desbloqueio por PIN"
+  en: "Enable PIN unlock"
+bitwarden.pin_disable_action:
+  pt-BR: "Desativar desbloqueio por PIN"
+  en: "Disable PIN unlock"
+bitwarden.pin_help:
+  pt-BR: "Menu: ativar/desativar PIN (Bitwarden)"
+  en: "Menu: enable/disable PIN (Bitwarden)"
 bitwarden.no_session:
   pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
   en: "Bitwarden is not ready for changes yet; lock and open it again."

@@ -51,6 +51,14 @@ std::optional<BwKey> keyFromBytes(const BwBytes &bytes);
 std::optional<BwBytes> decrypt(const QString &encString, const BwKey &key);
 std::optional<QString> decryptString(const QString &encString, const BwKey &key);
 
+// Encrypts into a type 2 EncString, with a fresh random IV each time. Used
+// for omapass' own PIN store, so what it writes reads back through the same
+// decrypt() as everything bw wrote.
+std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key);
+
+// Random bytes from the system generator, for a salt or an IV.
+BwBytes randomBytes(int size);
+
 // Decrypts an EncString holding another 64-byte key.
 std::optional<BwKey> unwrapKey(const QString &encString, const BwKey &key);
 

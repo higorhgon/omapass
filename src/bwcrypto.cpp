@@ -139,6 +139,48 @@ std::optional<BwBytes> decrypt(const QString &encString, const BwKey &key) {
     }
 }
 
+std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key) {
+    if (key.enc.size() != 32 || key.mac.size() != 32)
+        return std::nullopt;
+
+    try {
+        const BwBytes iv = randomBytes(16);
+        BwBytes data(plaintext.cbegin(), plaintext.cend());
+
+        const auto aes = Botan::Cipher_Mode::create_or_throw("AES-256/CBC/PKCS7", Botan::Cipher_Dir::Encryption);
+        aes->set_key(key.enc);
+        aes->start(iv);
+        aes->finish(data);
+
+        const auto hmac = Botan::MessageAuthenticationCode::create_or_throw("HMAC(SHA-256)");
+        hmac->set_key(key.mac);
+        hmac->update(iv);
+        hmac->update(data);
+        const auto mac = hmac->final();
+
+        const auto base64 = [](const BwBytes &bytes) {
+            return QByteArray(reinterpret_cast<const char *>(bytes.data()), qsizetype(bytes.size())).toBase64();
+        };
+        return QStringLiteral("2.") + QString::fromLatin1(base64(iv)) + QLatin1Char('|')
+            + QString::fromLatin1(base64(data)) + QLatin1Char('|')
+            + QString::fromLatin1(QByteArray(reinterpret_cast<const char *>(mac.data()),
+                                             qsizetype(mac.size())).toBase64());
+    } catch (const std::exception &) {
+        return std::nullopt;
+    }
+}
+
+BwBytes randomBytes(int size) {
+    BwBytes bytes(size_t(size < 0 ? 0 : size));
+    try {
+        Botan::System_RNG rng;
+        rng.randomize(bytes.data(), bytes.size());
+    } catch (const std::exception &) {
+        bytes.clear();
+    }
+    return bytes;
+}
+
 std::optional<QString> decryptString(const QString &encString, const BwKey &key) {
     const std::optional<BwBytes> bytes = decrypt(encString, key);
     if (!bytes)

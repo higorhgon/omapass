@@ -12,6 +12,7 @@ HEADERS += \
     src/bitwardenvault.h \
     src/bwcache.h \
     src/bwcrypto.h \
+    src/bwpin.h \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
@@ -36,6 +37,7 @@ SOURCES += \
     src/bitwardenvault.cpp \
     src/bwcache.cpp \
     src/bwcrypto.cpp \
+    src/bwpin.cpp \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \

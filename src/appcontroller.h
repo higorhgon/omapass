@@ -34,6 +34,8 @@ class AppController : public QObject {
     Q_PROPERTY(QString databaseQuery READ databaseQuery WRITE setDatabaseQuery NOTIFY databasesChanged)
     Q_PROPERTY(QVariantMap pendingDatabase READ pendingDatabase NOTIFY pendingDatabaseChanged)
     Q_PROPERTY(QString unlockError READ unlockError NOTIFY unlockErrorChanged)
+    // The database waiting to be unlocked has a PIN stored for it.
+    Q_PROPERTY(bool pinAvailable READ pinAvailable NOTIFY pendingDatabaseChanged)
 
     Q_PROPERTY(bool bitwardenAvailable READ bitwardenAvailable CONSTANT)
     // Where the Bitwarden login sheet is: "" (closed), "credentials",
@@ -43,6 +45,8 @@ class AppController : public QObject {
 
     Q_PROPERTY(QString vaultLabel READ vaultLabel NOTIFY stageChanged)
     Q_PROPERTY(bool passBackend READ passBackend NOTIFY stageChanged)
+    Q_PROPERTY(bool bitwardenBackend READ bitwardenBackend NOTIFY stageChanged)
+    Q_PROPERTY(bool pinConfigured READ pinConfigured NOTIFY pinConfiguredChanged)
 
     Q_PROPERTY(QStringList entries READ entries NOTIFY entriesChanged)
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY entriesChanged)
@@ -77,6 +81,9 @@ public:
 
     QString vaultLabel() const;
     bool passBackend() const;
+    bool bitwardenBackend() const;
+    bool pinAvailable() const { return m_pinAvailable; }
+    bool pinConfigured() const { return m_pinConfigured; }
 
     QStringList entries() const { return m_filteredEntries; }
     QString query() const { return m_query; }
@@ -90,6 +97,7 @@ public:
     // Database selection
     Q_INVOKABLE void selectDatabase(int index);
     Q_INVOKABLE void unlock(const QString &password);
+    Q_INVOKABLE void unlockWithPin(const QString &pin);
     Q_INVOKABLE void cancelUnlock();
 
     // Database creation
@@ -107,6 +115,10 @@ public:
     Q_INVOKABLE void cancelBitwardenLogin();
     Q_INVOKABLE bool isBitwardenDatabase(int index) const;
     Q_INVOKABLE void logoutBitwarden();
+    Q_INVOKABLE void enableBitwardenPin(const QString &masterPassword, const QString &pin);
+    Q_INVOKABLE void disableBitwardenPin();
+    Q_INVOKABLE QString validatePin(const QString &pin, const QString &confirm) const;
+    Q_INVOKABLE QString pinWeakWarning(const QString &pin) const;
 
     // Entries
     Q_INVOKABLE bool isEmptyGroup(const QString &entry) const;
@@ -139,6 +151,7 @@ signals:
     void messageChanged();
     void databaseCreated();
     void loginChanged();
+    void pinConfiguredChanged();
 
 private:
     void setBusy(bool busy);
@@ -160,6 +173,9 @@ private:
     void openVault(const DbRef &ref, const Secret &secret);
     void adoptVault(const DbRef &ref, Vault *vault);
     void setLoginStep(const QString &step);
+    // Account of the open vault, or of the one waiting to be unlocked.
+    QString bitwardenAccount() const;
+    void refreshPinState();
     void closeVault();
     void showClipboardMessage(const QString &text);
     void lock();
@@ -188,6 +204,8 @@ private:
     DbRef m_pendingDatabase;
     bool m_hasPendingDatabase = false;
     QString m_unlockError;
+    bool m_pinAvailable = false;
+    bool m_pinConfigured = false;
 
     QScopedPointer<Vault> m_vault;
 
