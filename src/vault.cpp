@@ -1,5 +1,6 @@
 #include "vault.h"
 
+#include "bitwardenvault.h"
 #include "config.h"
 #include "i18n.h"
 #include "keepassvault.h"
@@ -122,7 +123,21 @@ QString Vault::emptyGroupSuffix() {
 }
 
 QString Vault::kindLabel(VaultKind kind) {
-    return kind == VaultKind::Keepass ? QStringLiteral("KeePassXC") : QStringLiteral("pass");
+    switch (kind) {
+    case VaultKind::Keepass:
+        return QStringLiteral("KeePassXC");
+    case VaultKind::Pass:
+        return QStringLiteral("pass");
+    case VaultKind::Bitwarden:
+        return QStringLiteral("Bitwarden");
+    }
+    return QString();
+}
+
+QString Vault::displayName(const DbRef &ref) {
+    if (ref.kind == VaultKind::Bitwarden)
+        return BitwardenVault::emailOf(ref.path);
+    return QFileInfo(ref.path).fileName();
 }
 
 QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
@@ -145,6 +160,10 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
 
     for (const QString &root : stores)
         databases.append({root, VaultKind::Pass});
+
+    const QString account = BitwardenVault::rememberedAccount();
+    if (!account.isEmpty() && BitwardenVault::isAvailable())
+        databases.append({BitwardenVault::refPath(account), VaultKind::Bitwarden});
 
     return databases;
 }
@@ -175,6 +194,9 @@ bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
 }
 
 Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
+    if (ref.kind == VaultKind::Bitwarden)
+        return BitwardenVault::unlock(BitwardenVault::emailOf(ref.path), secret, error);
+
     if (ref.kind == VaultKind::Keepass) {
         const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},
                                          {secret});

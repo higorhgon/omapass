@@ -4,8 +4,8 @@ cli.version:
   pt-BR: "omapass versão %{version}"
   en: "omapass version %{version}"
 cli.help_title:
-  pt-BR: "omapass - Gerenciador de senhas para KeePassXC e pass"
-  en: "omapass - Password manager for KeePassXC and pass"
+  pt-BR: "omapass - Gerenciador de senhas para KeePassXC, pass e Bitwarden"
+  en: "omapass - Password manager for KeePassXC, pass and Bitwarden"
 cli.help_usage_header:
   pt-BR: "Uso:"
   en: "Usage:"
@@ -145,6 +145,70 @@ pass.wrong_gpg_password:
 backend.wrong_password:
   pt-BR: "Senha incorreta!"
   en: "Wrong password!"
+
+bitwarden.spawn_error:
+  pt-BR: "Erro ao executar o bw (instale o bitwarden-cli): %{err}"
+  en: "Error running bw (install bitwarden-cli): %{err}"
+bitwarden.not_logged_in:
+  pt-BR: "A conta Bitwarden não está logada."
+  en: "The Bitwarden account is not logged in."
+bitwarden.entry_not_found:
+  pt-BR: "Entrada não encontrada: %{entry}"
+  en: "Entry not found: %{entry}"
+bitwarden.invalid_email:
+  pt-BR: "E-mail inválido!"
+  en: "Invalid e-mail!"
+bitwarden.invalid_code:
+  pt-BR: "Código inválido!"
+  en: "Invalid code!"
+bitwarden.login_failed:
+  pt-BR: "Falha no login do Bitwarden."
+  en: "Bitwarden login failed."
+bitwarden.logged_out:
+  pt-BR: "Conta Bitwarden desconectada."
+  en: "Bitwarden account logged out."
+bitwarden.login_title:
+  pt-BR: " Entrar no Bitwarden "
+  en: " Log in to Bitwarden "
+bitwarden.logging_in:
+  pt-BR: "Conectando ao Bitwarden…"
+  en: "Connecting to Bitwarden…"
+bitwarden.email_label:
+  pt-BR: " E-mail "
+  en: " E-mail "
+bitwarden.master_password_label:
+  pt-BR: " Senha Mestra "
+  en: " Master Password "
+bitwarden.code_label:
+  pt-BR: " Código de Verificação em Duas Etapas "
+  en: " Two-step Login Code "
+bitwarden.code_hint:
+  pt-BR: "Digite o código do seu método de verificação | ENTER: Confirmar | ESC: Cancelar"
+  en: "Enter the code from your two-step method | ENTER: Confirm | ESC: Cancel"
+bitwarden.device_code_label:
+  pt-BR: " Código de Verificação do Dispositivo "
+  en: " Device Verification Code "
+bitwarden.device_code_hint:
+  pt-BR: "Novo dispositivo: digite o código enviado ao seu e-mail | ENTER: Confirmar | ESC: Cancelar"
+  en: "New device: enter the code sent to your e-mail | ENTER: Confirm | ESC: Cancel"
+bitwarden.method_title:
+  pt-BR: " Verificação em Duas Etapas "
+  en: " Two-step Login "
+bitwarden.method_authenticator:
+  pt-BR: "Aplicativo autenticador"
+  en: "Authenticator app"
+bitwarden.method_email:
+  pt-BR: "E-mail"
+  en: "E-mail"
+bitwarden.method_yubikey:
+  pt-BR: "YubiKey"
+  en: "YubiKey"
+bitwarden.logout_confirm:
+  pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
+  en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
+bitwarden.help_logout:
+  pt-BR: "Sair da conta Bitwarden"
+  en: "Log out of Bitwarden account"
 
 kdbx2pass.master_password_prompt:
   pt-BR: "Senha mestra de %{db}: "

@@ -7,11 +7,11 @@
 #include "secret.h"
 
 // Abstraction over the supported password backends: KeePassXC (through
-// `keepassxc-cli`, see keepassvault.h) and pass (through gpg, see
-// passvault.h). The rest of the app only ever talks to Vault/DbRef, so no
+// `keepassxc-cli`, see keepassvault.h), pass (through gpg, see passvault.h)
+// and Bitwarden (through `bw`, see bitwardenvault.h). The rest of the app only ever talks to Vault/DbRef, so no
 // backend's command shapes leak into the interface.
 
-enum class VaultKind { Keepass, Pass };
+enum class VaultKind { Keepass, Pass, Bitwarden };
 
 // A database found by the search, before it is opened.
 struct DbRef {
@@ -63,10 +63,14 @@ public:
     // cannot change mid-run), so display and detection never drift apart.
     static QString emptyGroupSuffix();
     static QString kindLabel(VaultKind kind);
+    // How a database is named in the list: the file or directory name, or
+    // the account e-mail for Bitwarden.
+    static QString displayName(const DbRef &ref);
 
     // Finds KeePassXC databases (.kdbx) and pass stores (any directory with a
     // .gpg-id) under `searchPath` — the same configurable directory for both,
-    // so a store anywhere below it is found, not just ~/.password-store.
+    // so a store anywhere below it is found, not just ~/.password-store —
+    // plus the Bitwarden account added through omapass, if any.
     static QVector<DbRef> findDatabases(const QString &searchPath);
 
     static bool createKeepassDatabase(const QString &name, const Secret &password,

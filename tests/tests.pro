@@ -7,6 +7,7 @@ INCLUDEPATH += ../src
 
 SOURCES += \
     tst_omapass.cpp \
+    ../src/bitwardenjson.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/history.cpp \
@@ -17,6 +18,7 @@ SOURCES += \
     ../src/secret.cpp
 
 HEADERS += \
+    ../src/bitwardenjson.h \
     ../src/config.h \
     ../src/filter.h \
     ../src/history.h \

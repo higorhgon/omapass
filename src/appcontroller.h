@@ -8,6 +8,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "bitwardenlogin.h"
 #include "config.h"
 #include "history.h"
 #include "vault.h"
@@ -30,6 +31,12 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantMap pendingDatabase READ pendingDatabase NOTIFY pendingDatabaseChanged)
     Q_PROPERTY(QString unlockError READ unlockError NOTIFY unlockErrorChanged)
 
+    Q_PROPERTY(bool bitwardenAvailable READ bitwardenAvailable CONSTANT)
+    // Where the Bitwarden login sheet is: "" (closed), "credentials",
+    // "method", "code" or "deviceCode".
+    Q_PROPERTY(QString loginStep READ loginStep NOTIFY loginChanged)
+    Q_PROPERTY(QString loginEmail READ loginEmail NOTIFY loginChanged)
+
     Q_PROPERTY(QString vaultLabel READ vaultLabel NOTIFY stageChanged)
     Q_PROPERTY(bool passBackend READ passBackend NOTIFY stageChanged)
 
@@ -43,6 +50,7 @@ class AppController : public QObject {
 
 public:
     explicit AppController(const AppConfig &config, QObject *parent = nullptr);
+    ~AppController() override;
 
     // Application-wide activity watch for the auto-lock timer below: every
     // key/mouse event, anywhere in the app, counts as "still in use".
@@ -57,6 +65,10 @@ public:
     void setDatabaseQuery(const QString &query);
     QVariantMap pendingDatabase() const;
     QString unlockError() const { return m_unlockError; }
+
+    bool bitwardenAvailable() const;
+    QString loginStep() const { return m_loginStep; }
+    QString loginEmail() const { return m_loginEmail; }
 
     QString vaultLabel() const;
     bool passBackend() const;
@@ -81,6 +93,15 @@ public:
     Q_INVOKABLE QStringList directorySuggestions(const QString &path) const;
     Q_INVOKABLE QString defaultPassStoreDirectory() const;
     Q_INVOKABLE void createPassStore(const QString &directory, const QString &keyId);
+
+    // Bitwarden account
+    Q_INVOKABLE void addBitwardenAccount();
+    Q_INVOKABLE void bitwardenLogin(const QString &email, const QString &password);
+    Q_INVOKABLE void chooseBitwardenMethod(int method);
+    Q_INVOKABLE void sendBitwardenCode(const QString &code);
+    Q_INVOKABLE void cancelBitwardenLogin();
+    Q_INVOKABLE bool isBitwardenDatabase(int index) const;
+    Q_INVOKABLE void logoutBitwarden();
 
     // Entries
     Q_INVOKABLE bool isEmptyGroup(const QString &entry) const;
@@ -111,6 +132,7 @@ signals:
     void entriesChanged();
     void messageChanged();
     void databaseCreated();
+    void loginChanged();
 
 private:
     void setBusy(bool busy);
@@ -119,6 +141,9 @@ private:
     void refreshEntries();
     void applyEntryFilter();
     void openVault(const DbRef &ref, const Secret &secret);
+    void adoptVault(const DbRef &ref, Vault *vault);
+    void setLoginStep(const QString &step);
+    void closeVault();
     void showClipboardMessage(const QString &text);
     void lock();
 
@@ -144,6 +169,14 @@ private:
     QString m_unlockError;
 
     QScopedPointer<Vault> m_vault;
+
+    BitwardenLogin m_bitwardenLogin;
+    QString m_loginStep;
+    QString m_loginEmail;
+    // Kept only while a login is in progress: choosing a two-step method
+    // restarts `bw login`, which needs the password again.
+    Secret m_loginPassword;
+
     QStringList m_allEntries;
     QStringList m_filteredEntries;
     QStringList m_groups;
