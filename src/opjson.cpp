@@ -23,20 +23,6 @@ QJsonObject blankLoginItem() {
     return item;
 }
 
-// The item's tags, as 1Password stores them: normalised, without repeats and
-// in the order that decides which one places the item.
-QStringList itemTags(const QJsonObject &item) {
-    QStringList tags;
-    const QJsonArray array = item.value(QStringLiteral("tags")).toArray();
-    for (const QJsonValue &value : array) {
-        const QString tag = opNormalizeTag(value.toString());
-        if (!tag.isEmpty() && !tags.contains(tag))
-            tags.append(tag);
-    }
-    tags.sort();
-    return tags;
-}
-
 // The tag an item is filed under here: an item can carry several, but the
 // entry list is a tree, so the first in alphabetical order wins.
 QString placingTag(const QStringList &sortedTags) {
@@ -149,6 +135,18 @@ QString opTagPathOf(const QString &path) {
     return path.section(QLatin1Char('/'), 1);
 }
 
+QStringList opItemTags(const QJsonObject &item) {
+    QStringList tags;
+    const QJsonArray array = item.value(QStringLiteral("tags")).toArray();
+    for (const QJsonValue &value : array) {
+        const QString tag = opNormalizeTag(value.toString());
+        if (!tag.isEmpty() && !tags.contains(tag))
+            tags.append(tag);
+    }
+    tags.sort();
+    return tags;
+}
+
 QString opNormalizeTag(const QString &tag) {
     QStringList parts;
     const QStringList raw = tag.split(QLatin1Char('/'));
@@ -198,7 +196,7 @@ OpIndex buildOpIndex(const QHash<QString, QJsonObject> &items,
         // be placed, as long as the vault came back in `op vault list`.
         if (ref.vaultName.isEmpty())
             ref.vaultName = vaults.value(ref.vaultId);
-        ref.tagPath = placingTag(itemTags(item));
+        ref.tagPath = placingTag(opItemTags(item));
         if (ref.id.isEmpty())
             continue;
 
@@ -273,7 +271,7 @@ QByteArray applyOpEntryData(const QByteArray &itemJson, const QString &title,
     // Only the tag that placed the item is replaced; the others are the
     // user's own filing and have nothing to do with the group it was moved
     // to.
-    QStringList tags = itemTags(item);
+    QStringList tags = opItemTags(item);
     const QString placing = placingTag(tags);
     if (!placing.isEmpty())
         tags.removeAll(placing);

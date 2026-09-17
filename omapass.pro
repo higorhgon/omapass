@@ -21,6 +21,8 @@ HEADERS += \
     src/i18n.h \
     src/keepassvault.h \
     src/kdbx2pass.h \
+    src/onepasswordlogin.h \
+    src/onepasswordvault.h \
     src/opjson.h \
     src/palette.h \
     src/passstore.h \
@@ -48,6 +50,8 @@ SOURCES += \
     src/i18n.cpp \
     src/keepassvault.cpp \
     src/kdbx2pass.cpp \
+    src/onepasswordlogin.cpp \
+    src/onepasswordvault.cpp \
     src/opjson.cpp \
     src/palette.cpp \
     src/passstore.cpp \

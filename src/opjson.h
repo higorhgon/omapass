@@ -78,6 +78,10 @@ QString opTagPathOf(const QString &path);
 // slash, no surrounding spaces.
 QString opNormalizeTag(const QString &tag);
 
+// The item's tags, normalised, without repeats and sorted — so the first is
+// the one that places the item in the tree.
+QStringList opItemTags(const QJsonObject &item);
+
 // The fields omapass shows, read from an item object.
 EntryData opEntryData(const QJsonObject &item);
 

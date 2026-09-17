@@ -4,8 +4,8 @@ cli.version:
   pt-BR: "omapass versão %{version}"
   en: "omapass version %{version}"
 cli.help_title:
-  pt-BR: "omapass - Gerenciador de senhas para KeePassXC, pass e Bitwarden"
-  en: "omapass - Password manager for KeePassXC, pass and Bitwarden"
+  pt-BR: "omapass - Gerenciador de senhas para KeePassXC, pass, Bitwarden e 1Password"
+  en: "omapass - Password manager for KeePassXC, pass, Bitwarden and 1Password"
 cli.help_usage_header:
   pt-BR: "Uso:"
   en: "Usage:"
@@ -415,6 +415,79 @@ app.working:
 bitwarden.help_logout:
   pt-BR: "Sair da conta Bitwarden"
   en: "Log out of Bitwarden account"
+
+onepassword.spawn_error:
+  pt-BR: "Erro ao executar o op (instale o 1password-cli): %{err}"
+  en: "Error running op (install 1password-cli): %{err}"
+onepassword.not_logged_in:
+  pt-BR: "A conta 1Password não está configurada neste computador."
+  en: "The 1Password account is not set up on this device."
+onepassword.not_signed_in:
+  pt-BR: "A sessão do 1Password não está ativa; abra a conta de novo."
+  en: "There is no active 1Password session; open the account again."
+onepassword.session_expired:
+  pt-BR: "A sessão do 1Password expirou; abra a conta de novo."
+  en: "The 1Password session expired; open the account again."
+onepassword.rate_limited:
+  pt-BR: "O 1Password limitou as chamadas; espere um pouco e tente de novo."
+  en: "1Password is rate-limiting requests; wait a moment and try again."
+onepassword.entry_not_found:
+  pt-BR: "Entrada não encontrada: %{entry}"
+  en: "Entry not found: %{entry}"
+onepassword.vault_required:
+  pt-BR: "Escolha um cofre: no 1Password toda entrada fica dentro de um."
+  en: "Pick a vault: in 1Password every entry lives inside one."
+onepassword.unknown_vault:
+  pt-BR: "Cofre não encontrado: %{vault}"
+  en: "Vault not found: %{vault}"
+onepassword.passkey_readonly:
+  pt-BR: "Esta entrada tem uma passkey e o op não sabe reescrevê-la; edite pelo aplicativo do 1Password."
+  en: "This entry has a passkey and op cannot rewrite it; edit it in the 1Password app."
+onepassword.wrong_secret_key:
+  pt-BR: "Secret Key incorreta!"
+  en: "Wrong Secret Key!"
+onepassword.invalid_code:
+  pt-BR: "Código inválido!"
+  en: "Invalid code!"
+onepassword.login_failed:
+  pt-BR: "Falha ao entrar no 1Password."
+  en: "1Password login failed."
+onepassword.logged_out:
+  pt-BR: "Conta 1Password desconectada."
+  en: "1Password account logged out."
+onepassword.login_title:
+  pt-BR: " Entrar no 1Password "
+  en: " Log in to 1Password "
+onepassword.logging_in:
+  pt-BR: "Conectando ao 1Password…"
+  en: "Connecting to 1Password…"
+onepassword.address_label:
+  pt-BR: " Endereço (ex.: minha.1password.com) "
+  en: " Sign-in address (e.g. my.1password.com) "
+onepassword.email_label:
+  pt-BR: " E-mail "
+  en: " E-mail "
+onepassword.secret_key_label:
+  pt-BR: " Secret Key (A3-XXXXXX-…) "
+  en: " Secret Key (A3-XXXXXX-…) "
+onepassword.master_password_label:
+  pt-BR: " Senha mestra "
+  en: " Master password "
+onepassword.code_label:
+  pt-BR: " Código de verificação "
+  en: " Verification code "
+onepassword.code_hint:
+  pt-BR: "Digite o código do seu autenticador."
+  en: "Enter the code from your authenticator."
+onepassword.login_footer:
+  pt-BR: "TAB: Próximo campo | ENTER: Confirmar | ESC: Cancelar"
+  en: "TAB: Next field | ENTER: Confirm | ESC: Cancel"
+onepassword.logout_confirm:
+  pt-BR: "Desconectar a conta 1Password deste computador?"
+  en: "Log out of the 1Password account on this device?"
+onepassword.help_logout:
+  pt-BR: "Sair da conta 1Password"
+  en: "Log out of 1Password account"
 
 kdbx2pass.master_password_prompt:
   pt-BR: "Senha mestra de %{db}: "
