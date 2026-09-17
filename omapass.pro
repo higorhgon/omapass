@@ -16,6 +16,7 @@ HEADERS += \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
+    src/generator.h \
     src/history.h \
     src/i18n.h \
     src/keepassvault.h \
@@ -41,6 +42,7 @@ SOURCES += \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \
+    src/generator.cpp \
     src/history.cpp \
     src/i18n.cpp \
     src/keepassvault.cpp \

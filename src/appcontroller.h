@@ -11,6 +11,7 @@
 
 #include "bitwardenlogin.h"
 #include "config.h"
+#include "generator.h"
 #include "history.h"
 #include "vault.h"
 
@@ -131,6 +132,11 @@ public:
     Q_INVOKABLE void deleteEntry(const QString &entry);
     Q_INVOKABLE void renameGroup(const QString &entry, const QString &newName);
     Q_INVOKABLE QStringList matchingGroups(const QString &prefix) const;
+
+    // Password generator
+    Q_INVOKABLE QVariantMap generatorOptions() const;
+    Q_INVOKABLE QVariantMap generate(const QVariantMap &options);
+    Q_INVOKABLE void copySecret(const QString &password);
 
     // Status line
     Q_INVOKABLE void showMessage(const QString &text, bool isError);

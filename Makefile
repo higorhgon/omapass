@@ -4,6 +4,7 @@ BINDIR := $(DESTDIR)$(PREFIX)/bin
 DATADIR := $(DESTDIR)$(PREFIX)/share
 DESKTOPDIR := $(DATADIR)/applications
 ICONDIR := $(DATADIR)/icons/hicolor/scalable/apps
+WORDLISTDIR := $(DATADIR)/omapass/wordlists
 
 TARGET := omapass
 BUILD_DIR := build
@@ -24,6 +25,7 @@ install: build
 	install -Dm755 $(BUILD_DIR)/keepassxc-cli $(BINDIR)/keepassxc-cli
 	install -Dm644 $(TARGET).desktop $(DESKTOPDIR)/$(TARGET).desktop
 	install -Dm644 icons/$(TARGET).svg $(ICONDIR)/$(TARGET).svg
+	install -Dm644 vendor/keepassxc/share/wordlists/eff_large.wordlist $(WORDLISTDIR)/eff_large.wordlist
 	@echo "omapass instalado em $(BINDIR)/$(TARGET)"
 
 uninstall:
@@ -31,6 +33,7 @@ uninstall:
 	rm -f $(BINDIR)/keepassxc-cli
 	rm -f $(DESKTOPDIR)/$(TARGET).desktop
 	rm -f $(ICONDIR)/$(TARGET).svg
+	rm -f $(WORDLISTDIR)/eff_large.wordlist
 	@echo "omapass removido de $(BINDIR)/$(TARGET)"
 
 clean:

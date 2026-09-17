@@ -12,6 +12,7 @@ Modal {
     property var fields: ({})
 
     signal submitted(var payload)
+    signal generateRequested()
 
     heading: isEdit ? i18n.t("common.edit_entry_title") : i18n.t("common.new_entry_title")
     hint: passBackend ? i18n.t("ui.footer_form_pass") : i18n.t("ui.footer_form_full")
@@ -34,6 +35,11 @@ Modal {
             passwordField.field.forceActiveFocus();
         else
             groupField.field.forceActiveFocus();
+    }
+
+    function setPassword(password) {
+        passwordField.text = password;
+        passwordField.field.forceActiveFocus();
     }
 
     function refreshGroups() {
@@ -142,10 +148,12 @@ Modal {
         onSubmitted: root.submit()
         onNextRequested: root.focusNext(passwordField)
         onPreviousRequested: root.focusPrevious(passwordField)
+        onGenerateRequested: root.generateRequested()
     }
 
-    RevealBox {
+    CheckOption {
         id: revealPassword
+        text: i18n.t("ui.show_password")
     }
 
     Field {
