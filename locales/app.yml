@@ -334,8 +334,11 @@ bitwarden.pin_disable_action:
   pt-BR: "Desativar desbloqueio por PIN"
   en: "Disable PIN unlock"
 bitwarden.pin_help:
-  pt-BR: "Menu: ativar/desativar PIN (Bitwarden)"
-  en: "Menu: enable/disable PIN (Bitwarden)"
+  pt-BR: "Ativar/desativar desbloqueio por PIN"
+  en: "Enable/disable PIN unlock"
+bitwarden.pin_only_bitwarden:
+  pt-BR: "O desbloqueio por PIN é só para contas Bitwarden."
+  en: "PIN unlock is for Bitwarden accounts only."
 bitwarden.no_session:
   pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
   en: "Bitwarden is not ready for changes yet; lock and open it again."
