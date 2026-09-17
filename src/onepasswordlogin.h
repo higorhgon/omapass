@@ -7,11 +7,11 @@
 #include "opjson.h"
 #include "secret.h"
 
-// One run of `op account add`, driven asynchronously. Unlike every other op
-// call this one is interactive: the Secret Key, the password and, when the
-// account has two-step verification, the code are asked for on a prompt. The
-// answers omapass already has are written as each prompt appears; the code
-// is asked of the user while the process waits.
+// One run of `op account add`, driven asynchronously. With stdin on a pipe
+// `op` never prompts: the address and the e-mail are flags, the Secret Key
+// comes from OP_SECRET_KEY and the password is read from stdin. What cannot
+// be known up front is the two-step code, so the process is kept alive while
+// the interface asks the user for it and the answer is written to its stdin.
 class OnePasswordLogin : public QObject {
     Q_OBJECT
 
@@ -46,7 +46,6 @@ private:
     QString m_stdout;
     QString m_stderr;
     QString m_shorthand;
-    Secret m_secretKey;
     Secret m_password;
     QSet<int> m_promptsSeen;
     bool m_stopping = false;

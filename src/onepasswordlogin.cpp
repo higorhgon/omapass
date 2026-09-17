@@ -38,11 +38,17 @@ void OnePasswordLogin::start(const QString &address, const QString &email, const
     m_promptsSeen.clear();
     m_stopping = false;
     m_shorthand = shorthandFor(address);
-    m_secretKey = secretKey;
     m_password = password;
 
     m_process = new QProcess(this);
-    m_process->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+
+    // With stdin on a pipe `op` does not prompt: it takes the Secret Key
+    // from OP_SECRET_KEY and reads the password from stdin. The variable is
+    // the safer of the two channels — /proc/<pid>/environ is readable only
+    // by the same user, while /proc/<pid>/cmdline is readable by anyone.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("OP_SECRET_KEY"), secretKey.toString());
+    m_process->setProcessEnvironment(env);
 
     // --signin --raw so the same run that adds the account hands back a
     // session token, saving a second round trip.
@@ -66,6 +72,12 @@ void OnePasswordLogin::start(const QString &address, const QString &email, const
     });
 
     m_process->start(QStringLiteral("op"), args);
+
+    // The password goes in straight away: there is no prompt to wait for.
+    // A two-step code, when the account asks for one, is written later, once
+    // the user has typed it.
+    answer(m_password);
+    m_password.clear();
 }
 
 void OnePasswordLogin::answer(const Secret &secret) {
@@ -86,7 +98,6 @@ void OnePasswordLogin::sendCode(const QString &code) {
 }
 
 void OnePasswordLogin::cancel() {
-    m_secretKey.clear();
     m_password.clear();
     if (!m_process)
         return;
@@ -111,25 +122,12 @@ void OnePasswordLogin::onOutput() {
         return;
     m_promptsSeen.insert(int(prompt));
 
-    switch (prompt) {
-    case OpPrompt::SecretKey:
-        answer(m_secretKey);
-        m_secretKey.clear();
-        return;
-    case OpPrompt::Password:
-        answer(m_password);
-        m_password.clear();
-        return;
-    case OpPrompt::TwoFactorCode:
+    // Only the two-step code is asked of the user: the address and the
+    // e-mail went in as flags, the Secret Key as a variable and the password
+    // on stdin. Being asked for any of those means op did not take what was
+    // given, and the run fails on its own.
+    if (prompt == OpPrompt::TwoFactorCode)
         emit promptShown(prompt);
-        return;
-    case OpPrompt::SignInAddress:
-    case OpPrompt::Email:
-        // Both went in as flags; being asked for them means op did not take
-        // what was typed, and the run will fail on its own.
-    case OpPrompt::None:
-        return;
-    }
 }
 
 void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
@@ -140,7 +138,6 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     m_stderr += QString::fromUtf8(m_process->readAllStandardError());
     m_process->deleteLater();
     m_process = nullptr;
-    m_secretKey.clear();
     m_password.clear();
 
     if (status == QProcess::NormalExit && exitCode == 0) {
