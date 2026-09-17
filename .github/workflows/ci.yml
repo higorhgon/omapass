@@ -15,7 +15,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qt6-base-dev qt6-declarative-dev libgl1-mesa-dev
+            qt6-base-dev qt6-declarative-dev libgl1-mesa-dev libbotan-3-dev pkg-config
 
       - name: Compila
         run: ./bin/build

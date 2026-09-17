@@ -8,8 +8,11 @@
 // Backend for a Bitwarden account, through the official `bw` CLI.
 //
 // Every `bw` run starts a Node program and takes a couple of seconds, so:
-// - the whole vault is read once when it is opened and kept in memory, which
-//   makes copying, viewing and editing instant;
+// - opening decrypts bw's own encrypted copy (data.json, see BwCache)
+//   in-process, without running bw at all; only when that copy is in a shape
+//   BwCache does not know does it go through `bw unlock` and `bw list`;
+// - the whole vault is kept in memory while open, which makes copying,
+//   viewing and editing instant;
 // - writes update that copy from what `bw` returns instead of listing again;
 // - the slow calls (unlock, sync, writes) are meant to be run off the GUI
 //   thread — the cache is guarded for that.
@@ -47,8 +50,10 @@ public:
     static BitwardenVault *openWithSession(const QString &email, const Secret &session,
                                            QString *error);
 
-    // Pulls from the server and reloads. Opening skips it so the list shows
-    // up sooner; the caller runs this afterwards, in the background.
+    // Gets a bw session if opening did not need one, pulls from the server
+    // and reloads. Opening skips all of it so the list shows up at once; the
+    // caller runs this afterwards, in the background. Changes need the
+    // session, so they wait for it.
     bool sync(QString *error);
 
     void list(QStringList *entries, QStringList *groups) const override;
@@ -68,7 +73,10 @@ private:
     BitwardenVault(const QString &email, const Secret &session)
         : Vault(VaultKind::Bitwarden, refPath(email)), m_session(session) {}
 
+    static bool unlockSession(const Secret &password, Secret *session, QString *error);
     bool reload(QString *error) const;
+    bool ensureSession(QString *error);
+    bool requireSession(QString *error) const;
     bool ensureFolder(const QString &group, QString *folderId, QString *error) const;
     bool lookup(const QString &entryPath, BwItemRef *ref, QJsonObject *item, QString *error) const;
     // Stores what a create/edit returned and rebuilds the index.
@@ -76,6 +84,9 @@ private:
     void storeFolder(const QByteArray &folderJson) const;
 
     Secret m_session;
+    // Held only between a local unlock and the `bw unlock` that sync() runs
+    // right after, which needs it once more.
+    Secret m_password;
 
     // Mutable because the Vault interface is const: the cache is refreshed
     // by the very operations that change what it mirrors. The mutex lets a

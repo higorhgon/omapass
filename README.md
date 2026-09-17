@@ -33,6 +33,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Qt 6: `qt6-base`, `qt6-declarative`
 - `xdg-desktop-portal` e um backend de portal (para o modo claro/escuro e o tamanho de texto do desktop)
 - `wl-clipboard` (`wl-copy`) para copiar senhas
+- Botan 3 (`botan` no Arch/Omarchy, `libbotan-3-dev` no Debian/Ubuntu) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
 
 Para bancos **KeePassXC**:
 
@@ -128,10 +129,15 @@ suportado — servidores próprios (Vaultwarden, self-hosted) não.
   YubiKey). Num dispositivo novo, o Bitwarden manda um código por e-mail, que é pedido
   do mesmo jeito. Se o `bw` já estiver logado pelo terminal, a conta é só adicionada
   à lista e pede a senha mestra.
-- **Abrindo**: a conta aparece na lista com o e-mail; abrir pede só a senha mestra
-  e mostra a cópia local do `bw` assim que ela carrega. A sincronização com o servidor
-  (`bw sync`) roda em seguida, em segundo plano, e o rodapé indica enquanto ela
-  acontece; alterações esperam ela terminar. Se o `bw` tiver sido deslogado por fora,
+- **Abrindo**: a conta aparece na lista com o e-mail; abrir pede só a senha mestra.
+  O omapass decifra sozinho a cópia local cifrada que o próprio `bw` mantém
+  (`~/.config/Bitwarden CLI/data.json`), sem iniciar o `bw` — a lista aparece em
+  uma fração de segundo, e funciona sem internet. Se o arquivo estiver num formato
+  que o omapass não reconhece (uma versão nova do `bw`, contas com criptografia
+  mais nova, SSO sem senha mestra), ele abre pelo `bw` como antes, só mais devagar. A sincronização com o servidor
+  (`bw sync`) roda em seguida, em segundo plano, junto com o desbloqueio do `bw` que
+  as alterações precisam; o rodapé indica enquanto isso acontece, e alterações
+  esperam terminar. Se o `bw` tiver sido deslogado por fora,
   o omapass volta ao login com o e-mail já preenchido.
 - **Pastas viram grupos**: uma pasta `Trabalho/Email` é o grupo `Trabalho/Email`.
   Só itens do tipo **login** aparecem — cartões, identidades, notas seguras e chaves
@@ -202,7 +208,7 @@ texto puro durante o processo.
 ## Segurança
 
 - **Backend KeePassXC**: a senha da entrada é sempre passada ao `keepassxc-cli` via stdin, mas `keepassxc-cli` não aceita usuário/URL/notas por stdin — esses campos vão como argumentos (`-u`, `--url`, `--notes`) em `add`/`edit`. Isso é uma limitação do `keepassxc-cli`, não do omapass: durante a execução do processo, outro usuário local com acesso a `/proc/<pid>/cmdline` (ou `ps aux`) pode ler esses valores. A senha em si nunca passa por argv. O backend **pass** não tem essa limitação — toda a entrada (senha e metadados) é enviada por stdin ao `gpg`/`pass insert`.
-- **Backend Bitwarden**: A senha mestra vai para o `bw` por variável de ambiente (`--passwordenv`) e o JSON de itens e pastas (que carrega a senha) pelo stdin — nada disso aparece em argv. A chave de sessão fica num `Secret` e só chega ao `bw` pela variável `BW_SESSION` de cada processo filho. Enquanto o cofre está aberto, os itens (senhas incluídas) ficam na memória do omapass, para não pagar alguns segundos do `bw` a cada cópia; são descartados ao travar. Travar o cofre (auto-lock, `Ctrl+Q`, travar a tela) roda `bw lock`, o que **também encerra sessões do `bw` abertas no terminal**, e todo desbloqueio pelo omapass invalida chaves de sessão anteriores.
+- **Backend Bitwarden**: para abrir a conta, o omapass lê o `data.json` do `bw` (só a conta ativa, a chave cifrada e os itens — nunca os tokens de acesso, e sem jamais escrever no arquivo) e decifra com a criptografia do Bitwarden: PBKDF2-SHA256 ou Argon2id conforme a conta, HKDF, AES-256-CBC com HMAC-SHA256 verificado antes de decifrar e RSA-OAEP para chaves de organização, via Botan. A senha mestra fica em memória só até o `bw unlock` em segundo plano terminar. A senha mestra vai para o `bw` por variável de ambiente (`--passwordenv`) e o JSON de itens e pastas (que carrega a senha) pelo stdin — nada disso aparece em argv. A chave de sessão fica num `Secret` e só chega ao `bw` pela variável `BW_SESSION` de cada processo filho. Enquanto o cofre está aberto, os itens (senhas incluídas) ficam na memória do omapass, para não pagar alguns segundos do `bw` a cada cópia; são descartados ao travar. Travar o cofre (auto-lock, `Ctrl+Q`, travar a tela) roda `bw lock`, o que **também encerra sessões do `bw` abertas no terminal**, e todo desbloqueio pelo omapass invalida chaves de sessão anteriores.
 - Senhas e passphrases circulam em um tipo `Secret`, que mantém uma cópia própria e sobrescreve a memória ao ser destruído. A exceção inevitável é o campo de senha do formulário de edição: um campo editável precisa do texto em claro enquanto está na tela.
 - Ao copiar uma senha, o conteúdo é marcado como sensível para o `wl-clipboard` (mime `x-kde-passwordManagerHint`, que gerenciadores como o cliphist respeitam para não gravar no histórico) e o clipboard é limpo automaticamente após 10 segundos, com contagem regressiva visível na interface.
 - **`~/.config/omapass/history`** guarda só HMACs (com chave aleatória local em `.history_key`, 0600) e timestamps de uso, nunca o conteúdo das entradas — mas ainda revela para outro usuário local com acesso ao arquivo quantas entradas existem e o padrão de uso.
