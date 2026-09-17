@@ -1,4 +1,4 @@
-QT += core gui qml quick quickcontrols2 dbus
+QT += core gui qml quick quickcontrols2 dbus concurrent
 
 CONFIG += c++17 release
 TARGET = omapass

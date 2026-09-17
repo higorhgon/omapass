@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QHash>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 
@@ -23,8 +24,13 @@ struct BwStatus {
 
 BwStatus parseBwStatus(const QString &json);
 
-// One login item as the entry list knows it. No secret is kept here: the
-// password is fetched by id when it is actually needed.
+// The same answer read from bw's own state file (data.json) instead of
+// spawning `bw status`, which takes seconds. The file cannot tell locked from
+// unlocked, so a logged-in account comes back as "locked". An empty status
+// means the file was there but not in a shape this understands.
+BwStatus parseBwDataFile(const QByteArray &json);
+
+// One login item as the entry list knows it.
 struct BwItemRef {
     QString id;
     QString name;
@@ -41,11 +47,20 @@ struct BwIndex {
     QHash<QString, QString> folders;   // folder name → folder id (real folders only)
 };
 
-// Builds the index from `bw list items` and `bw list folders`. Items other
-// than logins are left out. Two logins that would land on the same path both
+// `bw list items` keyed by id, and `bw list folders` as id → name (without
+// the "No Folder" pseudo-folder).
+QHash<QString, QJsonObject> parseBwItems(const QByteArray &itemsJson);
+QHash<QString, QString> parseBwFolders(const QByteArray &foldersJson);
+
+// Builds the index from items and folders. Items other than logins, or in
+// the trash, are left out. Two logins that would land on the same path both
 // get the start of their id appended (`Mail [1a2b3c4d]`), so every path is
 // unique and stays the same across runs.
+BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QString, QString> &folders);
 BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson);
+
+// The fields omapass shows, read from an item object.
+EntryData bwEntryData(const QJsonObject &item);
 
 // The path segment for an item name: a slash inside a name would read as a
 // group, so it is shown as a look-alike division slash instead.

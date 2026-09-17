@@ -1,17 +1,26 @@
 #pragma once
 
+#include <QMutex>
+
 #include "bitwardenjson.h"
 #include "vault.h"
 
 // Backend for a Bitwarden account, through the official `bw` CLI.
+//
+// Every `bw` run starts a Node program and takes a couple of seconds, so:
+// - the whole vault is read once when it is opened and kept in memory, which
+//   makes copying, viewing and editing instant;
+// - writes update that copy from what `bw` returns instead of listing again;
+// - the slow calls (unlock, sync, writes) are meant to be run off the GUI
+//   thread — the cache is guarded for that.
 //
 // Security notes:
 // - The session key lives in a `Secret` and only reaches `bw` through the
 //   BW_SESSION variable of each child process, never argv.
 // - The master password goes through --passwordenv, and item/folder JSON
 //   (which carries the password) through stdin, so neither shows up in `ps`.
-// - The entry list keeps names and ids only; a password is fetched by id when
-//   it is copied or edited.
+// - While the vault is open its items, passwords included, are held in
+//   memory; they are dropped when it is locked.
 // - Locking the vault runs `bw lock`, which also ends any session opened
 //   with `bw unlock` in a terminal.
 class BitwardenVault : public Vault {
@@ -19,8 +28,7 @@ public:
     static bool isAvailable();
 
     // The account added through omapass, remembered so it can be listed
-    // without spawning `bw` (a Node program that takes about a second) at
-    // start-up. Empty when none.
+    // without spawning `bw` at start-up. Empty when none.
     static QString rememberedAccount();
     static void rememberAccount(const QString &email);
     static void forgetAccount();
@@ -28,6 +36,8 @@ public:
     static QString refPath(const QString &email);
     static QString emailOf(const QString &refPath);
 
+    // Read from bw's data.json when possible (instant), falling back to
+    // `bw status` (seconds) when the file is in a shape it does not know.
     static BwStatus status();
     static void logout();
 
@@ -36,6 +46,10 @@ public:
     // Loads the account behind a session key `bw login` already handed back.
     static BitwardenVault *openWithSession(const QString &email, const Secret &session,
                                            QString *error);
+
+    // Pulls from the server and reloads. Opening skips it so the list shows
+    // up sooner; the caller runs this afterwards, in the background.
+    bool sync(QString *error);
 
     void list(QStringList *entries, QStringList *groups) const override;
     QString titleFor(const QString &entryPath, const QString &fallback) const override;
@@ -54,15 +68,20 @@ private:
     BitwardenVault(const QString &email, const Secret &session)
         : Vault(VaultKind::Bitwarden, refPath(email)), m_session(session) {}
 
-    // Re-reads items and folders from bw's local copy. `sync` pulls from the
-    // server first, which is only worth it when the vault is opened: every
-    // write below already goes through the server.
-    bool reload(bool sync, QString *error) const;
+    bool reload(QString *error) const;
     bool ensureFolder(const QString &group, QString *folderId, QString *error) const;
-    bool lookup(const QString &entryPath, BwItemRef *ref, QString *error) const;
+    bool lookup(const QString &entryPath, BwItemRef *ref, QJsonObject *item, QString *error) const;
+    // Stores what a create/edit returned and rebuilds the index.
+    void storeItem(const QByteArray &itemJson) const;
+    void storeFolder(const QByteArray &folderJson) const;
 
     Secret m_session;
+
     // Mutable because the Vault interface is const: the cache is refreshed
-    // by the very operations that change what it mirrors.
+    // by the very operations that change what it mirrors. The mutex lets a
+    // background sync swap it while the interface reads.
+    mutable QMutex m_mutex;
+    mutable QHash<QString, QJsonObject> m_items;  // id → item, as bw returns it
+    mutable QHash<QString, QString> m_folders;    // id → name
     mutable BwIndex m_index;
 };

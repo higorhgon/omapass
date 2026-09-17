@@ -19,6 +19,14 @@ const char bwStatusLocked[] =
 const char bwStatusLoggedOut[] =
     "{\"serverUrl\":null,\"lastSync\":null,\"status\":\"unauthenticated\"}";
 
+const char bwDataFileLoggedIn[] =
+    "{\"global_account_activeAccountId\":\"u1\","
+    "\"global_account_accounts\":{\"u1\":{\"email\":\"a@b.com\",\"emailVerified\":true}},"
+    "\"user_u1_token_accessToken\":\"secret\"}";
+
+const char bwDataFileLoggedOut[] =
+    "{\"global_account_activeAccountId\":null,\"global_account_accounts\":{}}";
+
 const char bwFolders[] =
     "["
     "{\"object\":\"folder\",\"id\":\"f1\",\"name\":\"Work/Mail\"},"
@@ -236,6 +244,26 @@ private slots:
         const BwStatus out = parseBwStatus(QString::fromUtf8(bwStatusLoggedOut));
         QVERIFY(!out.loggedIn());
         QVERIFY(parseBwStatus(QStringLiteral("garbage")).status.isEmpty());
+    }
+
+    void bitwardenDataFileTellsWhoIsLoggedIn() {
+        const BwStatus in = parseBwDataFile(bwDataFileLoggedIn);
+        QVERIFY(in.loggedIn());
+        QCOMPARE(in.userEmail, QStringLiteral("a@b.com"));
+
+        const BwStatus out = parseBwDataFile(bwDataFileLoggedOut);
+        QCOMPARE(out.status, QStringLiteral("unauthenticated"));
+
+        QVERIFY(parseBwDataFile("not json").status.isEmpty());
+        QVERIFY(parseBwDataFile("{\"global_account_activeAccountId\":\"u9\"}").status.isEmpty());
+    }
+
+    void bitwardenEntryDataReadsTheFirstUri() {
+        const EntryData data = bwEntryData(QJsonDocument::fromJson(bwItemWithExtras).object());
+        QCOMPARE(data.username, QStringLiteral("u"));
+        QCOMPARE(data.password.toString(), QStringLiteral("p"));
+        QCOMPARE(data.url, QStringLiteral("https://a"));
+        QCOMPARE(data.notes, QStringLiteral("n"));
     }
 
     void bitwardenIndexMapsFoldersToGroups() {
