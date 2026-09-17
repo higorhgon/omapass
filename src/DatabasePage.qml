@@ -174,6 +174,7 @@ FocusScope {
             {
                 "title": i18n.t("help.general_section"),
                 "items": [["CTRL+?", i18n.t("help.this_help")],
+                          ["CTRL-O", i18n.t("settings.help")],
                           ["CTRL-C, CTRL-Q", i18n.t("help.quit_app")]]
             }
         ]
