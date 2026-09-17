@@ -92,11 +92,15 @@ int main(int argc, char *argv[]) {
             return status;
     }
 
+    // Set before the application exists: Qt registers the app ID with the
+    // desktop portal while QGuiApplication is being constructed, and the
+    // portal refuses a second registration made afterwards.
+    QGuiApplication::setDesktopFileName(QStringLiteral("omapass"));
+
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("omapass"));
     app.setApplicationVersion(applicationVersion);
     app.setOrganizationName(QStringLiteral("omapass"));
-    app.setDesktopFileName(QStringLiteral("omapass"));
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omapass")));
 
     // Basic rather than Material: every control here is drawn against the
