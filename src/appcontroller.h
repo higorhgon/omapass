@@ -13,6 +13,7 @@
 #include "config.h"
 #include "generator.h"
 #include "history.h"
+#include "onepasswordlogin.h"
 #include "vault.h"
 
 class QEvent;
@@ -39,14 +40,17 @@ class AppController : public QObject {
     Q_PROPERTY(bool pinAvailable READ pinAvailable NOTIFY pendingDatabaseChanged)
 
     Q_PROPERTY(bool bitwardenAvailable READ bitwardenAvailable CONSTANT)
-    // Where the Bitwarden login sheet is: "" (closed), "credentials",
-    // "method", "code" or "deviceCode".
+    Q_PROPERTY(bool onePasswordAvailable READ onePasswordAvailable CONSTANT)
+    // Where a login sheet is: "" (closed); "credentials", "method", "code"
+    // or "deviceCode" for Bitwarden; "opCredentials" or "opCode" for
+    // 1Password.
     Q_PROPERTY(QString loginStep READ loginStep NOTIFY loginChanged)
     Q_PROPERTY(QString loginEmail READ loginEmail NOTIFY loginChanged)
 
     Q_PROPERTY(QString vaultLabel READ vaultLabel NOTIFY stageChanged)
     Q_PROPERTY(bool passBackend READ passBackend NOTIFY stageChanged)
     Q_PROPERTY(bool bitwardenBackend READ bitwardenBackend NOTIFY stageChanged)
+    Q_PROPERTY(bool onePasswordBackend READ onePasswordBackend NOTIFY stageChanged)
     Q_PROPERTY(bool pinConfigured READ pinConfigured NOTIFY pinConfiguredChanged)
 
     Q_PROPERTY(QStringList entries READ entries NOTIFY entriesChanged)
@@ -77,12 +81,14 @@ public:
     QString unlockError() const { return m_unlockError; }
 
     bool bitwardenAvailable() const;
+    bool onePasswordAvailable() const;
     QString loginStep() const { return m_loginStep; }
     QString loginEmail() const { return m_loginEmail; }
 
     QString vaultLabel() const;
     bool passBackend() const;
     bool bitwardenBackend() const;
+    bool onePasswordBackend() const;
     bool pinAvailable() const { return m_pinAvailable; }
     bool pinConfigured() const { return m_pinConfigured; }
 
@@ -120,6 +126,15 @@ public:
     Q_INVOKABLE void disableBitwardenPin();
     Q_INVOKABLE QString validatePin(const QString &pin, const QString &confirm) const;
     Q_INVOKABLE QString pinWeakWarning(const QString &pin) const;
+
+    // 1Password account
+    Q_INVOKABLE void addOnePasswordAccount();
+    Q_INVOKABLE void onePasswordLogin(const QString &address, const QString &email,
+                                      const QString &secretKey, const QString &password);
+    Q_INVOKABLE void sendOnePasswordCode(const QString &code);
+    Q_INVOKABLE void cancelOnePasswordLogin();
+    Q_INVOKABLE bool isOnePasswordDatabase(int index) const;
+    Q_INVOKABLE void logoutOnePassword();
 
     // Entries
     Q_INVOKABLE bool isEmptyGroup(const QString &entry) const;
@@ -224,8 +239,11 @@ private:
     QScopedPointer<Vault> m_vault;
 
     BitwardenLogin m_bitwardenLogin;
+    OnePasswordLogin m_onePasswordLogin;
     QString m_loginStep;
     QString m_loginEmail;
+    // The 1Password sign-in address, kept while its login sheet is open.
+    QString m_loginAddress;
     // Kept only while a login is in progress: choosing a two-step method
     // restarts `bw login`, which needs the password again.
     Secret m_loginPassword;
