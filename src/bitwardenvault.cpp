@@ -1,9 +1,9 @@
 #include "bitwardenvault.h"
 
+#include "bwcache.h"
 #include "i18n.h"
 #include "process.h"
 
-#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -118,18 +118,6 @@ QVector<ProcResult> runBwParallel(const QVector<QStringList> &commands, const Se
     return results;
 }
 
-// Where bw keeps its state, following its own rules: BITWARDENCLI_APPDATA_DIR
-// when set, otherwise "Bitwarden CLI" under the XDG config directory.
-QString bwDataFilePath() {
-    const QString custom = qEnvironmentVariable("BITWARDENCLI_APPDATA_DIR");
-    if (!custom.isEmpty())
-        return custom + QStringLiteral("/data.json");
-    QString config = qEnvironmentVariable("XDG_CONFIG_HOME");
-    if (config.isEmpty())
-        config = QDir::homePath() + QStringLiteral("/.config");
-    return config + QStringLiteral("/Bitwarden CLI/data.json");
-}
-
 void wipe(QString *text) {
     text->fill(QChar(0));
     text->clear();
@@ -165,8 +153,28 @@ QString BitwardenVault::emailOf(const QString &path) {
     return path.startsWith(refPrefix) ? path.mid(refPrefix.size()) : path;
 }
 
+bool BitwardenVault::unlockSession(const Secret &password, Secret *session, QString *error) {
+    waitForPendingLock();
+
+    QProcessEnvironment passwordEnv;
+    passwordEnv.insert(QStringLiteral("OMAPASS_BW_PASSWORD"), password.toString());
+    ProcResult result = runBw({QStringLiteral("unlock"), QStringLiteral("--passwordenv"),
+                               QStringLiteral("OMAPASS_BW_PASSWORD"), QStringLiteral("--raw")},
+                              Secret(), QByteArray(), passwordEnv);
+    if (!result.success) {
+        *error = classifyBwError(result.err) == BwLoginError::WrongPassword
+            ? I18n::t(QStringLiteral("backend.wrong_password"))
+            : result.err;
+        return false;
+    }
+
+    *session = Secret(result.out.trimmed());
+    wipe(&result.out);
+    return true;
+}
+
 BwStatus BitwardenVault::status() {
-    QFile file(bwDataFilePath());
+    QFile file(BwCache::defaultPath());
     if (!file.exists()) {
         BwStatus status;
         status.status = QStringLiteral("unauthenticated");
@@ -197,23 +205,32 @@ BitwardenVault *BitwardenVault::unlock(const QString &email, const Secret &passw
         return nullptr;
     }
 
-    waitForPendingLock();
+    const QString account = current.userEmail.isEmpty() ? email : current.userEmail;
 
-    QProcessEnvironment passwordEnv;
-    passwordEnv.insert(QStringLiteral("OMAPASS_BW_PASSWORD"), password.toString());
-    ProcResult result = runBw({QStringLiteral("unlock"), QStringLiteral("--passwordenv"),
-                               QStringLiteral("OMAPASS_BW_PASSWORD"), QStringLiteral("--raw")},
-                              Secret(), QByteArray(), passwordEnv);
-    if (!result.success) {
-        *error = classifyBwError(result.err) == BwLoginError::WrongPassword
-            ? I18n::t(QStringLiteral("backend.wrong_password"))
-            : result.err;
-        return nullptr;
+    if (const std::optional<BwCache> cache = BwCache::load()) {
+        QHash<QString, QJsonObject> items;
+        QHash<QString, QString> folders;
+        switch (cache->decrypt(password, &items, &folders)) {
+        case BwCache::Result::Ok: {
+            auto *vault = new BitwardenVault(account, Secret());
+            vault->m_password = password;
+            vault->m_index = buildBwIndex(items, folders);
+            vault->m_items = std::move(items);
+            vault->m_folders = std::move(folders);
+            return vault;
+        }
+        case BwCache::Result::WrongPassword:
+            *error = I18n::t(QStringLiteral("backend.wrong_password"));
+            return nullptr;
+        case BwCache::Result::Unsupported:
+            break; // bw knows its own format: let it do the work
+        }
     }
 
-    const Secret session(result.out.trimmed());
-    wipe(&result.out);
-    return openWithSession(current.userEmail.isEmpty() ? email : current.userEmail, session, error);
+    Secret session;
+    if (!unlockSession(password, &session, error))
+        return nullptr;
+    return openWithSession(account, session, error);
 }
 
 BitwardenVault *BitwardenVault::openWithSession(const QString &email, const Secret &session,
@@ -226,7 +243,29 @@ BitwardenVault *BitwardenVault::openWithSession(const QString &email, const Secr
     return vault;
 }
 
+bool BitwardenVault::ensureSession(QString *error) {
+    if (!m_session.isEmpty())
+        return true;
+
+    Secret session;
+    const bool ok = unlockSession(m_password, &session, error);
+    m_password.clear();
+    if (ok)
+        m_session = session;
+    return ok;
+}
+
+bool BitwardenVault::requireSession(QString *error) const {
+    if (!m_session.isEmpty())
+        return true;
+    *error = I18n::t(QStringLiteral("bitwarden.no_session"));
+    return false;
+}
+
 bool BitwardenVault::sync(QString *error) {
+    if (!ensureSession(error))
+        return false;
+
     const ProcResult result = runBw({QStringLiteral("sync")}, m_session);
     if (!result.success) {
         *error = result.err;
@@ -299,6 +338,8 @@ bool BitwardenVault::lookup(const QString &entryPath, BwItemRef *ref, QJsonObjec
 }
 
 bool BitwardenVault::ensureFolder(const QString &group, QString *folderId, QString *error) const {
+    if (!requireSession(error))
+        return false;
     if (group.isEmpty()) {
         folderId->clear();
         return true;
@@ -380,20 +421,31 @@ bool BitwardenVault::addEntry(const QString &entryPath, const QString &group, co
 bool BitwardenVault::editEntry(const QString &oldPath, const QString &newPath, const QString &group,
                                const EntryData &data, QString *error) const {
     BwItemRef ref;
-    QJsonObject item;
-    if (!lookup(oldPath, &ref, &item, error))
+    if (!lookup(oldPath, &ref, nullptr, error) || !requireSession(error))
         return false;
 
-    QString folderId;
-    if (!ensureFolder(group, &folderId, error))
+    // The item as bw has it, not the in-memory copy: that one only carries
+    // the fields omapass shows, and editing from it would drop password
+    // history, attachments, passkeys and the like.
+    ProcResult current = runBw({QStringLiteral("get"), QStringLiteral("item"), ref.id}, m_session);
+    if (!current.success) {
+        *error = current.err;
         return false;
+    }
+    QByteArray itemJson = current.out.toUtf8();
+    wipe(&current.out);
+
+    QString folderId;
+    if (!ensureFolder(group, &folderId, error)) {
+        itemJson.fill('\0');
+        return false;
+    }
 
     // An untouched title keeps the real name: the path segment may carry a
     // look-alike slash or the id suffix that told duplicates apart.
     const QString title = lastSegment(newPath);
     const QString name = title == lastSegment(oldPath) ? ref.name : title;
 
-    QByteArray itemJson = QJsonDocument(item).toJson(QJsonDocument::Compact);
     QByteArray updated = applyBwEntryData(itemJson, name, folderId, data);
     itemJson.fill('\0');
 
@@ -413,7 +465,7 @@ bool BitwardenVault::editEntry(const QString &oldPath, const QString &newPath, c
 
 bool BitwardenVault::removeEntry(const QString &entryPath, QString *error) const {
     BwItemRef ref;
-    if (!lookup(entryPath, &ref, nullptr, error))
+    if (!lookup(entryPath, &ref, nullptr, error) || !requireSession(error))
         return false;
 
     // Without --permanent the item goes to Bitwarden's trash, recoverable
@@ -434,6 +486,8 @@ bool BitwardenVault::renameGroup(const QString &oldGroup, const QString &newName
     const QString parent = parentGroup(oldGroup);
     const QString newGroup = parent.isEmpty() ? newName : parent + QLatin1Char('/') + newName;
     const QString oldPrefix = oldGroup + QLatin1Char('/');
+    if (!requireSession(error))
+        return false;
 
     QHash<QString, QString> folders;
     {
@@ -471,6 +525,8 @@ bool BitwardenVault::removeGroup(const QString &group, QString *error) const {
     }
     if (folderId.isEmpty())
         return true;
+    if (!requireSession(error))
+        return false;
 
     const ProcResult result = runBw({QStringLiteral("delete"), QStringLiteral("folder"), folderId},
                                     m_session);
@@ -486,6 +542,18 @@ bool BitwardenVault::removeGroup(const QString &group, QString *error) const {
 }
 
 void BitwardenVault::close() {
+    m_password.clear();
+
+    // Opened from the local copy and locked before a session was ever made:
+    // bw was never unlocked, so there is nothing to lock.
+    if (m_session.isEmpty()) {
+        const QMutexLocker locker(&m_mutex);
+        m_items.clear();
+        m_folders.clear();
+        m_index = BwIndex();
+        return;
+    }
+
     // Detached: `bw lock` takes seconds, and nothing waits on it — neither
     // locking back to the database list nor quitting the app.
     QProcess process;

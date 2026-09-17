@@ -1,0 +1,40 @@
+{
+  "folders": {
+    "f1": "Trabalho/Email"
+  },
+  "items": [
+    {
+      "id": "c1",
+      "name": "Gmail",
+      "folderId": "f1",
+      "organizationId": null,
+      "username": "eu@gmail.com",
+      "password": "s3nh@-gm",
+      "uri": "https://mail.google.com",
+      "notes": "pessoal",
+      "totp": "otpauth://totp/x?secret=ABC"
+    },
+    {
+      "id": "c2",
+      "name": "Banco",
+      "folderId": null,
+      "organizationId": null,
+      "username": "12345",
+      "password": "p@ss/banco",
+      "uri": null,
+      "notes": null,
+      "totp": null
+    },
+    {
+      "id": "c3",
+      "name": "Servidor",
+      "folderId": null,
+      "organizationId": "99999999-8888-7777-6666-555555555555",
+      "username": "root",
+      "password": "org-secret",
+      "uri": "ssh://srv",
+      "notes": "compartilhado",
+      "totp": null
+    }
+  ]
+}

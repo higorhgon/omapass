@@ -1,5 +1,7 @@
 QT += core testlib
-CONFIG += testcase c++17
+CONFIG += testcase c++20 link_pkgconfig
+PKGCONFIG += botan-3
+DEFINES += OMAPASS_BW_FIXTURES=\\\"$$PWD/fixtures/bitwarden\\\"
 TEMPLATE = app
 TARGET = tst_omapass
 
@@ -8,6 +10,8 @@ INCLUDEPATH += ../src
 SOURCES += \
     tst_omapass.cpp \
     ../src/bitwardenjson.cpp \
+    ../src/bwcache.cpp \
+    ../src/bwcrypto.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/history.cpp \
@@ -19,6 +23,8 @@ SOURCES += \
 
 HEADERS += \
     ../src/bitwardenjson.h \
+    ../src/bwcache.h \
+    ../src/bwcrypto.h \
     ../src/config.h \
     ../src/filter.h \
     ../src/history.h \

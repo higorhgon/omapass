@@ -206,6 +206,9 @@ bitwarden.method_yubikey:
 bitwarden.logout_confirm:
   pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
   en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
+bitwarden.no_session:
+  pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
+  en: "Bitwarden is not ready for changes yet; lock and open it again."
 bitwarden.wait_sync:
   pt-BR: "Aguarde a sincronização com o Bitwarden terminar."
   en: "Wait for the Bitwarden sync to finish."

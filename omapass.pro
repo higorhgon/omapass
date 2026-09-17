@@ -1,6 +1,7 @@
 QT += core gui qml quick quickcontrols2 dbus concurrent
 
-CONFIG += c++17 release
+CONFIG += c++20 release link_pkgconfig
+PKGCONFIG += botan-3
 TARGET = omapass
 TEMPLATE = app
 
@@ -9,6 +10,8 @@ HEADERS += \
     src/bitwardenjson.h \
     src/bitwardenlogin.h \
     src/bitwardenvault.h \
+    src/bwcache.h \
+    src/bwcrypto.h \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
@@ -31,6 +34,8 @@ SOURCES += \
     src/bitwardenjson.cpp \
     src/bitwardenlogin.cpp \
     src/bitwardenvault.cpp \
+    src/bwcache.cpp \
+    src/bwcrypto.cpp \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \
