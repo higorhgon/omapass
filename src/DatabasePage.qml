@@ -140,8 +140,10 @@ FocusScope {
         databaseName: controller.pendingDatabase.name || ""
         errorText: controller.unlockError
         busy: controller.busy
+        pinAvailable: controller.pinAvailable
 
         onSubmitted: function(password) { controller.unlock(password); }
+        onPinSubmitted: function(pin) { controller.unlockWithPin(pin); }
         onDismissed: {
             controller.cancelUnlock();
             page.mode = "list";
