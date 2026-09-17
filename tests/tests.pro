@@ -2,6 +2,7 @@ QT += core testlib
 CONFIG += testcase c++20 link_pkgconfig
 PKGCONFIG += botan-3
 DEFINES += OMAPASS_BW_FIXTURES=\\\"$$PWD/fixtures/bitwarden\\\"
+DEFINES += OMAPASS_OP_FIXTURES=\\\"$$PWD/fixtures/onepassword\\\"
 TEMPLATE = app
 TARGET = tst_omapass
 
@@ -19,6 +20,7 @@ SOURCES += \
     ../src/history.cpp \
     ../src/i18n.cpp \
     ../src/kdbx2pass.cpp \
+    ../src/opjson.cpp \
     ../src/passstore.cpp \
     ../src/process.cpp \
     ../src/secret.cpp
@@ -34,6 +36,7 @@ HEADERS += \
     ../src/history.h \
     ../src/i18n.h \
     ../src/kdbx2pass.h \
+    ../src/opjson.h \
     ../src/passstore.h \
     ../src/process.h \
     ../src/secret.h

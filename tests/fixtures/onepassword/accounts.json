@@ -1,0 +1,15 @@
+[
+  {
+    "url": "minha.1password.com",
+    "email": "pessoa@exemplo.com",
+    "user_uuid": "AAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "account_uuid": "BBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "shorthand": "minha"
+  },
+  {
+    "url": "empresa.1password.com",
+    "email": "pessoa@empresa.com",
+    "user_uuid": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "account_uuid": "DDDDDDDDDDDDDDDDDDDDDDDDDD"
+  }
+]
