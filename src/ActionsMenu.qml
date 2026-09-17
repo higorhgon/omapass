@@ -15,8 +15,28 @@ Popup {
     signal chosen(int index)
 
     readonly property real s: systemTheme.textScale
+    readonly property real fontSize: Math.round(13 * s)
+    readonly property real itemMargin: Math.round(8 * s)
 
-    width: Math.round(200 * s)
+    // Wide enough for the longest option: the entries are translated and the
+    // list changes with the backend, so a fixed width would clip them.
+    FontMetrics {
+        id: metrics
+        // The interface font is the desktop's monospace one, which is wider
+        // than the default; measuring with anything else clips the options.
+        font.family: Qt.application.font.family
+        font.pixelSize: root.fontSize
+    }
+
+    readonly property real optionsWidth: {
+        let widest = 0;
+        for (let i = 0; i < options.length; ++i)
+            widest = Math.max(widest, metrics.advanceWidth(options[i]));
+        return widest;
+    }
+
+    width: Math.min(Math.max(Math.round(200 * s), optionsWidth + (itemMargin + padding) * 2),
+                    parent ? parent.width - Math.round(40 * s) : Math.round(420 * s))
     padding: Math.round(6 * s)
     modal: true
     focus: true
@@ -87,10 +107,13 @@ Popup {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
-                    anchors.leftMargin: Math.round(8 * root.s)
+                    anchors.right: parent.right
+                    anchors.leftMargin: root.itemMargin
+                    anchors.rightMargin: root.itemMargin
                     text: modelData
                     color: theme.base
-                    font.pixelSize: Math.round(13 * root.s)
+                    elide: Text.ElideRight
+                    font.pixelSize: root.fontSize
                 }
 
                 HoverHandler {
