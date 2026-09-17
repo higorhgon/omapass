@@ -86,6 +86,8 @@ FocusScope {
         onQueryChanged: controller.query = query
 
         footerText: controller.hasMessage ? controller.message
+                  : controller.busy ? i18n.t("app.working")
+                  : controller.syncing ? i18n.t("bitwarden.syncing")
                   : page.mode === "list" ? (searchMode ? i18n.t("ui.footer_search")
                                                        : i18n.t("ui.footer_normal"))
                   : ""

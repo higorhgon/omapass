@@ -46,33 +46,71 @@ BwStatus parseBwStatus(const QString &json) {
     return status;
 }
 
+BwStatus parseBwDataFile(const QByteArray &json) {
+    BwStatus status;
+    const QJsonDocument document = QJsonDocument::fromJson(json);
+    if (!document.isObject())
+        return status;
+
+    const QJsonObject root = document.object();
+    const QString activeId = root.value(QStringLiteral("global_account_activeAccountId")).toString();
+    if (activeId.isEmpty()) {
+        status.status = QStringLiteral("unauthenticated");
+        return status;
+    }
+
+    const QJsonObject account = root.value(QStringLiteral("global_account_accounts"))
+                                    .toObject().value(activeId).toObject();
+    status.userEmail = account.value(QStringLiteral("email")).toString();
+    // An active id without an account record is not a state bw leaves behind
+    // on its own; better to ask bw than to guess.
+    if (status.userEmail.isEmpty())
+        return BwStatus();
+    status.status = QStringLiteral("locked");
+    return status;
+}
+
 QString bwDisplayName(const QString &name) {
     QString display = name;
     display.replace(QLatin1Char('/'), QChar(0x2215));
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
 }
 
-BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson) {
-    BwIndex index;
+QHash<QString, QJsonObject> parseBwItems(const QByteArray &itemsJson) {
+    QHash<QString, QJsonObject> items;
+    const QJsonArray array = QJsonDocument::fromJson(itemsJson).array();
+    for (const QJsonValue &value : array) {
+        const QJsonObject item = value.toObject();
+        const QString id = item.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty())
+            items.insert(id, item);
+    }
+    return items;
+}
 
-    QHash<QString, QString> folderNames; // id → name
-    const QJsonArray folders = QJsonDocument::fromJson(foldersJson).array();
-    for (const QJsonValue &value : folders) {
+QHash<QString, QString> parseBwFolders(const QByteArray &foldersJson) {
+    QHash<QString, QString> folders;
+    const QJsonArray array = QJsonDocument::fromJson(foldersJson).array();
+    for (const QJsonValue &value : array) {
         const QJsonObject folder = value.toObject();
         const QString id = folder.value(QStringLiteral("id")).toString();
         QString name = folder.value(QStringLiteral("name")).toString();
         while (name.endsWith(QLatin1Char('/')))
             name.chop(1);
         // `bw list folders` includes a "No Folder" pseudo-folder with a null id.
-        if (id.isEmpty() || name.isEmpty())
-            continue;
-        folderNames.insert(id, name);
-        index.folders.insert(name, id);
+        if (!id.isEmpty() && !name.isEmpty())
+            folders.insert(id, name);
     }
+    return folders;
+}
+
+BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QString, QString> &folders) {
+    BwIndex index;
 
     QStringList groups;
-    for (const QString &name : std::as_const(folderNames)) {
-        const QStringList parts = name.split(QLatin1Char('/'));
+    for (auto it = folders.cbegin(); it != folders.cend(); ++it) {
+        index.folders.insert(it.value(), it.key());
+        const QStringList parts = it.value().split(QLatin1Char('/'));
         for (int i = 1; i <= parts.size(); ++i) {
             const QString group = parts.mid(0, i).join(QLatin1Char('/'));
             if (!groups.contains(group))
@@ -89,13 +127,11 @@ BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson)
     QVector<Candidate> candidates;
     QHash<QString, int> pathCount;
 
-    const QJsonArray items = QJsonDocument::fromJson(itemsJson).array();
-    for (const QJsonValue &value : items) {
-        const QJsonObject item = value.toObject();
+    for (const QJsonObject &item : items) {
         if (item.value(QStringLiteral("type")).toInt() != 1)
             continue;
-        if (!item.value(QStringLiteral("deletedDate")).isNull()
-            && !item.value(QStringLiteral("deletedDate")).isUndefined())
+        const QJsonValue deleted = item.value(QStringLiteral("deletedDate"));
+        if (!deleted.isNull() && !deleted.isUndefined())
             continue;
 
         BwItemRef ref;
@@ -106,7 +142,7 @@ BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson)
             continue;
 
         // An item pointing at a folder we did not get back sits at the root.
-        const QString group = folderNames.value(ref.folderId);
+        const QString group = folders.value(ref.folderId);
         const QString display = bwDisplayName(ref.name);
         const QString path = group.isEmpty() ? display : group + QLatin1Char('/') + display;
 
@@ -124,6 +160,23 @@ BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson)
     index.entries.sort();
 
     return index;
+}
+
+BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson) {
+    return buildBwIndex(parseBwItems(itemsJson), parseBwFolders(foldersJson));
+}
+
+EntryData bwEntryData(const QJsonObject &item) {
+    const QJsonObject login = item.value(QStringLiteral("login")).toObject();
+    const QJsonArray uris = login.value(QStringLiteral("uris")).toArray();
+
+    EntryData data;
+    data.username = login.value(QStringLiteral("username")).toString();
+    data.password = Secret(login.value(QStringLiteral("password")).toString());
+    data.url = uris.isEmpty() ? QString()
+                              : uris.first().toObject().value(QStringLiteral("uri")).toString();
+    data.notes = item.value(QStringLiteral("notes")).toString();
+    return data;
 }
 
 QByteArray applyBwEntryData(const QByteArray &itemJson, const QString &name,

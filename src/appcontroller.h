@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QFuture>
 #include <QObject>
 #include <QScopedPointer>
 #include <QStringList>
@@ -24,6 +25,9 @@ class AppController : public QObject {
 
     Q_PROPERTY(QString stage READ stage NOTIFY stageChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    // A Bitwarden vault pulling from the server after it opened: reading
+    // stays available, changes wait for it to finish.
+    Q_PROPERTY(bool syncing READ syncing NOTIFY syncingChanged)
 
     Q_PROPERTY(QVariantList databases READ databases NOTIFY databasesChanged)
     Q_PROPERTY(bool anyDatabaseFound READ anyDatabaseFound NOTIFY databasesChanged)
@@ -58,6 +62,7 @@ public:
 
     QString stage() const { return m_stage; }
     bool busy() const { return m_busy; }
+    bool syncing() const { return m_syncing; }
 
     QVariantList databases() const;
     bool anyDatabaseFound() const { return !m_databases.isEmpty(); }
@@ -126,6 +131,7 @@ public:
 signals:
     void stageChanged();
     void busyChanged();
+    void syncingChanged();
     void databasesChanged();
     void pendingDatabaseChanged();
     void unlockErrorChanged();
@@ -136,6 +142,17 @@ signals:
 
 private:
     void setBusy(bool busy);
+    // Runs `work` on a worker thread with the app marked busy, then `done`
+    // with its result back on this one. The backends block on external
+    // processes — `bw` takes seconds per call — and the window has to keep
+    // painting meanwhile.
+    template <typename Work, typename Done>
+    void runInBackground(Work work, Done done);
+    // Whether the open vault can take a change right now; says why not on the
+    // status line when it cannot.
+    bool vaultReadyForChanges();
+    void startBackgroundSync();
+    void setSyncing(bool syncing);
     void setUnlockError(const QString &error);
     void refreshDatabases();
     void refreshEntries();
@@ -160,6 +177,10 @@ private:
 
     QString m_stage = QStringLiteral("databases");
     bool m_busy = false;
+    bool m_syncing = false;
+    // Waited on at shutdown, so no worker thread outlives the vault it uses.
+    QFuture<void> m_task;
+    QFuture<void> m_syncTask;
 
     QVector<DbRef> m_databases;
     QVector<DbRef> m_filteredDatabases;
