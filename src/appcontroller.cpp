@@ -5,6 +5,7 @@
 #include "bwcache.h"
 #include "clipboard.h"
 #include "filter.h"
+#include "generator.h"
 #include "i18n.h"
 #include "passstore.h"
 
@@ -1064,6 +1065,98 @@ void AppController::setUnlockError(const QString &error) {
 
     m_unlockError = error;
     emit unlockErrorChanged();
+}
+
+namespace {
+
+const auto generatorSetting = QStringLiteral("generator/");
+
+GeneratorOptions optionsFromMap(const QVariantMap &map) {
+    const GeneratorOptions defaults;
+    GeneratorOptions options;
+    options.passphrase = map.value(QStringLiteral("passphrase"), defaults.passphrase).toBool();
+    options.length = map.value(QStringLiteral("length"), defaults.length).toInt();
+    options.lower = map.value(QStringLiteral("lower"), defaults.lower).toBool();
+    options.upper = map.value(QStringLiteral("upper"), defaults.upper).toBool();
+    options.numbers = map.value(QStringLiteral("numbers"), defaults.numbers).toBool();
+    options.special = map.value(QStringLiteral("special"), defaults.special).toBool();
+    options.excludeSimilar = map.value(QStringLiteral("excludeSimilar"), defaults.excludeSimilar).toBool();
+    options.exclude = map.value(QStringLiteral("exclude")).toString();
+    options.custom = map.value(QStringLiteral("custom")).toString();
+    options.words = map.value(QStringLiteral("words"), defaults.words).toInt();
+    options.separator = map.value(QStringLiteral("separator"), defaults.separator).toString();
+    return options;
+}
+
+QVariantMap optionsToMap(const GeneratorOptions &options) {
+    return {{QStringLiteral("passphrase"), options.passphrase},
+            {QStringLiteral("length"), options.length},
+            {QStringLiteral("lower"), options.lower},
+            {QStringLiteral("upper"), options.upper},
+            {QStringLiteral("numbers"), options.numbers},
+            {QStringLiteral("special"), options.special},
+            {QStringLiteral("excludeSimilar"), options.excludeSimilar},
+            {QStringLiteral("exclude"), options.exclude},
+            {QStringLiteral("custom"), options.custom},
+            {QStringLiteral("words"), options.words},
+            {QStringLiteral("separator"), options.separator}};
+}
+
+}
+
+// The sheet's last settings, so generating a second password does not mean
+// setting everything up again.
+QVariantMap AppController::generatorOptions() const {
+    QSettings settings;
+    QVariantMap map = optionsToMap(GeneratorOptions());
+    for (auto it = map.begin(); it != map.end(); ++it)
+        *it = settings.value(generatorSetting + it.key(), *it);
+
+    QVariantMap result = optionsToMap(Generator::normalize(optionsFromMap(map)));
+    result.insert(QStringLiteral("passphraseAvailable"), !Generator::wordlistPath().isEmpty());
+    return result;
+}
+
+// Generating takes about ten milliseconds, so it happens right here rather
+// than on a worker thread: the sheet regenerates on every change.
+QVariantMap AppController::generate(const QVariantMap &options) {
+    // Only with a vault open: generating is one step of putting a password
+    // somewhere, not a standalone tool.
+    if (m_vault.isNull())
+        return {};
+
+    const GeneratorOptions wanted = Generator::normalize(optionsFromMap(options));
+
+    QSettings settings;
+    const QVariantMap map = optionsToMap(wanted);
+    for (auto it = map.cbegin(); it != map.cend(); ++it)
+        settings.setValue(generatorSetting + it.key(), it.value());
+
+    Secret password;
+    QString error;
+    if (!Generator::generate(wanted, &password, &error)) {
+        showMessage(error, true);
+        return {};
+    }
+
+    QVariantMap result = map;
+    result.insert(QStringLiteral("password"), password.toString());
+    return result;
+}
+
+// Copies with the same treatment an entry's password gets: marked sensitive
+// for the clipboard manager and wiped after the countdown.
+void AppController::copySecret(const QString &password) {
+    if (password.isEmpty())
+        return;
+
+    if (!Clipboard::copy(password)) {
+        showMessage(I18n::t(QStringLiteral("app.copy_password_error")), true);
+        return;
+    }
+
+    showClipboardMessage(I18n::t(QStringLiteral("generator.copied")));
+    Clipboard::scheduleClear(Secret(password));
 }
 
 QVariantMap AppController::windowGeometry() const {

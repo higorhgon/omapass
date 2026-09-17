@@ -26,6 +26,7 @@ FocusScope {
     signal addRequested()
     signal editRequested()
     signal deleteRequested()
+    signal generateRequested()
     signal helpRequested()
     signal quitRequested()
 
@@ -93,6 +94,7 @@ FocusScope {
         case Qt.Key_A: pane.addRequested(); return true;
         case Qt.Key_E: pane.editRequested(); return true;
         case Qt.Key_X: pane.deleteRequested(); return true;
+        case Qt.Key_G: pane.generateRequested(); return true;
         // Ctrl+? reaches applications as Ctrl+Shift+/ or plain Ctrl+/
         // depending on the layout; both open the shortcut sheet.
         case Qt.Key_Question:

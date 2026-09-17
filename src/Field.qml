@@ -19,6 +19,7 @@ Item {
     signal previousRequested()
     signal listNext()
     signal listPrevious()
+    signal generateRequested()
 
     readonly property real s: systemTheme.textScale
 
@@ -59,7 +60,10 @@ Item {
             if (event.modifiers & Qt.ControlModifier) {
                 // Readline-style navigation for the suggestion dropdowns:
                 // this is a text field, so j/k cannot navigate here.
-                if (event.key === Qt.Key_N) {
+                if (event.key === Qt.Key_G) {
+                    root.generateRequested();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_N) {
                     root.listNext();
                     event.accepted = true;
                 } else if (event.key === Qt.Key_P) {

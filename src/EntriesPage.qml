@@ -104,6 +104,7 @@ FocusScope {
         onAddRequested: page.openAddForm()
         onEditRequested: page.editSelected()
         onDeleteRequested: page.confirmDelete()
+        onGenerateRequested: page.mode = "generate"
         onHelpRequested: page.mode = "help"
         onQuitRequested: Qt.quit()
         onMenuRequested: function(menuX, menuY) {
@@ -120,7 +121,7 @@ FocusScope {
         // The PIN entry only exists for Bitwarden, so the menu is built
         // rather than fixed, and the handler goes by the action it picked.
         readonly property var actions: {
-            const list = ["add", "edit", "delete"];
+            const list = ["add", "edit", "delete", "generate"];
             if (controller.bitwardenBackend)
                 list.push(controller.pinConfigured ? "disablePin" : "enablePin");
             return list;
@@ -129,6 +130,7 @@ FocusScope {
             "add": i18n.t("ui.context_add_new"),
             "edit": i18n.t("ui.context_edit"),
             "delete": i18n.t("ui.context_delete"),
+            "generate": i18n.t("generator.context_generate"),
             "enablePin": i18n.t("bitwarden.pin_enable_action"),
             "disablePin": i18n.t("bitwarden.pin_disable_action")
         })
@@ -143,6 +145,8 @@ FocusScope {
                 page.editSelected();
             else if (action === "delete")
                 page.confirmDelete();
+            else if (action === "generate")
+                page.mode = "generate";
             else if (action === "enablePin")
                 page.mode = "pin";
             else
@@ -171,7 +175,26 @@ FocusScope {
             controller.saveEntry(payload);
             page.mode = "list";
         }
+        onGenerateRequested: page.mode = "generateForForm"
         onDismissed: page.mode = "list"
+    }
+
+    // The same sheet either copies what it generated or hands it to the form
+    // that asked for it, which stays open underneath.
+    GeneratorModal {
+        visible: page.mode === "generate" || page.mode === "generateForForm"
+        fillMode: page.mode === "generateForForm"
+
+        onAccepted: function(password) {
+            if (page.mode === "generateForForm") {
+                formModal.setPassword(password);
+                page.mode = "form";
+            } else {
+                controller.copySecret(password);
+                page.mode = "list";
+            }
+        }
+        onDismissed: page.mode = page.mode === "generateForForm" ? "form" : "list"
     }
 
     EntryInfoModal {
@@ -221,7 +244,8 @@ FocusScope {
                           [i18n.t("common.space_key"), i18n.t("ui.help_open_menu")],
                           ["CTRL-A", i18n.t("ui.help_add_entry")],
                           ["CTRL-E", i18n.t("ui.help_edit_entry")],
-                          ["CTRL-X", i18n.t("ui.help_delete_entry")]]
+                          ["CTRL-X", i18n.t("ui.help_delete_entry")],
+                          ["CTRL-G", i18n.t("generator.help")]]
                     .concat(controller.bitwardenBackend
                             ? [[i18n.t("common.space_key"), i18n.t("bitwarden.pin_help")]] : [])
             },

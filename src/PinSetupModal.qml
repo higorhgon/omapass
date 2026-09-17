@@ -55,8 +55,9 @@ Modal {
         onCancelled: root.dismissed()
     }
 
-    RevealBox {
+    CheckOption {
         id: revealPassword
+        text: i18n.t("ui.show_password")
     }
 
     Field {
@@ -87,7 +88,7 @@ Modal {
         onCancelled: root.dismissed()
     }
 
-    RevealBox {
+    CheckOption {
         id: revealPin
         text: i18n.t("bitwarden.pin_show")
     }
