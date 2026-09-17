@@ -8,17 +8,26 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # Arch é a plataforma alvo (Omarchy) e traz as versões que o omapass usa.
+    # O Ubuntu do runner não serve: o noble não tem Botan 3, exigido pelo
+    # backend do Bitwarden e pelo keepassxc-cli vendorizado.
+    container: archlinux:latest
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Instala o Qt 6
+      # Antes do checkout: a action precisa do git para trazer o submodule.
+      - name: Instala as dependências
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            qt6-base-dev qt6-declarative-dev libgl1-mesa-dev libbotan-3-dev pkg-config
+          pacman -Syu --noconfirm --needed \
+            base-devel git cmake \
+            qt6-base qt6-declarative qt6-tools \
+            botan zlib minizip pcsclite libusb readline
 
-      - name: Compila
-        run: ./bin/build
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Testa
         run: ./bin/test
+
+      - name: Compila (omapass e keepassxc-cli)
+        run: ./bin/build
