@@ -6,6 +6,9 @@ TEMPLATE = app
 
 HEADERS += \
     src/appcontroller.h \
+    src/bitwardenjson.h \
+    src/bitwardenlogin.h \
+    src/bitwardenvault.h \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
@@ -25,6 +28,9 @@ HEADERS += \
 SOURCES += \
     src/main.cpp \
     src/appcontroller.cpp \
+    src/bitwardenjson.cpp \
+    src/bitwardenlogin.cpp \
+    src/bitwardenvault.cpp \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \

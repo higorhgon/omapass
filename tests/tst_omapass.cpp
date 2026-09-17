@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include "bitwardenjson.h"
 #include "config.h"
 #include "filter.h"
 #include "history.h"
@@ -7,6 +8,43 @@
 #include "kdbx2pass.h"
 #include "passstore.h"
 #include "secret.h"
+
+namespace {
+
+// Output of `bw`, as plain string literals: moc does not cope with raw
+// strings in this file.
+const char bwStatusLocked[] =
+    "{\"serverUrl\":null,\"lastSync\":\"2026-09-17T10:00:00.000Z\",\"userEmail\":\"a@b.com\",\"userId\":\"u1\",\"status\":\"locked\"}";
+
+const char bwStatusLoggedOut[] =
+    "{\"serverUrl\":null,\"lastSync\":null,\"status\":\"unauthenticated\"}";
+
+const char bwFolders[] =
+    "["
+    "{\"object\":\"folder\",\"id\":\"f1\",\"name\":\"Work/Mail\"},"
+    "{\"object\":\"folder\",\"id\":\"f2\",\"name\":\"Empty\"},"
+    "{\"object\":\"folder\",\"id\":null,\"name\":\"No Folder\"}]";
+
+const char bwItems[] =
+    "["
+    "{\"id\":\"i1\",\"type\":1,\"name\":\"Gmail\",\"folderId\":\"f1\",\"login\":{\"password\":\"x\"}},"
+    "{\"id\":\"i2\",\"type\":1,\"name\":\"Bank\",\"folderId\":null},"
+    "{\"id\":\"i3\",\"type\":2,\"name\":\"A note\",\"folderId\":null},"
+    "{\"id\":\"i4\",\"type\":1,\"name\":\"Lost\",\"folderId\":\"gone\"}]";
+
+const char bwDuplicateItems[] =
+    "["
+    "{\"id\":\"aaaaaaaa-1111\",\"type\":1,\"name\":\"Mail\",\"folderId\":null},"
+    "{\"id\":\"bbbbbbbb-2222\",\"type\":1,\"name\":\"Mail\",\"folderId\":null},"
+    "{\"id\":\"cccccccc-3333\",\"type\":1,\"name\":\"a/b\",\"folderId\":null}]";
+
+const char bwItemWithExtras[] =
+    "{\"id\":\"i1\",\"type\":1,\"name\":\"Old\",\"folderId\":\"f1\",\"notes\":\"n\","
+    "\"organizationId\":\"o1\",\"fields\":[{\"name\":\"pin\",\"value\":\"1234\",\"type\":1}],"
+    "\"login\":{\"username\":\"u\",\"password\":\"p\",\"totp\":\"otpauth://x\","
+    "\"uris\":[{\"match\":null,\"uri\":\"https://a\"},{\"match\":null,\"uri\":\"https://b\"}]}}";
+
+}
 
 class TestOmapass : public QObject {
     Q_OBJECT
@@ -187,6 +225,101 @@ private slots:
         QCOMPARE(weightForAge(86400), 50u);
         QCOMPARE(weightForAge(604800), 20u);
         QCOMPARE(weightForAge(2592000), 5u);
+    }
+
+    void bitwardenStatusReadsStateAndEmail() {
+        const BwStatus locked = parseBwStatus(QString::fromUtf8(bwStatusLocked));
+        QCOMPARE(locked.status, QStringLiteral("locked"));
+        QCOMPARE(locked.userEmail, QStringLiteral("a@b.com"));
+        QVERIFY(locked.loggedIn());
+
+        const BwStatus out = parseBwStatus(QString::fromUtf8(bwStatusLoggedOut));
+        QVERIFY(!out.loggedIn());
+        QVERIFY(parseBwStatus(QStringLiteral("garbage")).status.isEmpty());
+    }
+
+    void bitwardenIndexMapsFoldersToGroups() {
+        const QByteArray folders(bwFolders);
+        const QByteArray items(bwItems);
+
+        const BwIndex index = buildBwIndex(items, folders);
+        QCOMPARE(index.groups, QStringList({QStringLiteral("Empty"), QStringLiteral("Work"),
+                                            QStringLiteral("Work/Mail")}));
+        QCOMPARE(index.entries, QStringList({QStringLiteral("Bank"), QStringLiteral("Lost"),
+                                             QStringLiteral("Work/Mail/Gmail")}));
+        QCOMPARE(index.items.value(QStringLiteral("Work/Mail/Gmail")).id, QStringLiteral("i1"));
+        QCOMPARE(index.folders.value(QStringLiteral("Work/Mail")), QStringLiteral("f1"));
+        QVERIFY(!index.folders.contains(QStringLiteral("Work")));
+        QVERIFY(!index.folders.contains(QStringLiteral("No Folder")));
+    }
+
+    void bitwardenIndexDisambiguatesDuplicateNames() {
+        const QByteArray items(bwDuplicateItems);
+
+        const BwIndex index = buildBwIndex(items, "[]");
+        QVERIFY(index.items.contains(QStringLiteral("Mail [aaaaaaaa]")));
+        QVERIFY(index.items.contains(QStringLiteral("Mail [bbbbbbbb]")));
+        QVERIFY(!index.items.contains(QStringLiteral("Mail")));
+        const QString slashed = QStringLiteral("a") + QChar(0x2215) + QStringLiteral("b");
+        QCOMPARE(index.items.value(slashed).name, QStringLiteral("a/b"));
+    }
+
+    void bitwardenEditKeepsFieldsItDoesNotModel() {
+        const QByteArray original(bwItemWithExtras);
+
+        EntryData data;
+        data.username = QStringLiteral("new-user");
+        data.password = Secret(QStringLiteral("new-pass"));
+        data.url = QStringLiteral("https://c");
+
+        const QJsonObject item =
+            QJsonDocument::fromJson(applyBwEntryData(original, QStringLiteral("New"), QString(), data)).object();
+        const QJsonObject login = item.value(QStringLiteral("login")).toObject();
+
+        QCOMPARE(item.value(QStringLiteral("name")).toString(), QStringLiteral("New"));
+        QVERIFY(item.value(QStringLiteral("folderId")).isNull());
+        QVERIFY(item.value(QStringLiteral("notes")).isNull());
+        QCOMPARE(item.value(QStringLiteral("organizationId")).toString(), QStringLiteral("o1"));
+        QCOMPARE(item.value(QStringLiteral("fields")).toArray().size(), 1);
+        QCOMPARE(login.value(QStringLiteral("username")).toString(), QStringLiteral("new-user"));
+        QCOMPARE(login.value(QStringLiteral("password")).toString(), QStringLiteral("new-pass"));
+        QCOMPARE(login.value(QStringLiteral("totp")).toString(), QStringLiteral("otpauth://x"));
+        const QJsonArray uris = login.value(QStringLiteral("uris")).toArray();
+        QCOMPARE(uris.size(), 2);
+        QCOMPARE(uris.at(0).toObject().value(QStringLiteral("uri")).toString(), QStringLiteral("https://c"));
+        QCOMPARE(uris.at(1).toObject().value(QStringLiteral("uri")).toString(), QStringLiteral("https://b"));
+    }
+
+    void bitwardenNewItemStartsFromABlankLogin() {
+        EntryData data;
+        data.password = Secret(QStringLiteral("p"));
+        const QJsonObject item =
+            QJsonDocument::fromJson(applyBwEntryData({}, QStringLiteral("Site"), QStringLiteral("f1"), data)).object();
+        QCOMPARE(item.value(QStringLiteral("type")).toInt(), 1);
+        QCOMPARE(item.value(QStringLiteral("folderId")).toString(), QStringLiteral("f1"));
+        QVERIFY(item.value(QStringLiteral("login")).toObject().value(QStringLiteral("uris")).toArray().isEmpty());
+    }
+
+    void bitwardenErrorsAreClassified() {
+        QCOMPARE(classifyBwError(QStringLiteral("Username or password is incorrect. Try again.")),
+                 BwLoginError::WrongPassword);
+        QCOMPARE(classifyBwError(QStringLiteral("Invalid master password.")), BwLoginError::WrongPassword);
+        QCOMPARE(classifyBwError(QStringLiteral("Two-step token is invalid. Try again.")),
+                 BwLoginError::InvalidCode);
+        QCOMPARE(classifyBwError(QStringLiteral("You are already logged in as a@b.com.")),
+                 BwLoginError::AlreadyLoggedIn);
+        QCOMPARE(classifyBwError(QStringLiteral("Something else")), BwLoginError::Other);
+        QCOMPARE(classifyBwError(QString()), BwLoginError::None);
+    }
+
+    void bitwardenPromptsAreDetected() {
+        QCOMPARE(detectBwPrompt(QStringLiteral("? Two-step login method: (Use arrow keys)")),
+                 BwPrompt::TwoFactorMethod);
+        QCOMPARE(detectBwPrompt(QStringLiteral("\x1b[2K? Two-step login code: ")), BwPrompt::TwoFactorCode);
+        QCOMPARE(detectBwPrompt(QStringLiteral(
+                     "? Two-step login code: 123\n? New device verification required. Enter OTP sent to login email:")),
+                 BwPrompt::NewDeviceCode);
+        QCOMPARE(detectBwPrompt(QStringLiteral("loading")), BwPrompt::None);
     }
 
     void secretsWipeTheirOwnStorage() {

@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 
+#include "bitwardenvault.h"
 #include "clipboard.h"
 #include "filter.h"
 #include "i18n.h"
@@ -8,7 +9,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEvent>
-#include <QFileInfo>
 #include <QRect>
 #include <QSettings>
 
@@ -23,7 +23,7 @@ const auto windowGeometrySetting = QStringLiteral("window/geometry");
 
 QVariantMap describe(const DbRef &ref) {
     return {{QStringLiteral("path"), ref.path},
-            {QStringLiteral("name"), QFileInfo(ref.path).fileName()},
+            {QStringLiteral("name"), Vault::displayName(ref)},
             {QStringLiteral("kind"), Vault::kindLabel(ref.kind)}};
 }
 
@@ -41,6 +41,70 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             }
         }
         clearMessage();
+    });
+
+    connect(&m_bitwardenLogin, &BitwardenLogin::promptShown, this, [this](BwPrompt prompt) {
+        setBusy(false);
+        setUnlockError(QString());
+        switch (prompt) {
+        case BwPrompt::TwoFactorMethod:
+            setLoginStep(QStringLiteral("method"));
+            break;
+        case BwPrompt::TwoFactorCode:
+            setLoginStep(QStringLiteral("code"));
+            break;
+        case BwPrompt::NewDeviceCode:
+            setLoginStep(QStringLiteral("deviceCode"));
+            break;
+        case BwPrompt::None:
+            break;
+        }
+    });
+    connect(&m_bitwardenLogin, &BitwardenLogin::succeeded, this, [this](const Secret &session) {
+        const QString email = m_loginEmail;
+        m_loginPassword.clear();
+        setLoginStep(QString());
+
+        BitwardenVault::rememberAccount(email);
+        refreshDatabases();
+        emit databaseCreated();
+
+        QString error;
+        BitwardenVault *vault = BitwardenVault::openWithSession(email, session, &error);
+        if (vault)
+            adoptVault({BitwardenVault::refPath(email), VaultKind::Bitwarden}, vault);
+        else
+            showMessage(error, true);
+        setBusy(false);
+    });
+    connect(&m_bitwardenLogin, &BitwardenLogin::failed, this,
+            [this](const QString &error, BwLoginError kind) {
+        setBusy(false);
+        m_loginPassword.clear();
+
+        switch (kind) {
+        case BwLoginError::WrongPassword:
+            setUnlockError(I18n::t(QStringLiteral("backend.wrong_password")));
+            break;
+        case BwLoginError::InvalidEmail:
+            setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_email")));
+            break;
+        case BwLoginError::InvalidCode:
+            setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_code")));
+            break;
+        case BwLoginError::AlreadyLoggedIn:
+            // Logged in from a terminal meanwhile: nothing left to do here
+            // but unlock, which the account's own entry does.
+            setLoginStep(QString());
+            addBitwardenAccount();
+            return;
+        default:
+            setUnlockError(error.isEmpty() ? I18n::t(QStringLiteral("bitwarden.login_failed")) : error);
+            break;
+        }
+        // Every failure ends the bw process, so the next try starts over from
+        // the credentials, e-mail kept.
+        setLoginStep(QStringLiteral("credentials"));
     });
 
     refreshDatabases();
@@ -63,6 +127,11 @@ AppController::AppController(const AppConfig &config, QObject *parent)
     }
 }
 
+AppController::~AppController() {
+    m_bitwardenLogin.cancel();
+    closeVault();
+}
+
 bool AppController::eventFilter(QObject *watched, QEvent *event) {
     switch (event->type()) {
     case QEvent::KeyPress:
@@ -82,7 +151,7 @@ void AppController::lock() {
     if (m_vault.isNull())
         return; // nada desbloqueado — nada a travar (tela de bancos, por exemplo)
 
-    m_vault.reset();
+    closeVault();
     m_query.clear();
     refreshEntries();
 
@@ -128,7 +197,7 @@ QVariantMap AppController::pendingDatabase() const {
 QString AppController::vaultLabel() const {
     if (m_vault.isNull())
         return QString();
-    return QFileInfo(m_vault->path()).fileName();
+    return Vault::displayName({m_vault->path(), m_vault->kind()});
 }
 
 bool AppController::passBackend() const {
@@ -166,10 +235,37 @@ void AppController::selectDatabase(int index) {
     if (index < 0 || index >= m_filteredDatabases.size())
         return;
 
-    m_pendingDatabase = m_filteredDatabases.at(index);
-    m_hasPendingDatabase = true;
-    setUnlockError(QString());
-    emit pendingDatabaseChanged();
+    const DbRef ref = m_filteredDatabases.at(index);
+    if (ref.kind != VaultKind::Bitwarden) {
+        m_pendingDatabase = ref;
+        m_hasPendingDatabase = true;
+        setUnlockError(QString());
+        emit pendingDatabaseChanged();
+        return;
+    }
+
+    if (m_busy)
+        return;
+
+    // A Bitwarden account can have been logged out behind omapass' back (bw
+    // logout in a terminal, an expired login), in which case the master
+    // password alone cannot unlock it: back to the login sheet.
+    setBusy(true);
+    QTimer::singleShot(0, this, [this, ref]() {
+        const BwStatus status = BitwardenVault::status();
+        setBusy(false);
+        setUnlockError(QString());
+
+        if (status.loggedIn()) {
+            m_pendingDatabase = ref;
+            m_hasPendingDatabase = true;
+            emit pendingDatabaseChanged();
+            return;
+        }
+
+        m_loginEmail = BitwardenVault::emailOf(ref.path);
+        setLoginStep(QStringLiteral("credentials"));
+    });
 }
 
 void AppController::cancelUnlock() {
@@ -203,6 +299,10 @@ void AppController::openVault(const DbRef &ref, const Secret &secret) {
         return;
     }
 
+    adoptVault(ref, vault);
+}
+
+void AppController::adoptVault(const DbRef &ref, Vault *vault) {
     m_vault.reset(vault);
     m_history.recordUse(ref.path);
 
@@ -507,6 +607,115 @@ void AppController::createPassStore(const QString &directory, const QString &key
         emit pendingDatabaseChanged();
         setBusy(false);
     });
+}
+
+bool AppController::bitwardenAvailable() const {
+    return BitwardenVault::isAvailable();
+}
+
+void AppController::setLoginStep(const QString &step) {
+    if (step.isEmpty())
+        m_loginPassword.clear();
+    m_loginStep = step;
+    emit loginChanged();
+}
+
+void AppController::addBitwardenAccount() {
+    if (m_busy)
+        return;
+
+    setBusy(true);
+    setUnlockError(QString());
+    QTimer::singleShot(0, this, [this]() {
+        const BwStatus status = BitwardenVault::status();
+        setBusy(false);
+
+        // Already logged in with bw (from a terminal, say): the account only
+        // needs adding to the list and unlocking.
+        if (status.loggedIn() && !status.userEmail.isEmpty()) {
+            BitwardenVault::rememberAccount(status.userEmail);
+            refreshDatabases();
+            emit databaseCreated();
+
+            m_pendingDatabase = {BitwardenVault::refPath(status.userEmail), VaultKind::Bitwarden};
+            m_hasPendingDatabase = true;
+            emit pendingDatabaseChanged();
+            return;
+        }
+
+        m_loginEmail = BitwardenVault::rememberedAccount();
+        setLoginStep(QStringLiteral("credentials"));
+    });
+}
+
+void AppController::bitwardenLogin(const QString &email, const QString &password) {
+    if (m_busy)
+        return;
+
+    const QString trimmed = email.trimmed();
+    if (trimmed.isEmpty()) {
+        setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_email")));
+        return;
+    }
+
+    m_loginEmail = trimmed;
+    m_loginPassword = Secret(password);
+    emit loginChanged();
+
+    setBusy(true);
+    setUnlockError(QString());
+    m_bitwardenLogin.start(m_loginEmail, m_loginPassword);
+}
+
+void AppController::chooseBitwardenMethod(int method) {
+    if (m_busy || m_loginPassword.isEmpty())
+        return;
+
+    setBusy(true);
+    setUnlockError(QString());
+    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, method);
+}
+
+void AppController::sendBitwardenCode(const QString &code) {
+    if (m_busy || code.trimmed().isEmpty())
+        return;
+
+    setBusy(true);
+    setUnlockError(QString());
+    m_bitwardenLogin.sendCode(code);
+}
+
+void AppController::cancelBitwardenLogin() {
+    m_bitwardenLogin.cancel();
+    setBusy(false);
+    setUnlockError(QString());
+    setLoginStep(QString());
+}
+
+bool AppController::isBitwardenDatabase(int index) const {
+    return index >= 0 && index < m_filteredDatabases.size()
+        && m_filteredDatabases.at(index).kind == VaultKind::Bitwarden;
+}
+
+void AppController::logoutBitwarden() {
+    if (m_busy)
+        return;
+
+    setBusy(true);
+    QTimer::singleShot(0, this, [this]() {
+        BitwardenVault::logout();
+        BitwardenVault::forgetAccount();
+        refreshDatabases();
+        setBusy(false);
+        showMessage(I18n::t(QStringLiteral("bitwarden.logged_out")), false);
+    });
+}
+
+void AppController::closeVault() {
+    if (m_vault.isNull())
+        return;
+    m_vault->close();
+    m_vault.reset();
 }
 
 QString AppController::message() const {
