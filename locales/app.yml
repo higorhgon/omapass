@@ -4,8 +4,8 @@ cli.version:
   pt-BR: "omapass versão %{version}"
   en: "omapass version %{version}"
 cli.help_title:
-  pt-BR: "omapass - Gerenciador de senhas para KeePassXC e pass"
-  en: "omapass - Password manager for KeePassXC and pass"
+  pt-BR: "omapass - Gerenciador de senhas para KeePassXC, pass e Bitwarden"
+  en: "omapass - Password manager for KeePassXC, pass and Bitwarden"
 cli.help_usage_header:
   pt-BR: "Uso:"
   en: "Usage:"
@@ -145,6 +145,151 @@ pass.wrong_gpg_password:
 backend.wrong_password:
   pt-BR: "Senha incorreta!"
   en: "Wrong password!"
+
+bitwarden.spawn_error:
+  pt-BR: "Erro ao executar o bw (instale o bitwarden-cli): %{err}"
+  en: "Error running bw (install bitwarden-cli): %{err}"
+bitwarden.not_logged_in:
+  pt-BR: "A conta Bitwarden não está logada."
+  en: "The Bitwarden account is not logged in."
+bitwarden.entry_not_found:
+  pt-BR: "Entrada não encontrada: %{entry}"
+  en: "Entry not found: %{entry}"
+bitwarden.invalid_email:
+  pt-BR: "E-mail inválido!"
+  en: "Invalid e-mail!"
+bitwarden.invalid_code:
+  pt-BR: "Código inválido!"
+  en: "Invalid code!"
+bitwarden.login_failed:
+  pt-BR: "Falha no login do Bitwarden."
+  en: "Bitwarden login failed."
+bitwarden.logged_out:
+  pt-BR: "Conta Bitwarden desconectada."
+  en: "Bitwarden account logged out."
+bitwarden.login_title:
+  pt-BR: " Entrar no Bitwarden "
+  en: " Log in to Bitwarden "
+bitwarden.logging_in:
+  pt-BR: "Conectando ao Bitwarden…"
+  en: "Connecting to Bitwarden…"
+bitwarden.email_label:
+  pt-BR: " E-mail "
+  en: " E-mail "
+bitwarden.master_password_label:
+  pt-BR: " Senha Mestra "
+  en: " Master Password "
+bitwarden.code_label:
+  pt-BR: " Código de Verificação em Duas Etapas "
+  en: " Two-step Login Code "
+bitwarden.code_hint:
+  pt-BR: "Digite o código do seu método de verificação | ENTER: Confirmar | ESC: Cancelar"
+  en: "Enter the code from your two-step method | ENTER: Confirm | ESC: Cancel"
+bitwarden.device_code_label:
+  pt-BR: " Código de Verificação do Dispositivo "
+  en: " Device Verification Code "
+bitwarden.device_code_hint:
+  pt-BR: "Novo dispositivo: digite o código enviado ao seu e-mail | ENTER: Confirmar | ESC: Cancelar"
+  en: "New device: enter the code sent to your e-mail | ENTER: Confirm | ESC: Cancel"
+bitwarden.method_title:
+  pt-BR: " Verificação em Duas Etapas "
+  en: " Two-step Login "
+bitwarden.method_authenticator:
+  pt-BR: "Aplicativo autenticador"
+  en: "Authenticator app"
+bitwarden.method_email:
+  pt-BR: "E-mail"
+  en: "E-mail"
+bitwarden.method_yubikey:
+  pt-BR: "YubiKey"
+  en: "YubiKey"
+bitwarden.logout_confirm:
+  pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
+  en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
+bitwarden.pin_title:
+  pt-BR: " Desbloqueio por PIN "
+  en: " PIN Unlock "
+bitwarden.pin_label:
+  pt-BR: " PIN "
+  en: " PIN "
+bitwarden.pin_confirm_label:
+  pt-BR: " Repita o PIN "
+  en: " Repeat PIN "
+bitwarden.pin_footer:
+  pt-BR: "ENTER: Desbloquear | TAB: Usar a senha mestra | ESC: Cancelar"
+  en: "ENTER: Unlock | TAB: Use the master password | ESC: Cancel"
+bitwarden.pin_wrong:
+  pt-BR: "PIN incorreto! Restam %{left} tentativa(s)."
+  en: "Wrong PIN! %{left} attempt(s) left."
+bitwarden.pin_blocked:
+  pt-BR: "PIN incorreto demais vezes: o PIN foi removido. Use a senha mestra."
+  en: "Too many wrong PINs: the PIN was removed. Use the master password."
+bitwarden.pin_missing:
+  pt-BR: "Nenhum PIN guardado para esta conta."
+  en: "No PIN stored for this account."
+bitwarden.pin_stale:
+  pt-BR: "A senha guardada com o PIN não vale mais; o PIN foi removido."
+  en: "The password kept with the PIN is no longer valid; the PIN was removed."
+bitwarden.pin_too_short:
+  pt-BR: "O PIN precisa ter pelo menos %{min} dígitos."
+  en: "The PIN must have at least %{min} digits."
+bitwarden.pin_only_digits:
+  pt-BR: "O PIN só pode conter dígitos."
+  en: "The PIN may only contain digits."
+bitwarden.pin_mismatch:
+  pt-BR: "Os PINs não coincidem."
+  en: "The PINs do not match."
+bitwarden.pin_weak:
+  pt-BR: "Um PIN de %{digits} dígitos são só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline. Use %{recommended} ou mais."
+  en: "A %{digits}-digit PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing. Use %{recommended} or more."
+bitwarden.pin_show:
+  pt-BR: "Mostrar PIN"
+  en: "Show PIN"
+bitwarden.pin_no_keyring:
+  pt-BR: "Chaveiro do sistema indisponível (instale o libsecret/secret-tool)."
+  en: "System keyring unavailable (install libsecret/secret-tool)."
+bitwarden.pin_store_error:
+  pt-BR: "Não foi possível guardar o PIN."
+  en: "Could not store the PIN."
+bitwarden.pin_enabled:
+  pt-BR: "Desbloqueio por PIN ativado."
+  en: "PIN unlock enabled."
+bitwarden.pin_disabled:
+  pt-BR: "Desbloqueio por PIN desativado."
+  en: "PIN unlock disabled."
+bitwarden.pin_setup_title:
+  pt-BR: " Ativar Desbloqueio por PIN "
+  en: " Enable PIN Unlock "
+bitwarden.pin_setup_footer:
+  pt-BR: "A senha mestra fica guardada no chaveiro, cifrada pelo PIN | ENTER: Confirmar | ESC: Cancelar"
+  en: "The master password is kept in the keyring, encrypted with the PIN | ENTER: Confirm | ESC: Cancel"
+bitwarden.pin_enable_action:
+  pt-BR: "Ativar desbloqueio por PIN"
+  en: "Enable PIN unlock"
+bitwarden.pin_disable_action:
+  pt-BR: "Desativar desbloqueio por PIN"
+  en: "Disable PIN unlock"
+bitwarden.pin_help:
+  pt-BR: "Menu: ativar/desativar PIN (Bitwarden)"
+  en: "Menu: enable/disable PIN (Bitwarden)"
+bitwarden.no_session:
+  pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
+  en: "Bitwarden is not ready for changes yet; lock and open it again."
+bitwarden.wait_sync:
+  pt-BR: "Aguarde a sincronização com o Bitwarden terminar."
+  en: "Wait for the Bitwarden sync to finish."
+bitwarden.syncing:
+  pt-BR: "Sincronizando com o Bitwarden…"
+  en: "Syncing with Bitwarden…"
+bitwarden.sync_error:
+  pt-BR: "Falha ao sincronizar com o Bitwarden (mostrando a cópia local): %{err}"
+  en: "Bitwarden sync failed (showing the local copy): %{err}"
+app.working:
+  pt-BR: "Aguarde…"
+  en: "Please wait…"
+bitwarden.help_logout:
+  pt-BR: "Sair da conta Bitwarden"
+  en: "Log out of Bitwarden account"
 
 kdbx2pass.master_password_prompt:
   pt-BR: "Senha mestra de %{db}: "

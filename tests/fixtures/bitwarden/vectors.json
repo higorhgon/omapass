@@ -1,0 +1,23 @@
+{
+  "password": "omapass-teste-123",
+  "salt": "teste@exemplo.com",
+  "pbkdf2": {
+    "iterations": 5000,
+    "masterKey": "710c40e7d8be953d8adae7fa119996bf2dcdc1a5a3ba146fd18e1daffbdf3d76"
+  },
+  "argon2id": {
+    "iterations": 2,
+    "memory": 16,
+    "parallelism": 1,
+    "masterKey": "5c28cde313f3fc192e54af33793b37c6314aaf1edff003d5bd3d1b60c4fcd21d"
+  },
+  "encString": {
+    "key": "2400ee083073ec770800a3becd7161f2ddbd7f2f92e4a8563873c1b9a68d01bf35d11fda9eb900772a3e310f576c04524c4a7b7804007ab8a7c539379506b733",
+    "plaintext": "Olá, omapass! 🔐",
+    "encrypted": "2.GPyDHJAwElkLsHcrRvaE6g==|gU9ZJQR5O13YAZHXAoS1RgOWH6IhsoeJpaowx+D++SU=|wc6NlxW2WE0uKJVrbroldiCA8jmAiSqC0/fiUodJyf4="
+  },
+  "userKeyArgon2id": {
+    "userKey": "2400ee083073ec770800a3becd7161f2ddbd7f2f92e4a8563873c1b9a68d01bf35d11fda9eb900772a3e310f576c04524c4a7b7804007ab8a7c539379506b733",
+    "wrapped": "2.uvdUZm23qUfVeINUqb93Wg==|dTM9cF2Ota+IhDTPbQRpzCNiFJXCIoFW0gqFRzriKmE3dUeVpa0qe9/eGyXgy1kqbnpH67UedQTk6j57VJ8j7a360n06Wqoqp/bxNG7SsvU=|1g7pys3CjL/5DF2pPq+8g77wyJZqf8lt2iXL8bcm7IU="
+  }
+}

@@ -4,6 +4,8 @@
         <file alias="DatabasePage.qml">DatabasePage.qml</file>
         <file alias="EntriesPage.qml">EntriesPage.qml</file>
         <file alias="ListPane.qml">ListPane.qml</file>
+        <file alias="PinSetupModal.qml">PinSetupModal.qml</file>
+        <file alias="RevealBox.qml">RevealBox.qml</file>
         <file alias="Modal.qml">Modal.qml</file>
         <file alias="Field.qml">Field.qml</file>
         <file alias="SuggestionList.qml">SuggestionList.qml</file>
@@ -15,6 +17,7 @@
         <file alias="EntryFormModal.qml">EntryFormModal.qml</file>
         <file alias="EntryInfoModal.qml">EntryInfoModal.qml</file>
         <file alias="HelpModal.qml">HelpModal.qml</file>
+        <file alias="LoginModal.qml">LoginModal.qml</file>
         <file alias="RenameGroupModal.qml">RenameGroupModal.qml</file>
         <file alias="UnlockModal.qml">UnlockModal.qml</file>
         <file alias="locales/app.yml">../locales/app.yml</file>

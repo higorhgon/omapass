@@ -4,8 +4,9 @@
 
 Gerenciador de senhas com interface Qt Quick, escrito em C++, que segue o tema
 do Omarchy, a fonte monoespaçada do sistema e o modo claro/escuro
-automaticamente. Suporta dois backends: **KeePassXC** (.kdbx, via
-`keepassxc-cli`) e **pass** — the standard unix password manager (via `gpg`).
+automaticamente. Suporta três backends: **KeePassXC** (.kdbx, via
+`keepassxc-cli`), **pass** — the standard unix password manager (via `gpg`) — e
+**Bitwarden** (via o CLI oficial `bw`).
 
 Feito na mesma linha do [omacalc](https://github.com/omacom-io/omacalc),
 [omawrite](https://github.com/omacom-io/omawrite) e
@@ -16,9 +17,10 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 
 - Suporte a KeePassXC e a pass — o omapass detecta ambos automaticamente e adapta a interface a cada um (entradas do pass, por exemplo, têm só Título e Senha, sem Usuário/URL/Notas no formulário)
 - No pass, o omapass guarda a passphrase só durante a sessão e decifra as entradas com ela
+- Contas Bitwarden (bitwarden.com) com login pela própria interface, incluindo verificação em duas etapas e verificação de novo dispositivo, e desbloqueio opcional por PIN
 - Seletor de banco de dados com busca multi-termo e navegação estilo vim
 - Modal integrado para desbloqueio de banco com validação de senha/passphrase
-- Criação de bancos pela própria interface: KeePassXC (nome + senha) ou pass (diretório com autocomplete + escolha de chave GPG existente)
+- Criação de bancos pela própria interface: KeePassXC (nome + senha), pass (diretório com autocomplete + escolha de chave GPG existente) ou conta Bitwarden (login)
 - Listagem, adição, edição, exclusão e renomeação de grupos/entradas
 - Modal de ajuda com todos os atalhos (`Ctrl+?`)
 - Motor de frecency (frequência + recência) para ordenação inteligente
@@ -31,6 +33,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Qt 6: `qt6-base`, `qt6-declarative`
 - `xdg-desktop-portal` e um backend de portal (para o modo claro/escuro e o tamanho de texto do desktop)
 - `wl-clipboard` (`wl-copy`) para copiar senhas
+- Botan 3 (`botan` no Arch/Omarchy, `libbotan-3-dev` no Debian/Ubuntu) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
 
 Para bancos **KeePassXC**:
 
@@ -42,6 +45,11 @@ Para bancos **pass**:
 - [`pass`](https://www.passwordstore.org/) instalado
 - `gpg`/`gpg-agent`, com pelo menos uma chave secreta já criada (veja [Configurando o pass](#configurando-o-pass))
 - `gpg-agent` configurado para aceitar a senha via loopback (`allow-loopback-pinentry`) — necessário porque o omapass decifra entradas passando a passphrase pelo stdin do `gpg`, sem abrir um pinentry a cada acesso
+
+Para contas **Bitwarden**:
+
+- [`bitwarden-cli`](https://bitwarden.com/help/cli/) (o comando `bw`) no PATH — no Arch/Omarchy, `sudo pacman -S bitwarden-cli`. Sem ele, a opção Bitwarden não aparece no menu de novo banco.
+- Para o desbloqueio por PIN (opcional): `secret-tool`, do `libsecret`, e um chaveiro do sistema destravado — o Omarchy já traz os dois. Sem isso, a opção de PIN simplesmente não aparece.
 
 A busca por bancos usa [`fd`](https://github.com/sharkdp/fd) quando disponível
 (bem mais rápido em um diretório home inteiro) e cai para uma varredura própria
@@ -97,8 +105,9 @@ O programa busca automaticamente, dentro do diretório configurado (`path` em
 - arquivos `.kdbx` (bancos KeePassXC)
 - diretórios contendo `.gpg-id` (password-stores do pass)
 
-e exibe uma interface interativa para seleção, desbloqueio e gestão de senhas,
-indicando o tipo de cada banco encontrado (`[KeePassXC]` ou `[pass]`). Havendo
+além da conta Bitwarden adicionada pelo omapass, se houver, e exibe uma interface
+interativa para seleção, desbloqueio e gestão de senhas, indicando o tipo de cada
+banco encontrado (`[KeePassXC]`, `[pass]` ou `[Bitwarden]`). Havendo
 um único banco, ele vai direto para o modal de desbloqueio.
 
 ### Criando um banco pela interface
@@ -107,6 +116,55 @@ Na tela de seleção, `Ctrl+A` abre um menu perguntando o tipo de banco a criar:
 
 - **KeePassXC** — pede nome do arquivo e senha mestra; o banco é criado em `~/.config/omapass/databases/`.
 - **pass** — pede o diretório de destino (com autocomplete dos nomes de pasta existentes) e uma chave GPG dentre as já presentes no seu chaveiro. O omapass não gera chaves GPG novas — veja a seção abaixo para criar uma.
+- **Bitwarden** — aparece só com o `bw` instalado. Pede e-mail e senha mestra da sua conta; veja [Usando o Bitwarden](#usando-o-bitwarden).
+
+### Usando o Bitwarden
+
+O omapass conversa com o Bitwarden pelo `bw`, então a conta fica logada no próprio
+`bw` (o mesmo login que `bw status` mostra no terminal). Só **bitwarden.com** é
+suportado — servidores próprios (Vaultwarden, self-hosted) não.
+
+- **Adicionando a conta**: `Ctrl+A` → **Bitwarden** → e-mail e senha mestra. Se a conta
+  usa verificação em duas etapas, o omapass pede o código em seguida (com vários
+  métodos cadastrados, pergunta antes qual usar: aplicativo autenticador, e-mail ou
+  YubiKey). Num dispositivo novo, o Bitwarden manda um código por e-mail, que é pedido
+  do mesmo jeito. Se o `bw` já estiver logado pelo terminal, a conta é só adicionada
+  à lista e pede a senha mestra.
+- **Abrindo**: a conta aparece na lista com o e-mail; abrir pede só a senha mestra.
+  O omapass decifra sozinho a cópia local cifrada que o próprio `bw` mantém
+  (`~/.config/Bitwarden CLI/data.json`), sem iniciar o `bw` — a lista aparece em
+  uma fração de segundo, e funciona sem internet. Se o arquivo estiver num formato
+  que o omapass não reconhece (uma versão nova do `bw`, contas com criptografia
+  mais nova, SSO sem senha mestra), ele abre pelo `bw` como antes, só mais devagar. A sincronização com o servidor
+  (`bw sync`) roda em seguida, em segundo plano, junto com o desbloqueio do `bw` que
+  as alterações precisam; o rodapé indica enquanto isso acontece, e alterações
+  esperam terminar. Se o `bw` tiver sido deslogado por fora,
+  o omapass volta ao login com o e-mail já preenchido.
+- **Pastas viram grupos**: uma pasta `Trabalho/Email` é o grupo `Trabalho/Email`.
+  Só itens do tipo **login** aparecem — cartões, identidades, notas seguras e chaves
+  SSH ficam de fora. Itens com o mesmo nome na mesma pasta ganham o começo do id
+  entre colchetes (`Email [1a2b3c4d]`) para se distinguirem.
+- **Editar preserva o resto**: o formulário mexe em nome, pasta, usuário, senha,
+  primeira URL e notas; TOTP, campos personalizados e as demais URLs do item ficam
+  como estavam.
+- **Excluir manda para a lixeira** do Bitwarden (recuperável pelo cofre web por 30 dias).
+- **Saindo da conta**: `Ctrl+X` sobre a conta na tela de bancos faz `bw logout`, tira a conta
+  da lista e apaga o PIN guardado, se houver.
+
+#### Desbloqueio por PIN
+
+Com a conta aberta, o menu de ações (`Espaço` ou botão direito) tem **Ativar desbloqueio por
+PIN**. Ele pede a senha mestra uma vez e um PIN de pelo menos 4 dígitos (6 ou mais é o
+recomendado, e PINs menores mostram um aviso com o número de combinações). A partir daí, a tela
+de desbloqueio pede o PIN; `Tab` volta para a senha mestra a qualquer momento.
+
+O PIN vale entre sessões e depois de reiniciar a máquina. Ele é removido quando você desativa
+pelo mesmo menu, erra 5 vezes seguidas, sai da conta, ou quando a senha guardada deixa de abrir
+o cofre — por exemplo depois de trocar a senha mestra, quando o omapass pede a senha nova.
+- Cada comando do `bw` leva alguns segundos (é um programa Node). Por isso o cofre
+  inteiro é carregado uma vez ao abrir — copiar, ver detalhes e editar são
+  instantâneos — e as operações que precisam do `bw` (abrir, salvar, excluir,
+  renomear) rodam em segundo plano, sem travar a janela.
 
 ### Configurando o pass
 
@@ -162,6 +220,8 @@ texto puro durante o processo.
 ## Segurança
 
 - **Backend KeePassXC**: a senha da entrada é sempre passada ao `keepassxc-cli` via stdin, mas `keepassxc-cli` não aceita usuário/URL/notas por stdin — esses campos vão como argumentos (`-u`, `--url`, `--notes`) em `add`/`edit`. Isso é uma limitação do `keepassxc-cli`, não do omapass: durante a execução do processo, outro usuário local com acesso a `/proc/<pid>/cmdline` (ou `ps aux`) pode ler esses valores. A senha em si nunca passa por argv. O backend **pass** não tem essa limitação — toda a entrada (senha e metadados) é enviada por stdin ao `gpg`/`pass insert`.
+- **Backend Bitwarden**: para abrir a conta, o omapass lê o `data.json` do `bw` (só a conta ativa, a chave cifrada e os itens — nunca os tokens de acesso, e sem jamais escrever no arquivo) e decifra com a criptografia do Bitwarden: PBKDF2-SHA256 ou Argon2id conforme a conta, HKDF, AES-256-CBC com HMAC-SHA256 verificado antes de decifrar e RSA-OAEP para chaves de organização, via Botan. A senha mestra fica em memória só até o `bw unlock` em segundo plano terminar. A senha mestra vai para o `bw` por variável de ambiente (`--passwordenv`) e o JSON de itens e pastas (que carrega a senha) pelo stdin — nada disso aparece em argv. A chave de sessão fica num `Secret` e só chega ao `bw` pela variável `BW_SESSION` de cada processo filho. Enquanto o cofre está aberto, os itens (senhas incluídas) ficam na memória do omapass, para não pagar alguns segundos do `bw` a cada cópia; são descartados ao travar. Travar o cofre (auto-lock, `Ctrl+Q`, travar a tela) roda `bw lock`, o que **também encerra sessões do `bw` abertas no terminal**, e todo desbloqueio pelo omapass invalida chaves de sessão anteriores.
+- **Desbloqueio por PIN do Bitwarden**: o `bw` não aceita PIN, só a senha mestra — então é a **senha mestra** que fica guardada, cifrada com uma chave derivada do PIN (PBKDF2-SHA256, 600.000 iterações, com salt aleatório) no formato AES-256-CBC + HMAC-SHA256, no chaveiro do sistema (`secret-tool`, atributos `service=omapass account=bitwarden-pin:<e-mail>`). O PIN em si não é guardado, nem um hash dele: o PIN errado falha na verificação do HMAC. **O limite honesto:** um PIN de 4 dígitos são 10.000 combinações, e quem conseguir ler o chaveiro pode testá-las offline — as 600.000 iterações são a única barreira, e o limite de 5 tentativas é da interface, não da criptografia. Use 6 dígitos ou mais, e deixe o PIN desligado em máquina compartilhada. Nem a senha mestra nem o PIN passam por argumentos de processo.
 - Senhas e passphrases circulam em um tipo `Secret`, que mantém uma cópia própria e sobrescreve a memória ao ser destruído. A exceção inevitável é o campo de senha do formulário de edição: um campo editável precisa do texto em claro enquanto está na tela.
 - Ao copiar uma senha, o conteúdo é marcado como sensível para o `wl-clipboard` (mime `x-kde-passwordManagerHint`, que gerenciadores como o cliphist respeitam para não gravar no histórico) e o clipboard é limpo automaticamente após 10 segundos, com contagem regressiva visível na interface.
 - **`~/.config/omapass/history`** guarda só HMACs (com chave aleatória local em `.history_key`, 0600) e timestamps de uso, nunca o conteúdo das entradas — mas ainda revela para outro usuário local com acesso ao arquivo quantas entradas existem e o padrão de uso.
@@ -254,7 +314,7 @@ Lista completa disponível a qualquer momento com `Ctrl+?`. Os mais essenciais:
 | `Enter` | Copiar senha / Confirmar |
 | `Tab` | Ver detalhes da entrada |
 | `Espaço` | Menu de ações |
-| `Ctrl+A` / `Ctrl+E` / `Ctrl+X` | Adicionar / editar / excluir |
+| `Ctrl+A` / `Ctrl+E` / `Ctrl+X` | Adicionar / editar / excluir (na tela de bancos, `Ctrl+X` sai de uma conta Bitwarden) |
 | `ESC` / `q` | Cancelar / Sair |
 | `Ctrl+Q` | Sair do programa |
 | `Ctrl+C` | Sair do programa (fora de campos de texto, onde copia) |
