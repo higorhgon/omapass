@@ -64,6 +64,19 @@ FocusScope {
         }
     }
 
+    // PIN unlock belongs to Bitwarden accounts; the shortcut says so rather
+    // than doing nothing on the other backends.
+    function togglePin() {
+        if (!controller.bitwardenBackend) {
+            controller.showMessage(i18n.t("bitwarden.pin_only_bitwarden"), true);
+            return;
+        }
+        if (controller.pinConfigured)
+            controller.disableBitwardenPin();
+        else
+            page.mode = "pin";
+    }
+
     function confirmDelete() {
         const entry = currentEntry();
         if (entry.length === 0) {
@@ -105,6 +118,7 @@ FocusScope {
         onEditRequested: page.editSelected()
         onDeleteRequested: page.confirmDelete()
         onGenerateRequested: page.mode = "generate"
+        onPinToggleRequested: page.togglePin()
         onHelpRequested: page.mode = "help"
         onQuitRequested: Qt.quit()
         onMenuRequested: function(menuX, menuY) {
@@ -120,19 +134,12 @@ FocusScope {
         parent: page
         // The PIN entry only exists for Bitwarden, so the menu is built
         // rather than fixed, and the handler goes by the action it picked.
-        readonly property var actions: {
-            const list = ["add", "edit", "delete", "generate"];
-            if (controller.bitwardenBackend)
-                list.push(controller.pinConfigured ? "disablePin" : "enablePin");
-            return list;
-        }
+        readonly property var actions: ["add", "edit", "delete", "generate"]
         readonly property var labels: ({
             "add": i18n.t("ui.context_add_new"),
             "edit": i18n.t("ui.context_edit"),
             "delete": i18n.t("ui.context_delete"),
-            "generate": i18n.t("generator.context_generate"),
-            "enablePin": i18n.t("bitwarden.pin_enable_action"),
-            "disablePin": i18n.t("bitwarden.pin_disable_action")
+            "generate": i18n.t("generator.context_generate")
         })
         options: actions.map(function(action) { return labels[action]; })
 
@@ -145,12 +152,8 @@ FocusScope {
                 page.editSelected();
             else if (action === "delete")
                 page.confirmDelete();
-            else if (action === "generate")
-                page.mode = "generate";
-            else if (action === "enablePin")
-                page.mode = "pin";
             else
-                controller.disableBitwardenPin();
+                page.mode = "generate";
         }
         onClosed: pane.claimKeyboard()
     }
@@ -247,7 +250,7 @@ FocusScope {
                           ["CTRL-X", i18n.t("ui.help_delete_entry")],
                           ["CTRL-G", i18n.t("generator.help")]]
                     .concat(controller.bitwardenBackend
-                            ? [[i18n.t("common.space_key"), i18n.t("bitwarden.pin_help")]] : [])
+                            ? [["CTRL-I", i18n.t("bitwarden.pin_help")]] : [])
             },
             {
                 "title": i18n.t("help.search_section"),
