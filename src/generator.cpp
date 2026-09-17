@@ -1,5 +1,6 @@
 #include "generator.h"
 
+#include "config.h"
 #include "i18n.h"
 #include "process.h"
 
@@ -98,6 +99,8 @@ QStringList wordlistNames(const QString &configured, const QString &language) {
 QStringList wordlistDirectories() {
     const QString appDir = QCoreApplication::applicationDirPath();
     QStringList directories{
+        // Lists the user brought in through the settings sheet.
+        Config::configDir() + QStringLiteral("/wordlists"),
         // Installed beside omapass (PREFIX/share/omapass/…), wherever that is.
         appDir + QStringLiteral("/../share/omapass/wordlists"),
         // Running from build/: the lists in the repository and in the submodule.

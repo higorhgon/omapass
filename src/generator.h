@@ -34,6 +34,9 @@ struct GeneratorOptions {
 
 namespace Generator {
 
+// Below this many words keepassxc-cli refuses to use a wordlist (6^4).
+constexpr int minimumWordlistSize = 1296;
+
 // Bounds the numbers and makes sure at least one character class is on, so
 // the sheet cannot ask for something keepassxc-cli would refuse.
 GeneratorOptions normalize(GeneratorOptions options);

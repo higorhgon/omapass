@@ -20,6 +20,7 @@
         <file alias="HelpModal.qml">HelpModal.qml</file>
         <file alias="LoginModal.qml">LoginModal.qml</file>
         <file alias="RenameGroupModal.qml">RenameGroupModal.qml</file>
+        <file alias="SettingsModal.qml">SettingsModal.qml</file>
         <file alias="UnlockModal.qml">UnlockModal.qml</file>
         <file alias="locales/app.yml">../locales/app.yml</file>
     </qresource>
