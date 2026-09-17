@@ -5,6 +5,9 @@ DATADIR := $(DESTDIR)$(PREFIX)/share
 DESKTOPDIR := $(DATADIR)/applications
 ICONDIR := $(DATADIR)/icons/hicolor/scalable/apps
 WORDLISTDIR := $(DATADIR)/omapass/wordlists
+# O keepassxc-cli procura os proprios dados em $(PREFIX)/share/keepassxc;
+# sem eles o `diceware` avulso nao acha as palavras.
+KPXC_DATADIR := $(DATADIR)/keepassxc
 
 TARGET := omapass
 BUILD_DIR := build
@@ -27,6 +30,7 @@ install: build
 	install -Dm644 icons/$(TARGET).svg $(ICONDIR)/$(TARGET).svg
 	install -Dm644 vendor/keepassxc/share/wordlists/eff_large.wordlist $(WORDLISTDIR)/eff_large.wordlist
 	install -Dm644 wordlists/pt-BR.wordlist $(WORDLISTDIR)/pt-BR.wordlist
+	install -Dm644 vendor/keepassxc/share/wordlists/eff_large.wordlist $(KPXC_DATADIR)/wordlists/eff_large.wordlist
 	@echo "omapass instalado em $(BINDIR)/$(TARGET)"
 
 uninstall:
@@ -36,6 +40,7 @@ uninstall:
 	rm -f $(ICONDIR)/$(TARGET).svg
 	rm -f $(WORDLISTDIR)/eff_large.wordlist
 	rm -f $(WORDLISTDIR)/pt-BR.wordlist
+	rm -f $(KPXC_DATADIR)/wordlists/eff_large.wordlist
 	@echo "omapass removido de $(BINDIR)/$(TARGET)"
 
 clean:
