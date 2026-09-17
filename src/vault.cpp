@@ -4,6 +4,7 @@
 #include "config.h"
 #include "i18n.h"
 #include "keepassvault.h"
+#include "onepasswordvault.h"
 #include "passstore.h"
 #include "passvault.h"
 #include "process.h"
@@ -137,6 +138,8 @@ QString Vault::kindLabel(VaultKind kind) {
 QString Vault::displayName(const DbRef &ref) {
     if (ref.kind == VaultKind::Bitwarden)
         return BitwardenVault::emailOf(ref.path);
+    if (ref.kind == VaultKind::OnePassword)
+        return OnePasswordVault::accountOf(ref.path);
     return QFileInfo(ref.path).fileName();
 }
 
@@ -164,6 +167,10 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
     const QString account = BitwardenVault::rememberedAccount();
     if (!account.isEmpty() && BitwardenVault::isAvailable())
         databases.append({BitwardenVault::refPath(account), VaultKind::Bitwarden});
+
+    const QString opAccount = OnePasswordVault::rememberedAccount();
+    if (!opAccount.isEmpty() && OnePasswordVault::isAvailable())
+        databases.append({OnePasswordVault::refPath(opAccount), VaultKind::OnePassword});
 
     return databases;
 }
@@ -196,6 +203,9 @@ bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
 Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
     if (ref.kind == VaultKind::Bitwarden)
         return BitwardenVault::unlock(BitwardenVault::emailOf(ref.path), secret, error);
+
+    if (ref.kind == VaultKind::OnePassword)
+        return OnePasswordVault::unlock(OnePasswordVault::accountOf(ref.path), secret, error);
 
     if (ref.kind == VaultKind::Keepass) {
         const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},
