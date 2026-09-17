@@ -11,9 +11,11 @@ HEADERS += \
     src/filter.h \
     src/history.h \
     src/i18n.h \
+    src/keepassvault.h \
     src/kdbx2pass.h \
     src/palette.h \
     src/passstore.h \
+    src/passvault.h \
     src/process.h \
     src/secret.h \
     src/sessionlock.h \
@@ -28,9 +30,11 @@ SOURCES += \
     src/filter.cpp \
     src/history.cpp \
     src/i18n.cpp \
+    src/keepassvault.cpp \
     src/kdbx2pass.cpp \
     src/palette.cpp \
     src/passstore.cpp \
+    src/passvault.cpp \
     src/process.cpp \
     src/secret.cpp \
     src/sessionlock.cpp \

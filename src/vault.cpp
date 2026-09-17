@@ -2,7 +2,9 @@
 
 #include "config.h"
 #include "i18n.h"
+#include "keepassvault.h"
 #include "passstore.h"
+#include "passvault.h"
 #include "process.h"
 
 #include <QDir>
@@ -77,35 +79,6 @@ QStringList findPassStores(const QString &searchPath) {
     return outermost;
 }
 
-QString parentGroup(const QString &group) {
-    const int slash = group.lastIndexOf(QLatin1Char('/'));
-    return slash < 0 ? QString() : group.left(slash);
-}
-
-PassEntryData toPassData(const EntryData &data) {
-    PassEntryData pd;
-    pd.password = data.password;
-    pd.username = data.username;
-    pd.url = data.url;
-    pd.extra = data.extra;
-    return pd;
-}
-
-// Tags every group with no entries or subgroups below it, so it still shows
-// up in the list.
-void appendEmptyGroups(const QStringList &groups, QStringList *entries) {
-    for (const QString &group : groups) {
-        const QString prefix = group + QLatin1Char('/');
-        const bool hasChildren =
-            std::any_of(entries->cbegin(), entries->cend(),
-                        [&prefix](const QString &e) { return e.startsWith(prefix); })
-            || std::any_of(groups.cbegin(), groups.cend(),
-                           [&prefix](const QString &g) { return g.startsWith(prefix); });
-        if (!hasChildren)
-            entries->append(group + Vault::emptyGroupSuffix());
-    }
-}
-
 }
 
 KpResult runKpcli(const QStringList &args, const QVector<Secret> &stdinLines) {
@@ -124,6 +97,24 @@ KpResult runKpcli(const QStringList &args, const QVector<Secret> &stdinLines) {
         ? result.err
         : I18n::t(QStringLiteral("keepass.spawn_error"), QStringLiteral("err"), result.err);
     return kp;
+}
+
+void appendEmptyGroups(const QStringList &groups, QStringList *entries) {
+    for (const QString &group : groups) {
+        const QString prefix = group + QLatin1Char('/');
+        const bool hasChildren =
+            std::any_of(entries->cbegin(), entries->cend(),
+                        [&prefix](const QString &e) { return e.startsWith(prefix); })
+            || std::any_of(groups.cbegin(), groups.cend(),
+                           [&prefix](const QString &g) { return g.startsWith(prefix); });
+        if (!hasChildren)
+            entries->append(group + Vault::emptyGroupSuffix());
+    }
+}
+
+QString parentGroup(const QString &group) {
+    const int slash = group.lastIndexOf(QLatin1Char('/'));
+    return slash < 0 ? QString() : group.left(slash);
 }
 
 QString Vault::emptyGroupSuffix() {
@@ -195,7 +186,7 @@ Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
             *error = I18n::t(QStringLiteral("backend.wrong_password"));
             return nullptr;
         }
-        return new Vault(VaultKind::Keepass, ref.path, secret);
+        return new KeepassVault(ref.path, secret);
     }
 
     if (!PassStore::isStore(ref.path)) {
@@ -207,277 +198,5 @@ Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
     if (!store.verifyPassphrase(secret, error))
         return nullptr;
 
-    return new Vault(VaultKind::Pass, ref.path, secret);
-}
-
-void Vault::list(QStringList *entries, QStringList *groups) const {
-    entries->clear();
-    groups->clear();
-
-    if (m_kind == VaultKind::Keepass) {
-        const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-Rfq"), m_path},
-                                         {m_secret});
-        if (!result.success)
-            return;
-
-        QStringList lines;
-        const auto rawLines = result.out.split(QLatin1Char('\n'));
-        for (const QString &raw : rawLines) {
-            const QString line = raw.trimmed();
-            if (line.isEmpty())
-                continue;
-            lines.append(line);
-            if (line.endsWith(QLatin1Char('/')))
-                groups->append(line.chopped(1));
-            else
-                entries->append(line);
-        }
-
-        // `ls -Rfq` lists a group both as "Work/" and through its children,
-        // so emptiness is decided against the raw listing rather than the
-        // split lists.
-        for (const QString &group : std::as_const(*groups)) {
-            const QString prefix = group + QLatin1Char('/');
-            const bool isEmpty = !std::any_of(lines.cbegin(), lines.cend(),
-                                              [&prefix](const QString &line) {
-                return line.startsWith(prefix) && line != prefix;
-            });
-            if (isEmpty)
-                entries->append(group + emptyGroupSuffix());
-        }
-        return;
-    }
-
-    PassStore(m_path).list(entries, groups);
-    appendEmptyGroups(*groups, entries);
-}
-
-QString Vault::titleFor(const QString &entryPath, const QString &fallback) const {
-    if (m_kind != VaultKind::Keepass)
-        return fallback;
-
-    const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), m_path, entryPath,
-                                      QStringLiteral("-a"), QStringLiteral("Title")},
-                                     {m_secret});
-    const QString title = result.success ? result.out.trimmed() : QString();
-    return title.isEmpty() ? fallback : title;
-}
-
-bool Vault::fetchPassword(const QString &entryPath, Secret *password, QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), m_path,
-                                          entryPath, QStringLiteral("-a"), QStringLiteral("Password")},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        *password = Secret(result.out.trimmed());
-        return true;
-    }
-
-    PassEntryData data;
-    if (!PassStore(m_path).show(entryPath, m_secret, &data, error))
-        return false;
-
-    *password = data.password;
-    return true;
-}
-
-bool Vault::fetchEntry(const QString &entryPath, EntryData *data, QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        const auto attribute = [this, &entryPath](const QString &name) {
-            const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), m_path,
-                                              entryPath, QStringLiteral("-a"), name},
-                                             {m_secret});
-            return result.success ? result.out.trimmed() : QString();
-        };
-
-        data->username = attribute(QStringLiteral("UserName"));
-        data->password = Secret(attribute(QStringLiteral("Password")));
-        data->url = attribute(QStringLiteral("URL"));
-        data->notes = attribute(QStringLiteral("Notes"));
-        data->extra.clear();
-        return true;
-    }
-
-    PassEntryData pd;
-    if (!PassStore(m_path).show(entryPath, m_secret, &pd, error))
-        return false;
-
-    data->username = pd.username;
-    data->password = pd.password;
-    data->url = pd.url;
-    data->notes = pd.extra.join(QLatin1Char('\n'));
-    data->extra = pd.extra;
-    return true;
-}
-
-bool Vault::addEntry(const QString &entryPath, const QString &group, const EntryData &data,
-                     QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        if (!group.isEmpty())
-            runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), m_path, group}, {m_secret});
-
-        const KpResult result = runKpcli({QStringLiteral("add"), QStringLiteral("-q"),
-                                          QStringLiteral("-p"), QStringLiteral("-u"), data.username,
-                                          QStringLiteral("--url"), data.url,
-                                          QStringLiteral("--notes"), data.notes, m_path, entryPath},
-                                         {m_secret, data.password, data.password});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    }
-
-    return PassStore(m_path).insert(entryPath, toPassData(data), error);
-}
-
-bool Vault::editEntry(const QString &oldPath, const QString &newPath, const QString &group,
-                      const EntryData &data, QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        if (!group.isEmpty())
-            runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), m_path, group}, {m_secret});
-
-        if (newPath != oldPath) {
-            // keepassxc-cli's `mv` takes [database] [source] [target group];
-            // the root is spelled "/".
-            const QString destination = group.isEmpty() ? QStringLiteral("/") : group;
-            runKpcli({QStringLiteral("mv"), QStringLiteral("-q"), m_path, oldPath, destination},
-                     {m_secret});
-        }
-
-        const KpResult result = runKpcli({QStringLiteral("edit"), QStringLiteral("-q"),
-                                          QStringLiteral("-p"), QStringLiteral("-u"), data.username,
-                                          QStringLiteral("--url"), data.url,
-                                          QStringLiteral("--notes"), data.notes, m_path, newPath},
-                                         {m_secret, data.password, data.password});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    }
-
-    const PassStore store(m_path);
-    if (!store.insert(oldPath, toPassData(data), error))
-        return false;
-    if (newPath != oldPath)
-        return store.move(oldPath, newPath, error);
-    return true;
-}
-
-bool Vault::removeEntry(const QString &entryPath, QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        const KpResult result = runKpcli({QStringLiteral("rm"), QStringLiteral("-q"), m_path, entryPath},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    }
-
-    return PassStore(m_path).remove(entryPath, error);
-}
-
-bool Vault::renameGroup(const QString &oldGroup, const QString &newName, QString *error) const {
-    const QString parent = parentGroup(oldGroup);
-    const QString newGroup = parent.isEmpty() ? newName : parent + QLatin1Char('/') + newName;
-
-    if (m_kind == VaultKind::Pass)
-        return PassStore(m_path).move(oldGroup, newGroup, error);
-
-    // keepassxc-cli has no native group rename: rebuild the subtree under the
-    // new name, move each entry across keeping its relative path, then delete
-    // the old (now empty) tree from the leaves up.
-    QStringList entries;
-    QStringList groups;
-    list(&entries, &groups);
-    const QString oldPrefix = oldGroup + QLatin1Char('/');
-
-    // Every step is checked and aborts on the first failure: this is
-    // multi-step (a sequence of mkdir/mv), so swallowing an error midway
-    // would leave the group tree half-rebuilt.
-    const auto mkdir = [this, error](const QString &path) {
-        const KpResult result = runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), m_path, path},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    };
-    const auto move = [this, error](const QString &source, const QString &destinationGroup) {
-        const KpResult result = runKpcli({QStringLiteral("mv"), QStringLiteral("-q"), m_path, source,
-                                          destinationGroup},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    };
-
-    // The new group is always created, even when `oldGroup` has no children —
-    // otherwise an empty group would simply vanish, since the mkdir/mv calls
-    // below only build destinations for content that actually exists.
-    if (!mkdir(newGroup))
-        return false;
-
-    for (const QString &group : std::as_const(groups)) {
-        if (!group.startsWith(oldPrefix))
-            continue;
-        if (!mkdir(newGroup + QLatin1Char('/') + group.mid(oldPrefix.size())))
-            return false;
-    }
-
-    const QString suffix = emptyGroupSuffix();
-    for (const QString &entry : std::as_const(entries)) {
-        if (entry.endsWith(suffix) || !entry.startsWith(oldPrefix))
-            continue;
-
-        const QString relative = entry.mid(oldPrefix.size());
-        const int slash = relative.lastIndexOf(QLatin1Char('/'));
-        const QString destination = slash < 0
-            ? newGroup
-            : newGroup + QLatin1Char('/') + relative.left(slash);
-
-        if (!mkdir(destination) || !move(entry, destination))
-            return false;
-    }
-
-    QStringList oldTree;
-    for (const QString &group : std::as_const(groups)) {
-        if (group == oldGroup || group.startsWith(oldPrefix))
-            oldTree.append(group);
-    }
-    std::sort(oldTree.begin(), oldTree.end(), [](const QString &a, const QString &b) {
-        return a.size() > b.size();
-    });
-    for (const QString &group : std::as_const(oldTree)) {
-        const KpResult result = runKpcli({QStringLiteral("rmdir"), QStringLiteral("-q"), m_path, group},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool Vault::removeGroup(const QString &group, QString *error) const {
-    if (m_kind == VaultKind::Keepass) {
-        const KpResult result = runKpcli({QStringLiteral("rmdir"), QStringLiteral("-q"), m_path, group},
-                                         {m_secret});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    }
-
-    return PassStore(m_path).removeGroup(group, error);
+    return new PassVault(ref.path, secret);
 }
