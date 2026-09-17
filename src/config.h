@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QMap>
 #include <QString>
 
 #include <optional>
@@ -42,6 +43,16 @@ QString resolveLanguage(const QString &configured, const QString &langEnv, const
 // (zero, negative, "true", garbage) is treated as invalid and also falls
 // back to the default, rather than silently becoming "never locks".
 std::optional<int> parseLockMinutes(const QString &raw);
+
+// Writes the given values into ~/.config/omapass/config.toml. Keys are
+// "section.key" and the values are already TOML (quoted strings, bare
+// numbers and booleans); `tomlString` quotes one. Everything else in the
+// file — comments, order, keys omapass knows nothing about — is left alone.
+bool writeValues(const QMap<QString, QString> &values);
+
+// The editing behind writeValues, on the file's text. Exposed for testing.
+QString applyTomlEdits(const QString &content, const QMap<QString, QString> &values);
+QString tomlString(const QString &value);
 
 // Minimal TOML reader for the flat `[section] key = "value"` files omapass and
 // Omarchy both use. Keys come back as "section.key" (or bare "key" outside a
