@@ -1,0 +1,56 @@
+{
+  "id": "i3",
+  "title": "GitLab / CI",
+  "version": 4,
+  "vault": { "id": "v2", "name": "Trabalho" },
+  "category": "LOGIN",
+  "tags": ["Trabalho/Deploy", "Assinaturas"],
+  "last_edited_by": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+  "created_at": "2024-11-20T09:00:00Z",
+  "updated_at": "2025-07-01T16:45:00Z",
+  "sections": [{ "id": "sec1", "label": "Extras" }],
+  "fields": [
+    {
+      "id": "username",
+      "type": "STRING",
+      "purpose": "USERNAME",
+      "label": "username",
+      "value": "pessoa@empresa.com",
+      "reference": "op://Trabalho/GitLab CI/username"
+    },
+    {
+      "id": "password",
+      "type": "CONCEALED",
+      "purpose": "PASSWORD",
+      "label": "password",
+      "value": "senha-antiga",
+      "password_details": { "strength": "FANTASTIC", "history": ["mais-antiga"] }
+    },
+    {
+      "id": "notesPlain",
+      "type": "STRING",
+      "purpose": "NOTES",
+      "label": "notesPlain",
+      "value": "nota antiga"
+    },
+    {
+      "id": "otp1",
+      "section": { "id": "sec1", "label": "Extras" },
+      "type": "OTP",
+      "label": "one-time password",
+      "value": "otpauth://totp/GitLab?secret=ABCDEF",
+      "totp": "123456"
+    },
+    {
+      "id": "cf1",
+      "section": { "id": "sec1", "label": "Extras" },
+      "type": "STRING",
+      "label": "ambiente",
+      "value": "producao"
+    }
+  ],
+  "urls": [
+    { "label": "website", "primary": true, "href": "https://gitlab.exemplo.com" },
+    { "label": "espelho", "href": "https://espelho.exemplo.com" }
+  ]
+}
