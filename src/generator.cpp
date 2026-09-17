@@ -9,6 +9,10 @@
 
 namespace {
 
+// Set by configure(); the defaults are what the tests and a bare run see.
+QString configuredWordlist = QStringLiteral("auto");
+QString interfaceLanguage = QStringLiteral("en");
+
 constexpr int minLength = 4;
 constexpr int maxLength = 128;
 constexpr int minWords = 3;
@@ -65,22 +69,59 @@ QStringList arguments(const GeneratorOptions &options, const QString &wordlist) 
     return args;
 }
 
+void configure(const QString &configured, const QString &language) {
+    configuredWordlist = configured.isEmpty() ? QStringLiteral("auto") : configured;
+    interfaceLanguage = language;
+}
+
+QStringList wordlistNames(const QString &configured, const QString &language) {
+    // A path is used as given, with no fallback: naming a file that is not
+    // there is a mistake worth noticing, not something to paper over.
+    if (configured.contains(QLatin1Char('/')))
+        return {configured};
+
+    const QString english = QStringLiteral("eff_large.wordlist");
+    if (configured == QLatin1String("en"))
+        return {english};
+    if (!configured.isEmpty() && configured != QLatin1String("auto"))
+        return {configured + QStringLiteral(".wordlist"), english};
+
+    // "auto": the interface language first, English as the fallback — the
+    // language is a tag like "pt-BR", which is the list's own name.
+    QStringList names;
+    if (!language.isEmpty() && !language.startsWith(QLatin1String("en")))
+        names << language + QStringLiteral(".wordlist");
+    names << english;
+    return names;
+}
+
+QStringList wordlistDirectories() {
+    const QString appDir = QCoreApplication::applicationDirPath();
+    QStringList directories{
+        // Installed beside omapass (PREFIX/share/omapass/…), wherever that is.
+        appDir + QStringLiteral("/../share/omapass/wordlists"),
+        // Running from build/: the lists in the repository and in the submodule.
+        appDir + QStringLiteral("/../wordlists"),
+        appDir + QStringLiteral("/../vendor/keepassxc/share/wordlists"),
+    };
+
+    const QStringList data = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    for (const QString &directory : data)
+        directories << directory + QStringLiteral("/wordlists");
+    return directories;
+}
+
 QString wordlistPath() {
-    const QString relative = QStringLiteral("wordlists/eff_large.wordlist");
+    const QStringList names = wordlistNames(configuredWordlist, interfaceLanguage);
+    for (const QString &name : names) {
+        if (name.contains(QLatin1Char('/')))
+            return QFile::exists(name) ? name : QString();
 
-    QStringList candidates;
-    // Installed beside omapass (PREFIX/share/omapass/…), wherever that is.
-    const QString installed = QCoreApplication::applicationDirPath()
-        + QStringLiteral("/../share/omapass/") + relative;
-    candidates << installed;
-    // Running from the build directory, straight out of the submodule.
-    candidates << QCoreApplication::applicationDirPath()
-            + QStringLiteral("/../vendor/keepassxc/share/") + relative;
-    candidates << QStandardPaths::locate(QStandardPaths::AppDataLocation, relative);
-
-    for (const QString &candidate : std::as_const(candidates)) {
-        if (!candidate.isEmpty() && QFile::exists(candidate))
-            return candidate;
+        for (const QString &directory : wordlistDirectories()) {
+            const QString candidate = directory + QLatin1Char('/') + name;
+            if (QFile::exists(candidate))
+                return candidate;
+        }
     }
     return QString();
 }

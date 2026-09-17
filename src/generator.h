@@ -41,9 +41,20 @@ GeneratorOptions normalize(GeneratorOptions options);
 // The `keepassxc-cli` command line for these options. Exposed for testing.
 QStringList arguments(const GeneratorOptions &options, const QString &wordlist);
 
-// The EFF wordlist that comes with the vendored keepassxc, installed beside
-// omapass. Empty when it cannot be found, which is what turns the passphrase
-// mode off.
+// Which wordlist the passphrase mode uses. `configured` is the config file's
+// `generator.wordlist`: "auto" follows `language`, "pt-BR"/"en" name a list
+// that ships with omapass, and anything else is a path. Set once at startup.
+void configure(const QString &configured, const QString &language);
+
+// The filenames to look for, in order: exposed for testing, since which file
+// exists depends on the machine.
+QStringList wordlistNames(const QString &configured, const QString &language);
+// Directories searched for those names: installed beside omapass, the source
+// tree when running from build/, and the user's own data directory.
+QStringList wordlistDirectories();
+
+// The first wordlist that is actually there. Empty when none is, which is
+// what hides the passphrase mode.
 QString wordlistPath();
 
 bool generate(const GeneratorOptions &options, Secret *password, QString *error);

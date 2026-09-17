@@ -12,6 +12,7 @@
 
 #include "appcontroller.h"
 #include "config.h"
+#include "generator.h"
 #include "i18n.h"
 #include "kdbx2pass.h"
 #include "palette.h"
@@ -107,6 +108,10 @@ int main(int argc, char *argv[]) {
     // Omarchy palette, and Material's own chrome (filled text containers,
     // floating placeholder labels) fights that instead of helping.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    // Wordlist for the passphrase generator; needs the application object for
+    // the paths it searches, so it comes after the one above.
+    Generator::configure(config.wordlist, config.language);
 
     SystemTheme systemTheme(&app);
     Palette palette(config.themeOverrides, &app);

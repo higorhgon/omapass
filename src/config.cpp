@@ -134,7 +134,13 @@ void ensureConfigExists() {
         << "language = \"auto\"\n"
         << "# Minutes of inactivity before the open vault is locked (back to the\n"
         << "# database list, asking to unlock again). \"false\" disables auto-lock.\n"
-        << "lock_minutes = 10\n";
+        << "lock_minutes = 10\n"
+        << "\n"
+        << "[generator]\n"
+        << "# Wordlist for the passphrase generator: \"auto\" follows the\n"
+        << "# interface language, or name one that ships with omapass\n"
+        << "# (\"pt-BR\", \"en\"), or give a path to a file of your own.\n"
+        << "wordlist = \"auto\"\n";
 }
 
 AppConfig load() {
@@ -163,6 +169,13 @@ AppConfig load() {
                                       qEnvironmentVariable("LC_ALL"));
 
     config.lockMinutes = parseLockMinutes(raw.value(QStringLiteral("general.lock_minutes")));
+
+    QString wordlist = raw.value(QStringLiteral("generator.wordlist"));
+    if (!wordlist.isEmpty()) {
+        if (wordlist.startsWith(QStringLiteral("~/")))
+            wordlist = home() + wordlist.mid(1);
+        config.wordlist = wordlist;
+    }
 
     if (config.themeName == QStringLiteral("default"))
         return config;
