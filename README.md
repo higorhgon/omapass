@@ -1,6 +1,6 @@
 # omapass
 
-[![CI](https://github.com/higorhgon/fpass/actions/workflows/ci.yml/badge.svg)](https://github.com/higorhgon/fpass/actions/workflows/ci.yml)
+[![CI](https://github.com/higorhgon/omapass/actions/workflows/ci.yml/badge.svg)](https://github.com/higorhgon/fpass/actions/workflows/ci.yml)
 
 Gerenciador de senhas com interface Qt Quick, escrito em C++, que segue o tema
 do Omarchy, a fonte monoespaçada do sistema e o modo claro/escuro
