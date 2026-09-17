@@ -14,7 +14,9 @@
 #include <QEvent>
 #include <QFutureWatcher>
 #include <QRect>
+#include <QFileInfo>
 #include <QSettings>
+#include <QUrl>
 #include <QtConcurrent/QtConcurrentRun>
 
 namespace {
@@ -143,16 +145,25 @@ AppController::AppController(const AppConfig &config, QObject *parent)
     if (m_databases.size() == 1)
         selectDatabase(0);
 
-    if (m_config.lockMinutes) {
-        m_lastActivity.start();
-        qApp->installEventFilter(this);
+    m_lastActivity.start();
+    qApp->installEventFilter(this);
 
-        m_lockTimer.setInterval(lockCheckIntervalMs);
-        connect(&m_lockTimer, &QTimer::timeout, this, [this]() {
-            if (m_lastActivity.hasExpired(qint64(*m_config.lockMinutes) * 60 * 1000))
-                lock();
-        });
+    m_lockTimer.setInterval(lockCheckIntervalMs);
+    connect(&m_lockTimer, &QTimer::timeout, this, [this]() {
+        if (m_config.lockMinutes && m_lastActivity.hasExpired(qint64(*m_config.lockMinutes) * 60 * 1000))
+            lock();
+    });
+    applyLockSettings();
+}
+
+// The timer only runs while auto-lock is on, so turning it off in the
+// settings stops it rather than leaving it ticking for nothing.
+void AppController::applyLockSettings() {
+    if (m_config.lockMinutes) {
+        m_lastActivity.restart();
         m_lockTimer.start();
+    } else {
+        m_lockTimer.stop();
     }
 }
 
@@ -1065,6 +1076,108 @@ void AppController::setUnlockError(const QString &error) {
 
     m_unlockError = error;
     emit unlockErrorChanged();
+}
+
+QVariantMap AppController::settings() const {
+    return {{QStringLiteral("path"), m_config.searchPath},
+            {QStringLiteral("recency"), m_config.recencyEnabled},
+            {QStringLiteral("lockEnabled"), m_config.lockMinutes.has_value()},
+            {QStringLiteral("lockMinutes"), m_config.lockMinutes.value_or(10)},
+            {QStringLiteral("wordlist"), m_config.wordlist},
+            {QStringLiteral("wordlistInUse"), Generator::wordlistPath()},
+            {QStringLiteral("configPath"), Config::configDir() + QStringLiteral("/config.toml")}};
+}
+
+// Saved to config.toml and applied right away — the sheet only offers the
+// settings that can take effect without a restart.
+void AppController::saveSettings(const QVariantMap &values) {
+    QString path = values.value(QStringLiteral("path")).toString().trimmed();
+    if (path.isEmpty())
+        path = m_config.searchPath;
+    if (path.startsWith(QStringLiteral("~/")))
+        path = QDir::homePath() + path.mid(1);
+
+    const bool recency = values.value(QStringLiteral("recency")).toBool();
+    const bool lockEnabled = values.value(QStringLiteral("lockEnabled")).toBool();
+    const int lockMinutes = qMax(1, values.value(QStringLiteral("lockMinutes")).toInt());
+    QString wordlist = values.value(QStringLiteral("wordlist")).toString().trimmed();
+    if (wordlist.isEmpty())
+        wordlist = QStringLiteral("auto");
+
+    QMap<QString, QString> toml;
+    toml.insert(QStringLiteral("general.path"), Config::tomlString(path));
+    toml.insert(QStringLiteral("general.recency"), recency ? QStringLiteral("true") : QStringLiteral("false"));
+    toml.insert(QStringLiteral("general.lock_minutes"),
+                lockEnabled ? QString::number(lockMinutes) : QStringLiteral("false"));
+    toml.insert(QStringLiteral("generator.wordlist"), Config::tomlString(wordlist));
+
+    if (!Config::writeValues(toml)) {
+        showMessage(I18n::t(QStringLiteral("settings.write_error")), true);
+        return;
+    }
+
+    const bool pathChanged = path != m_config.searchPath;
+    const bool recencyChanged = recency != m_config.recencyEnabled;
+
+    m_config.searchPath = path;
+    m_config.recencyEnabled = recency;
+    m_config.lockMinutes = lockEnabled ? std::optional<int>(lockMinutes) : std::nullopt;
+    m_config.wordlist = wordlist;
+
+    Generator::configure(m_config.wordlist, m_config.language);
+    applyLockSettings();
+    if (recencyChanged)
+        m_history = History(recency);
+    if (pathChanged || recencyChanged)
+        refreshDatabases();
+
+    showMessage(I18n::t(QStringLiteral("settings.saved")), false);
+}
+
+QString AppController::importWordlist(const QString &fileUrl) {
+    const QString source = QUrl(fileUrl).isLocalFile() ? QUrl(fileUrl).toLocalFile() : fileUrl;
+
+    QFile file(source);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        showMessage(I18n::t(QStringLiteral("settings.wordlist_unreadable")), true);
+        return QString();
+    }
+
+    // keepassxc-cli refuses anything under 1296 words (6^4); saying so here
+    // beats a passphrase mode that silently stops working.
+    int words = 0;
+    QTextStream in(&file);
+    while (!in.atEnd()) {
+        if (!in.readLine().trimmed().isEmpty())
+            ++words;
+    }
+    if (words < Generator::minimumWordlistSize) {
+        showMessage(I18n::t(QStringLiteral("settings.wordlist_too_small"),
+                            {{QStringLiteral("words"), words},
+                             {QStringLiteral("min"), Generator::minimumWordlistSize}}),
+                    true);
+        return QString();
+    }
+
+    const QString directory = Config::configDir() + QStringLiteral("/wordlists");
+    if (!QDir().mkpath(directory)) {
+        showMessage(I18n::t(QStringLiteral("settings.wordlist_copy_error")), true);
+        return QString();
+    }
+
+    const QString target = directory + QLatin1Char('/') + QFileInfo(source).fileName();
+    if (QFileInfo(source).absoluteFilePath() != QFileInfo(target).absoluteFilePath()) {
+        QFile::remove(target);
+        if (!QFile::copy(source, target)) {
+            showMessage(I18n::t(QStringLiteral("settings.wordlist_copy_error")), true);
+            return QString();
+        }
+    }
+
+    showMessage(I18n::t(QStringLiteral("settings.wordlist_imported"), QStringLiteral("words"),
+                        QString::number(words)),
+                false);
+    return target;
 }
 
 namespace {

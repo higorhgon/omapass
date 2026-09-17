@@ -13,18 +13,20 @@ QString home() {
 
 QString unquote(QString value) {
     value = value.trimmed();
-    // Strip an inline comment that follows the value, but never one that
-    // lives inside quotes.
-    if (!value.startsWith(QLatin1Char('"')) && !value.startsWith(QLatin1Char('\''))) {
-        const int hash = value.indexOf(QLatin1Char('#'));
-        if (hash >= 0)
-            value = value.left(hash).trimmed();
+
+    // A quoted value ends at its closing quote; anything after it (a comment,
+    // say) is not part of it, and a '#' inside the quotes is.
+    if (value.startsWith(QLatin1Char('"')) || value.startsWith(QLatin1Char('\''))) {
+        const QChar quote = value.at(0);
+        const int closing = value.indexOf(quote, 1);
+        if (closing > 0)
+            return value.mid(1, closing - 1);
+        return value.mid(1);
     }
 
-    if (value.size() >= 2
-            && ((value.startsWith(QLatin1Char('"')) && value.endsWith(QLatin1Char('"')))
-                || (value.startsWith(QLatin1Char('\'')) && value.endsWith(QLatin1Char('\'')))))
-        value = value.mid(1, value.size() - 2);
+    const int hash = value.indexOf(QLatin1Char('#'));
+    if (hash >= 0)
+        value = value.left(hash).trimmed();
 
     return value;
 }
@@ -81,6 +83,114 @@ QHash<QString, QString> readFlatToml(const QString &path) {
     }
 
     return values;
+}
+
+QString tomlString(const QString &value) {
+    QString escaped = value;
+    escaped.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+    escaped.replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    return QLatin1Char('"') + escaped + QLatin1Char('"');
+}
+
+QString applyTomlEdits(const QString &content, const QMap<QString, QString> &values) {
+    QStringList lines = content.split(QLatin1Char('\n'));
+    QMap<QString, QString> pending = values;
+
+    // Where each section's own lines end, so a key that is missing is added
+    // to its section instead of the end of the file.
+    QHash<QString, int> sectionEnd;
+    QString section;
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString line = lines.at(i);
+        const QString trimmed = line.trimmed();
+
+        if (trimmed.startsWith(QLatin1Char('[')) && trimmed.endsWith(QLatin1Char(']'))) {
+            section = trimmed.mid(1, trimmed.size() - 2).trimmed();
+            sectionEnd.insert(section, i + 1);
+            continue;
+        }
+        if (!trimmed.isEmpty())
+            sectionEnd.insert(section, i + 1);
+        if (trimmed.isEmpty() || trimmed.startsWith(QLatin1Char('#')))
+            continue;
+
+        const int equals = trimmed.indexOf(QLatin1Char('='));
+        if (equals < 0)
+            continue;
+
+        const QString key = trimmed.left(equals).trimmed();
+        const QString fullKey = section.isEmpty() ? key : section + QLatin1Char('.') + key;
+        if (!pending.contains(fullKey))
+            continue;
+
+        // A comment sitting after the value stays where it is.
+        QString comment;
+        const QString rest = trimmed.mid(equals + 1);
+        bool quoted = false;
+        for (int c = 0; c < rest.size(); ++c) {
+            const QChar character = rest.at(c);
+            if (character == QLatin1Char('"') || character == QLatin1Char('\''))
+                quoted = !quoted;
+            else if (character == QLatin1Char('#') && !quoted) {
+                comment = QStringLiteral("  ") + rest.mid(c).trimmed();
+                break;
+            }
+        }
+
+        int indentSize = 0;
+        while (indentSize < line.size() && line.at(indentSize).isSpace())
+            ++indentSize;
+
+        lines[i] = line.left(indentSize) + key + QStringLiteral(" = ") + pending.value(fullKey) + comment;
+        pending.remove(fullKey);
+    }
+
+    // What is left did not exist yet: into its section, or into a new one.
+    while (!pending.isEmpty()) {
+        const QString fullKey = pending.firstKey();
+        const int dot = fullKey.lastIndexOf(QLatin1Char('.'));
+        const QString keySection = dot < 0 ? QString() : fullKey.left(dot);
+        const QString key = dot < 0 ? fullKey : fullKey.mid(dot + 1);
+        const QString line = key + QStringLiteral(" = ") + pending.take(fullKey);
+
+        if (sectionEnd.contains(keySection)) {
+            const int at = sectionEnd.value(keySection);
+            lines.insert(at, line);
+            // Everything after this point moved down by one.
+            for (auto it = sectionEnd.begin(); it != sectionEnd.end(); ++it) {
+                if (it.value() >= at)
+                    *it += 1;
+            }
+            continue;
+        }
+
+        if (!lines.isEmpty() && !lines.last().trimmed().isEmpty())
+            lines << QString();
+        lines << QLatin1Char('[') + keySection + QLatin1Char(']') << line;
+        sectionEnd.insert(keySection, lines.size());
+    }
+
+    QString result = lines.join(QLatin1Char('\n'));
+    if (!result.endsWith(QLatin1Char('\n')))
+        result += QLatin1Char('\n');
+    return result;
+}
+
+bool writeValues(const QMap<QString, QString> &values) {
+    const QString path = configDir() + QStringLiteral("/config.toml");
+
+    QString content;
+    QFile file(path);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+        content = QString::fromUtf8(file.readAll());
+    file.close();
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+
+    QTextStream out(&file);
+    out << applyTomlEdits(content, values);
+    return true;
 }
 
 std::optional<int> parseLockMinutes(const QString &raw) {

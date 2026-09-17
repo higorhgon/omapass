@@ -154,13 +154,12 @@ suportado — servidores próprios (Vaultwarden, self-hosted) não.
 
 #### Desbloqueio por PIN
 
-Com a conta aberta, o menu de ações (`Espaço` ou botão direito) tem **Ativar desbloqueio por
-PIN**. Ele pede a senha mestra uma vez e um PIN de pelo menos 4 dígitos (6 ou mais é o
+Com a conta aberta, `Ctrl+I` ativa o desbloqueio por PIN (e desativa, quando já está ativo). Ele pede a senha mestra uma vez e um PIN de pelo menos 4 dígitos (6 ou mais é o
 recomendado, e PINs menores mostram um aviso com o número de combinações). A partir daí, a tela
 de desbloqueio pede o PIN; `Tab` volta para a senha mestra a qualquer momento.
 
 O PIN vale entre sessões e depois de reiniciar a máquina. Ele é removido quando você desativa
-pelo mesmo menu, erra 5 vezes seguidas, sai da conta, ou quando a senha guardada deixa de abrir
+com `Ctrl+I`, erra 5 vezes seguidas, sai da conta, ou quando a senha guardada deixa de abrir
 o cofre — por exemplo depois de trocar a senha mestra, quando o omapass pede a senha nova.
 - Cada comando do `bw` leva alguns segundos (é um programa Node). Por isso o cofre
   inteiro é carregado uma vez ao abrir — copiar, ver detalhes e editar são
@@ -272,10 +271,23 @@ lugares nem palavras ofensivas, e nenhuma palavra sendo prefixo de outra.
 
 ## Configuração
 
+`Ctrl+O` abre as configurações dentro do omapass, de qualquer tela. O modal edita o
+`config.toml` e aplica na hora o diretório de busca, a ordenação por uso, o auto-lock e a lista
+de palavras do gerador — as opções que valem sem reiniciar. Tema e idioma continuam só no
+arquivo, porque são lidos uma vez na abertura.
+
+Ao gravar, só os valores dessas chaves mudam: comentários, ordem das linhas e chaves que o
+omapass não conhece ficam como estavam. `Ctrl+F` no modal abre o seletor de arquivos para uma
+lista de palavras sua; o arquivo escolhido é **copiado** para `~/.config/omapass/wordlists/`, e o
+caminho da cópia é gravado — assim a lista continua valendo se você mover ou apagar o original.
+Listas com menos de 1.296 palavras (o mínimo do `keepassxc-cli`) são recusadas na hora, com o
+número de palavras na mensagem.
+
 Arquivos em `~/.config/omapass/`:
 
 - `config.toml` — caminho de busca, recency, tema ativo, idioma, tempo de auto-lock e lista de palavras do gerador
 - `themes/*.toml` — sobreposições de cores
+- `wordlists/*` — listas de palavras trazidas pelo modal de configurações
 
 > **Vindo do fpass:** se `~/.config/omapass` não existir e `~/.config/fpass`
 > existir, o omapass continua usando o diretório antigo — histórico, temas e
@@ -361,6 +373,8 @@ Lista completa disponível a qualquer momento com `Ctrl+?`. Os mais essenciais:
 | `Espaço` | Menu de ações |
 | `Ctrl+A` / `Ctrl+E` / `Ctrl+X` | Adicionar / editar / excluir (na tela de bancos, `Ctrl+X` sai de uma conta Bitwarden) |
 | `Ctrl+G` | Gerar senha (na lista, ou sobre o campo Senha do formulário) |
+| `Ctrl+I` | Ativar/desativar o desbloqueio por PIN (contas Bitwarden) |
+| `Ctrl+O` | Abrir as configurações |
 | `ESC` / `q` | Cancelar / Sair |
 | `Ctrl+Q` | Sair do programa |
 | `Ctrl+C` | Sair do programa (fora de campos de texto, onde copia) |

@@ -32,8 +32,28 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+C"
         context: Qt.ApplicationShortcut
-        enabled: !window.editingText
+        enabled: !window.editingText && !window.settingsOpen
         onActivated: window.close()
+    }
+
+    // Settings live above the pages: they are the same wherever you are, and
+    // the sheet has to survive the page changing under it.
+    property bool settingsOpen: false
+
+    Shortcut {
+        sequence: "Ctrl+O"
+        context: Qt.ApplicationShortcut
+        onActivated: window.settingsOpen = true
+    }
+
+    SettingsModal {
+        visible: window.settingsOpen
+
+        onSubmitted: function(values) {
+            controller.saveSettings(values);
+            window.settingsOpen = false;
+        }
+        onDismissed: window.settingsOpen = false
     }
 
     Loader {

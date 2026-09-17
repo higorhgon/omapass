@@ -133,6 +133,13 @@ public:
     Q_INVOKABLE void renameGroup(const QString &entry, const QString &newName);
     Q_INVOKABLE QStringList matchingGroups(const QString &prefix) const;
 
+    // Settings sheet
+    Q_INVOKABLE QVariantMap settings() const;
+    Q_INVOKABLE void saveSettings(const QVariantMap &values);
+    // Copies a wordlist of the user's into omapass' own directory and hands
+    // back the path to keep in the settings, or "" when it cannot be used.
+    Q_INVOKABLE QString importWordlist(const QString &fileUrl);
+
     // Password generator
     Q_INVOKABLE QVariantMap generatorOptions() const;
     Q_INVOKABLE QVariantMap generate(const QVariantMap &options);
@@ -171,6 +178,7 @@ private:
     // status line when it cannot.
     bool vaultReadyForChanges();
     void startBackgroundSync();
+    void applyLockSettings();
     void setSyncing(bool syncing);
     void setUnlockError(const QString &error);
     void refreshDatabases();

@@ -31,6 +31,64 @@ cli.kdbx2pass_usage:
   pt-BR: "Uso: omapass --kdbx2pass <banco.kdbx> <KEYID1> [KEYID2...]"
   en: "Usage: omapass --kdbx2pass <database.kdbx> <KEYID1> [KEYID2...]"
 
+settings.title:
+  pt-BR: " Configurações "
+  en: " Settings "
+settings.footer:
+  pt-BR: "ENTER: Salvar | TAB: Navegar | CTRL+F: Escolher lista de palavras | ESC: Cancelar"
+  en: "ENTER: Save | TAB: Move | CTRL+F: Choose a wordlist | ESC: Cancel"
+settings.path_label:
+  pt-BR: " Diretório de busca de bancos "
+  en: " Directory searched for databases "
+settings.recency:
+  pt-BR: "Ordenar por uso (frequência e recência)"
+  en: "Sort by use (frequency and recency)"
+settings.lock_enabled:
+  pt-BR: "Travar por inatividade"
+  en: "Lock after inactivity"
+settings.lock_minutes_label:
+  pt-BR: " Minutos até travar "
+  en: " Minutes until locking "
+settings.wordlist_label:
+  pt-BR: " Lista de palavras (auto, pt-BR, en ou um caminho) "
+  en: " Wordlist (auto, pt-BR, en or a path) "
+settings.wordlist_in_use:
+  pt-BR: "Em uso: %{path}"
+  en: "In use: %{path}"
+settings.wordlist_pick:
+  pt-BR: "Escolher lista de palavras"
+  en: "Choose a wordlist"
+settings.wordlist_filter:
+  pt-BR: "Listas de palavras (*.wordlist *.txt)"
+  en: "Wordlists (*.wordlist *.txt)"
+settings.all_files:
+  pt-BR: "Todos os arquivos (*)"
+  en: "All files (*)"
+settings.wordlist_imported:
+  pt-BR: "Lista copiada para o omapass (%{words} palavras)."
+  en: "Wordlist copied into omapass (%{words} words)."
+settings.wordlist_unreadable:
+  pt-BR: "Não foi possível ler o arquivo escolhido."
+  en: "Could not read the chosen file."
+settings.wordlist_too_small:
+  pt-BR: "A lista tem %{words} palavras; o mínimo é %{min}."
+  en: "The wordlist has %{words} words; the minimum is %{min}."
+settings.wordlist_copy_error:
+  pt-BR: "Não foi possível copiar a lista para o diretório do omapass."
+  en: "Could not copy the wordlist into omapass' directory."
+settings.config_path:
+  pt-BR: "Arquivo: %{path}"
+  en: "File: %{path}"
+settings.saved:
+  pt-BR: "Configurações salvas."
+  en: "Settings saved."
+settings.write_error:
+  pt-BR: "Não foi possível gravar o config.toml."
+  en: "Could not write config.toml."
+settings.help:
+  pt-BR: "Configurações"
+  en: "Settings"
+
 generator.title:
   pt-BR: " Gerar Senha "
   en: " Generate Password "
@@ -334,8 +392,11 @@ bitwarden.pin_disable_action:
   pt-BR: "Desativar desbloqueio por PIN"
   en: "Disable PIN unlock"
 bitwarden.pin_help:
-  pt-BR: "Menu: ativar/desativar PIN (Bitwarden)"
-  en: "Menu: enable/disable PIN (Bitwarden)"
+  pt-BR: "Ativar/desativar desbloqueio por PIN"
+  en: "Enable/disable PIN unlock"
+bitwarden.pin_only_bitwarden:
+  pt-BR: "O desbloqueio por PIN é só para contas Bitwarden."
+  en: "PIN unlock is for Bitwarden accounts only."
 bitwarden.no_session:
   pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
   en: "Bitwarden is not ready for changes yet; lock and open it again."
