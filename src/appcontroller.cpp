@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "generator.h"
 #include "i18n.h"
+#include "onepasswordvault.h"
 #include "passstore.h"
 
 #include <QCoreApplication>
@@ -136,6 +137,63 @@ AppController::AppController(const AppConfig &config, QObject *parent)
         // Every failure ends the bw process, so the next try starts over from
         // the credentials, e-mail kept.
         setLoginStep(QStringLiteral("credentials"));
+    });
+
+    connect(&m_onePasswordLogin, &OnePasswordLogin::promptShown, this, [this](OpPrompt prompt) {
+        setBusy(false);
+        setUnlockError(QString());
+        if (prompt == OpPrompt::TwoFactorCode)
+            setLoginStep(QStringLiteral("opCode"));
+    });
+    connect(&m_onePasswordLogin, &OnePasswordLogin::succeeded, this,
+            [this](const QString &account, const Secret &session) {
+        setBusy(false);
+        setLoginStep(QString());
+
+        OnePasswordVault::rememberAccount(account);
+        refreshDatabases();
+        emit databaseCreated();
+
+        const DbRef ref{OnePasswordVault::refPath(account), VaultKind::OnePassword};
+        m_pendingDatabase = ref;
+        m_hasPendingDatabase = true;
+        refreshPinState();
+        emit pendingDatabaseChanged();
+
+        runInBackground(
+            [account, session]() {
+                OpenResult result;
+                result.vault = OnePasswordVault::openWithSession(account, session, &result.error);
+                return result;
+            },
+            [this, ref](const OpenResult &result) {
+                if (result.vault)
+                    adoptVault(ref, result.vault);
+                else
+                    setUnlockError(result.error);
+            });
+    });
+    connect(&m_onePasswordLogin, &OnePasswordLogin::failed, this,
+            [this](const QString &error, OpError kind) {
+        setBusy(false);
+
+        switch (kind) {
+        case OpError::WrongPassword:
+            setUnlockError(I18n::t(QStringLiteral("backend.wrong_password")));
+            break;
+        case OpError::WrongSecretKey:
+            setUnlockError(I18n::t(QStringLiteral("onepassword.wrong_secret_key")));
+            break;
+        case OpError::WrongCode:
+            setUnlockError(I18n::t(QStringLiteral("onepassword.invalid_code")));
+            break;
+        default:
+            setUnlockError(error.isEmpty() ? I18n::t(QStringLiteral("onepassword.login_failed")) : error);
+            break;
+        }
+        // The process is over either way, so the next try starts from the
+        // credentials again, with what was typed still there.
+        setLoginStep(QStringLiteral("opCredentials"));
     });
 
     refreshDatabases();
@@ -335,6 +393,10 @@ void AppController::refreshPinState() {
     }
 }
 
+bool AppController::onePasswordBackend() const {
+    return !m_vault.isNull() && m_vault->kind() == VaultKind::OnePassword;
+}
+
 bool AppController::passBackend() const {
     return !m_vault.isNull() && m_vault->kind() == VaultKind::Pass;
 }
@@ -371,27 +433,46 @@ void AppController::selectDatabase(int index) {
         return;
 
     const DbRef ref = m_filteredDatabases.at(index);
-    if (ref.kind != VaultKind::Bitwarden) {
+    const auto waitForPassword = [this, ref]() {
         m_pendingDatabase = ref;
         m_hasPendingDatabase = true;
-        setUnlockError(QString());
         refreshPinState();
         emit pendingDatabaseChanged();
+    };
+
+    if (ref.kind != VaultKind::Bitwarden && ref.kind != VaultKind::OnePassword) {
+        setUnlockError(QString());
+        waitForPassword();
         return;
     }
 
     if (m_busy)
         return;
 
+    // A 1Password account can have been dropped behind omapass' back (`op
+    // account forget` in a terminal), and then the master password alone
+    // cannot open it: back to the login sheet. Reading op's own
+    // configuration takes milliseconds.
+    if (ref.kind == VaultKind::OnePassword) {
+        setUnlockError(QString());
+        const QString account = OnePasswordVault::accountOf(ref.path);
+        if (OnePasswordVault::hasAccount(account)) {
+            waitForPassword();
+            return;
+        }
+
+        m_loginEmail.clear();
+        m_loginAddress.clear();
+        setLoginStep(QStringLiteral("opCredentials"));
+        return;
+    }
+
     // A Bitwarden account can have been logged out behind omapass' back (bw
     // logout in a terminal, an expired login), in which case the master
     // password alone cannot unlock it: back to the login sheet.
     setUnlockError(QString());
     if (BitwardenVault::status().loggedIn()) {
-        m_pendingDatabase = ref;
-        m_hasPendingDatabase = true;
-        refreshPinState();
-        emit pendingDatabaseChanged();
+        waitForPassword();
         return;
     }
 
@@ -847,6 +928,10 @@ bool AppController::bitwardenAvailable() const {
     return BitwardenVault::isAvailable();
 }
 
+bool AppController::onePasswordAvailable() const {
+    return OnePasswordVault::isAvailable();
+}
+
 void AppController::setLoginStep(const QString &step) {
     if (step.isEmpty())
         m_loginPassword.clear();
@@ -946,6 +1031,101 @@ void AppController::logoutBitwarden() {
             refreshPinState();
             refreshDatabases();
             showMessage(I18n::t(QStringLiteral("bitwarden.logged_out")), false);
+        });
+}
+
+void AppController::addOnePasswordAccount() {
+    if (m_busy)
+        return;
+
+    setUnlockError(QString());
+
+    // Already set up with `op` (from a terminal, say): the account only
+    // needs adding to the list. With more than one configured, omapass keeps
+    // the one it already knew, since it lists a single 1Password account.
+    const QVector<OpAccount> known = OnePasswordVault::accounts();
+    const QString remembered = OnePasswordVault::rememberedAccount();
+    QString account;
+    for (const OpAccount &candidate : known) {
+        if (candidate.key() == remembered)
+            account = candidate.key();
+    }
+    if (account.isEmpty() && known.size() == 1)
+        account = known.first().key();
+
+    if (!account.isEmpty()) {
+        OnePasswordVault::rememberAccount(account);
+        refreshDatabases();
+        emit databaseCreated();
+
+        m_pendingDatabase = {OnePasswordVault::refPath(account), VaultKind::OnePassword};
+        m_hasPendingDatabase = true;
+        refreshPinState();
+        emit pendingDatabaseChanged();
+        return;
+    }
+
+    m_loginEmail.clear();
+    m_loginAddress.clear();
+    setLoginStep(QStringLiteral("opCredentials"));
+}
+
+void AppController::onePasswordLogin(const QString &address, const QString &email,
+                                     const QString &secretKey, const QString &password) {
+    if (m_busy)
+        return;
+
+    const QString trimmedAddress = address.trimmed();
+    const QString trimmedEmail = email.trimmed();
+    if (trimmedAddress.isEmpty() || trimmedEmail.isEmpty()) {
+        setUnlockError(I18n::t(QStringLiteral("onepassword.login_failed")));
+        return;
+    }
+
+    m_loginAddress = trimmedAddress;
+    m_loginEmail = trimmedEmail;
+    emit loginChanged();
+
+    setBusy(true);
+    setUnlockError(QString());
+    m_onePasswordLogin.start(trimmedAddress, trimmedEmail, Secret(secretKey), Secret(password));
+}
+
+void AppController::sendOnePasswordCode(const QString &code) {
+    if (m_busy || code.trimmed().isEmpty())
+        return;
+
+    setBusy(true);
+    setUnlockError(QString());
+    m_onePasswordLogin.sendCode(code);
+}
+
+void AppController::cancelOnePasswordLogin() {
+    m_onePasswordLogin.cancel();
+    setBusy(false);
+    setUnlockError(QString());
+    setLoginStep(QString());
+}
+
+bool AppController::isOnePasswordDatabase(int index) const {
+    return index >= 0 && index < m_filteredDatabases.size()
+        && m_filteredDatabases.at(index).kind == VaultKind::OnePassword;
+}
+
+void AppController::logoutOnePassword() {
+    if (m_busy)
+        return;
+
+    const QString account = OnePasswordVault::rememberedAccount();
+    runInBackground(
+        [account]() {
+            OnePasswordVault::logout(account);
+            return TaskResult{true, QString()};
+        },
+        [this](const TaskResult &) {
+            OnePasswordVault::forgetAccount();
+            refreshDatabases();
+            showMessage(I18n::t(QStringLiteral("onepassword.logged_out")), false);
         });
 }
 

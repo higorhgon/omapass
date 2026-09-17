@@ -412,9 +412,6 @@ bitwarden.sync_error:
 app.working:
   pt-BR: "Aguarde…"
   en: "Please wait…"
-bitwarden.help_logout:
-  pt-BR: "Sair da conta Bitwarden"
-  en: "Log out of Bitwarden account"
 
 onepassword.spawn_error:
   pt-BR: "Erro ao executar o op (instale o 1password-cli): %{err}"
@@ -485,9 +482,9 @@ onepassword.login_footer:
 onepassword.logout_confirm:
   pt-BR: "Desconectar a conta 1Password deste computador?"
   en: "Log out of the 1Password account on this device?"
-onepassword.help_logout:
-  pt-BR: "Sair da conta 1Password"
-  en: "Log out of 1Password account"
+db_app.help_logout:
+  pt-BR: "Sair da conta (Bitwarden ou 1Password)"
+  en: "Log out of the account (Bitwarden or 1Password)"
 
 kdbx2pass.master_password_prompt:
   pt-BR: "Senha mestra de %{db}: "
