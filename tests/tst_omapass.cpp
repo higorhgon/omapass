@@ -627,6 +627,28 @@ private slots:
         QCOMPARE(args.at(args.indexOf(QStringLiteral("-w")) + 1), QStringLiteral("/tmp/eff.wordlist"));
     }
 
+    void generatorWordlistFollowsConfigAndLanguage() {
+        const QString english = QStringLiteral("eff_large.wordlist");
+
+        // "auto": the interface language first, English behind it.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("auto"), QStringLiteral("pt-BR")),
+                 QStringList({QStringLiteral("pt-BR.wordlist"), english}));
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("auto"), QStringLiteral("en")),
+                 QStringList({english}));
+
+        // A named list still falls back to English; "en" is the English one.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("pt-BR"), QStringLiteral("en")),
+                 QStringList({QStringLiteral("pt-BR.wordlist"), english}));
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("en"), QStringLiteral("pt-BR")),
+                 QStringList({english}));
+
+        // A path is taken as it is, with nothing behind it.
+        QCOMPARE(Generator::wordlistNames(QStringLiteral("/tmp/minha.txt"), QStringLiteral("pt-BR")),
+                 QStringList({QStringLiteral("/tmp/minha.txt")}));
+
+        QVERIFY(!Generator::wordlistDirectories().isEmpty());
+    }
+
     void generatorOptionsAreBounded() {
         GeneratorOptions options;
         options.length = 2;

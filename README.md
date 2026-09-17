@@ -226,7 +226,9 @@ dois modos:
 - **Senha** — tamanho, maiúsculas, minúsculas, números, símbolos, evitar caracteres parecidos
   (`l/1/I`, `O/0`), excluir caracteres específicos e um conjunto personalizado, que substitui
   as classes.
-- **Frase** — número de palavras e separador, sorteadas da lista EFF (7.772 palavras).
+- **Frase** — número de palavras e separador. A lista segue o idioma da interface: em
+  português usa a lista pt-BR do omapass, e em inglês a lista EFF que vem do KeePassXC, ambas
+  com 7.776 palavras (12,9 bits de entropia por palavra).
 
 A senha é gerada de novo a cada ajuste, e `Ctrl+R` sorteia outra sem mudar nada. `Enter` copia
 para a área de transferência, com a mesma limpeza automática de 10 segundos das entradas. Dentro
@@ -235,9 +237,27 @@ campo em vez de copiar. As escolhas ficam guardadas para a próxima vez.
 
 O gerador é sempre o `keepassxc-cli`, mesmo em bancos do pass ou do Bitwarden: ele responde em
 cerca de 10 ms, enquanto o `bw generate` leva uns 2,5 s por senha (é um programa Node) e o
-`pass generate` não gera sem criar uma entrada. O modo frase precisa da lista de palavras, que o
-`make install` copia para `$(PREFIX)/share/omapass/wordlists`; rodando direto de `build/`, ela é
-lida do submodule. Sem a lista, o modo frase não aparece.
+`pass generate` não gera sem criar uma entrada. As listas de palavras são instaladas pelo
+`make install` em `$(PREFIX)/share/omapass/wordlists`; rodando direto de `build/`, elas são lidas
+do repositório e do submodule. Sem lista alguma, o modo frase não aparece.
+
+Para escolher outra lista, use `wordlist` no `config.toml`:
+
+```toml
+[generator]
+# "auto" (padrão) segue o idioma da interface; "pt-BR" ou "en" escolhem uma
+# das listas que acompanham o omapass; qualquer outra coisa é um caminho.
+wordlist = "auto"
+```
+
+Uma lista própria é um arquivo de texto com uma palavra por linha (o formato numerado
+`11111 palavra` do diceware também é aceito). Apontar para um arquivo que não existe deixa o
+modo frase indisponível, em vez de cair silenciosamente na lista padrão.
+
+A lista **pt-BR** foi montada a partir do corpus [fserb/pt-br](https://github.com/fserb/pt-br)
+(MIT, Fernando Serboncini) pelo script `tools/build-wordlist-pt-br.py`, que documenta os
+critérios: 7.776 palavras de 4 a 9 letras, sem acento, as mais comuns primeiro, sem nomes de
+lugares nem palavras ofensivas, e nenhuma palavra sendo prefixo de outra.
 
 ## Segurança
 
@@ -254,7 +274,7 @@ lida do submodule. Sem a lista, o modo frase não aparece.
 
 Arquivos em `~/.config/omapass/`:
 
-- `config.toml` — caminho de busca, recency, tema ativo, idioma e tempo de auto-lock
+- `config.toml` — caminho de busca, recency, tema ativo, idioma, tempo de auto-lock e lista de palavras do gerador
 - `themes/*.toml` — sobreposições de cores
 
 > **Vindo do fpass:** se `~/.config/omapass` não existir e `~/.config/fpass`
@@ -275,6 +295,9 @@ recency = true
 theme = "default"
 language = "pt-BR"
 lock_minutes = 10
+
+[generator]
+wordlist = "auto"
 ```
 
 `lock_minutes` define, em minutos, quanto tempo de inatividade até o banco desbloqueado ser travado (a interface volta pra tela de bancos, pedindo a senha de novo). Ausente, o padrão é 10; `lock_minutes = false` desativa o auto-lock por completo, voltando ao comportamento de sempre desbloqueado enquanto o omapass está aberto.

@@ -26,6 +26,7 @@ install: build
 	install -Dm644 $(TARGET).desktop $(DESKTOPDIR)/$(TARGET).desktop
 	install -Dm644 icons/$(TARGET).svg $(ICONDIR)/$(TARGET).svg
 	install -Dm644 vendor/keepassxc/share/wordlists/eff_large.wordlist $(WORDLISTDIR)/eff_large.wordlist
+	install -Dm644 wordlists/pt-BR.wordlist $(WORDLISTDIR)/pt-BR.wordlist
 	@echo "omapass instalado em $(BINDIR)/$(TARGET)"
 
 uninstall:
@@ -34,6 +35,7 @@ uninstall:
 	rm -f $(DESKTOPDIR)/$(TARGET).desktop
 	rm -f $(ICONDIR)/$(TARGET).svg
 	rm -f $(WORDLISTDIR)/eff_large.wordlist
+	rm -f $(WORDLISTDIR)/pt-BR.wordlist
 	@echo "omapass removido de $(BINDIR)/$(TARGET)"
 
 clean:

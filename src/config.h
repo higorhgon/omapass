@@ -18,6 +18,10 @@ struct AppConfig {
     // database list, secret dropped from memory). std::nullopt disables
     // auto-lock (`lock_minutes = false` in config.toml).
     std::optional<int> lockMinutes = 10;
+    // Wordlist for the passphrase generator: "auto" follows the interface
+    // language, "pt-BR"/"en" pick one of the lists that ship with omapass,
+    // and anything else is taken as a path to a wordlist file.
+    QString wordlist = QStringLiteral("auto");
 };
 
 namespace Config {
