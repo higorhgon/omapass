@@ -28,6 +28,11 @@ struct OpAccount {
 
 QVector<OpAccount> parseOpAccounts(const QByteArray &json);
 
+// The `op` command line as a single string, quoted for a shell — which is
+// how a command is handed to `script`, the terminal `op` borrows when it
+// will only answer to one. Nothing secret goes on it.
+QString opShellCommand(const QStringList &args);
+
 // What `op signin` hands back. Without --raw it prints the shell line
 // `export OP_SESSION_<name>="<token>"`, which is the only place the name of
 // the variable is stated — and `op` picks it, so guessing it is how a
