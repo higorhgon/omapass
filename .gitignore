@@ -1,5 +1,8 @@
 build/
 build-tests/
+dist/
+AppDir/
+.appimage-tools/
 
 # qmake deixa Makefile, moc_*, *.o e o binário ao lado do .pro quando se
 # compila um teste dentro do diretório dele; o bin/test compila fora, mas
