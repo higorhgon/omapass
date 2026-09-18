@@ -82,6 +82,14 @@ public:
     // passphrase before handing back a usable Vault.
     static Vault *open(const DbRef &ref, const Secret &secret, QString *error);
 
+    // Checks a password without opening the database, for storing it behind
+    // a PIN: opening would cost a session the caller does not want (and, for
+    // the account backends, would end the one already open). A 1Password
+    // account has nothing local to check against, so it accepts what it is
+    // given — a wrong password shows up at the first PIN unlock, which then
+    // drops the PIN.
+    static bool verifySecret(const DbRef &ref, const Secret &secret, QString *error);
+
     VaultKind kind() const { return m_kind; }
     QString path() const { return m_path; }
 

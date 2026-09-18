@@ -328,75 +328,69 @@ bitwarden.method_yubikey:
 bitwarden.logout_confirm:
   pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
   en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
-bitwarden.pin_title:
+pin.title:
   pt-BR: " Desbloqueio por PIN "
   en: " PIN Unlock "
-bitwarden.pin_label:
+pin.label:
   pt-BR: " PIN "
   en: " PIN "
-bitwarden.pin_confirm_label:
+pin.confirm_label:
   pt-BR: " Repita o PIN "
   en: " Repeat PIN "
-bitwarden.pin_footer:
+pin.footer:
   pt-BR: "ENTER: Desbloquear | TAB: Usar a senha mestra | ESC: Cancelar"
   en: "ENTER: Unlock | TAB: Use the master password | ESC: Cancel"
-bitwarden.pin_wrong:
+pin.wrong:
   pt-BR: "PIN incorreto! Restam %{left} tentativa(s)."
   en: "Wrong PIN! %{left} attempt(s) left."
-bitwarden.pin_blocked:
+pin.blocked:
   pt-BR: "PIN incorreto demais vezes: o PIN foi removido. Use a senha mestra."
   en: "Too many wrong PINs: the PIN was removed. Use the master password."
-bitwarden.pin_missing:
-  pt-BR: "Nenhum PIN guardado para esta conta."
-  en: "No PIN stored for this account."
-bitwarden.pin_stale:
+pin.missing:
+  pt-BR: "Nenhum PIN guardado para este banco."
+  en: "No PIN stored for this database."
+pin.stale:
   pt-BR: "A senha guardada com o PIN não vale mais; o PIN foi removido."
   en: "The password kept with the PIN is no longer valid; the PIN was removed."
-bitwarden.pin_too_short:
+pin.too_short:
   pt-BR: "O PIN precisa ter pelo menos %{min} dígitos."
   en: "The PIN must have at least %{min} digits."
-bitwarden.pin_only_digits:
-  pt-BR: "O PIN só pode conter dígitos."
-  en: "The PIN may only contain digits."
-bitwarden.pin_mismatch:
+pin.only_digits:
+  pt-BR: "O PIN só pode conter dígitos — marque \"Permitir letras e símbolos\" para usar outros."
+  en: "The PIN may only contain digits — tick \"Allow letters and symbols\" to use others."
+pin.allow_text:
+  pt-BR: "Permitir letras e símbolos"
+  en: "Allow letters and symbols"
+pin.mismatch:
   pt-BR: "Os PINs não coincidem."
   en: "The PINs do not match."
-bitwarden.pin_weak:
-  pt-BR: "Um PIN de %{digits} dígitos são só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline. Use %{recommended} ou mais."
-  en: "A %{digits}-digit PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing. Use %{recommended} or more."
-bitwarden.pin_show:
+pin.weak:
+  pt-BR: "Este PIN dá só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline — use mais caracteres, ou marque letras e símbolos."
+  en: "This PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing — use more characters, or tick letters and symbols."
+pin.show:
   pt-BR: "Mostrar PIN"
   en: "Show PIN"
-bitwarden.pin_no_keyring:
+pin.no_keyring:
   pt-BR: "Chaveiro do sistema indisponível (instale o libsecret/secret-tool)."
   en: "System keyring unavailable (install libsecret/secret-tool)."
-bitwarden.pin_store_error:
+pin.store_error:
   pt-BR: "Não foi possível guardar o PIN."
   en: "Could not store the PIN."
-bitwarden.pin_enabled:
+pin.enabled:
   pt-BR: "Desbloqueio por PIN ativado."
   en: "PIN unlock enabled."
-bitwarden.pin_disabled:
+pin.disabled:
   pt-BR: "Desbloqueio por PIN desativado."
   en: "PIN unlock disabled."
-bitwarden.pin_setup_title:
+pin.setup_title:
   pt-BR: " Ativar Desbloqueio por PIN "
   en: " Enable PIN Unlock "
-bitwarden.pin_setup_footer:
+pin.setup_footer:
   pt-BR: "A senha mestra fica guardada no chaveiro, cifrada pelo PIN | ENTER: Confirmar | ESC: Cancelar"
   en: "The master password is kept in the keyring, encrypted with the PIN | ENTER: Confirm | ESC: Cancel"
-bitwarden.pin_enable_action:
-  pt-BR: "Ativar desbloqueio por PIN"
-  en: "Enable PIN unlock"
-bitwarden.pin_disable_action:
-  pt-BR: "Desativar desbloqueio por PIN"
-  en: "Disable PIN unlock"
-bitwarden.pin_help:
+pin.help:
   pt-BR: "Ativar/desativar desbloqueio por PIN"
   en: "Enable/disable PIN unlock"
-bitwarden.pin_only_bitwarden:
-  pt-BR: "O desbloqueio por PIN é só para contas Bitwarden."
-  en: "PIN unlock is for Bitwarden accounts only."
 bitwarden.no_session:
   pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
   en: "Bitwarden is not ready for changes yet; lock and open it again."
@@ -635,8 +629,8 @@ ui.footer_search:
   pt-BR: "ENTER: Copiar | TAB: Info | CTRL+?: Ajuda"
   en: "ENTER: Copy | TAB: Info | CTRL+?: Help"
 ui.footer_normal:
-  pt-BR: "ENTER: Copiar | ESPAÇO: Ações | CTRL+?: Ajuda | ESC/q: Sair"
-  en: "ENTER: Copy | SPACE: Actions | CTRL+?: Help | ESC/q: Quit"
+  pt-BR: "ENTER: Copiar | ESPAÇO: Ações | CTRL+?: Ajuda | ESC/q: Bloquear"
+  en: "ENTER: Copy | SPACE: Actions | CTRL+?: Help | ESC/q: Lock"
 ui.footer_form:
   pt-BR: "TAB: Navegar | ENTER: Confirmar | ESC: Cancelar"
   en: "TAB: Navigate | ENTER: Confirm | ESC: Cancel"
@@ -712,6 +706,9 @@ ui.help_edit_entry:
 ui.help_delete_entry:
   pt-BR: "Excluir entrada"
   en: "Delete entry"
+ui.help_lock:
+  pt-BR: "Bloquear o banco e voltar para a lista"
+  en: "Lock the database and go back to the list"
 ui.help_exit_search:
   pt-BR: "Sair da busca / Fechar modal"
   en: "Exit search / Close modal"

@@ -12,7 +12,6 @@ HEADERS += \
     src/bitwardenvault.h \
     src/bwcache.h \
     src/bwcrypto.h \
-    src/bwpin.h \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
@@ -27,6 +26,7 @@ HEADERS += \
     src/palette.h \
     src/passstore.h \
     src/passvault.h \
+    src/pin.h \
     src/process.h \
     src/secret.h \
     src/sessionlock.h \
@@ -41,7 +41,6 @@ SOURCES += \
     src/bitwardenvault.cpp \
     src/bwcache.cpp \
     src/bwcrypto.cpp \
-    src/bwpin.cpp \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \
@@ -56,6 +55,7 @@ SOURCES += \
     src/palette.cpp \
     src/passstore.cpp \
     src/passvault.cpp \
+    src/pin.cpp \
     src/process.cpp \
     src/secret.cpp \
     src/sessionlock.cpp \
