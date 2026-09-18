@@ -246,14 +246,16 @@ bool OnePasswordVault::logout(const QString &account, QString *error) {
     // of them at once is how op ends up unsure of what is signed in.
     waitForPendingSignout();
 
-    // Which command removes an account depends on what op believes about it,
-    // and op refuses or quietly ignores the wrong one: while it thinks a
-    // session is live it answers `account forget` with "You are currently
-    // logged in… Use 'op signout --forget' instead"; with no session token
-    // to end, that same `op signout --forget` exits 0 and removes nothing.
-    // So every form is tried, and what settles it is whether op still lists
-    // the account — never the exit code.
+    // With the session already ended when the vault was locked, `op account
+    // forget` is the one that removes the account, so it goes first. The
+    // sign-out forms are for the state where op still believes a session is
+    // live: it then refuses to forget ("You are currently logged in… Use 'op
+    // signout --forget' instead") — and that sign-out, with no token left to
+    // end, exits 0 without removing anything. So every form is tried, and
+    // what settles it is whether op still lists the account, never the exit
+    // code.
     QVector<QStringList> attempts{
+        {QStringLiteral("account"), QStringLiteral("forget"), account},
         {QStringLiteral("signout"), QStringLiteral("--account"), account, QStringLiteral("--forget")},
     };
 
@@ -261,8 +263,6 @@ bool OnePasswordVault::logout(const QString &account, QString *error) {
     // only unambiguous when it knows one.
     if (accounts().size() == 1)
         attempts.append({QStringLiteral("signout"), QStringLiteral("--forget")});
-
-    attempts.append({QStringLiteral("account"), QStringLiteral("forget"), account});
 
     // `op account forget` may also want the id op gave the account rather
     // than the shorthand omapass refers to it by.
@@ -276,27 +276,34 @@ bool OnePasswordVault::logout(const QString &account, QString *error) {
             attempts.append({QStringLiteral("account"), QStringLiteral("forget"), id});
     }
 
+    // Kept rather than logged as they happen: a form that does not apply to
+    // the state op is in fails as a matter of course, and saying so on the
+    // way to a removal that worked is just noise.
+    QStringList refusals;
     ProcResult result;
     for (const QStringList &args : std::as_const(attempts)) {
         result = runOpUnderTerminal(args);
         if (!hasAccount(account))
             return true;
-        qWarning().noquote() << "omapass: op" << args.join(QLatin1Char(' '))
-                             << "did not remove the account:" << lastMessage(result);
+        refusals << QStringLiteral("op ") + args.join(QLatin1Char(' ')) + QStringLiteral(": ")
+                + lastMessage(result);
     }
+
+    for (const QString &refusal : std::as_const(refusals))
+        qWarning().noquote() << "omapass:" << refusal;
 
     // op is holding on to a session omapass cannot end, because ending one
     // takes the token it was given — and that is gone with the vault. Saying
     // so, with the two commands that do work in a terminal, beats a message
     // that only says no.
-    if (classifyOpError(lastMessage(result)) != OpError::None
-        && lastMessage(result).contains(QLatin1String("currently logged in"), Qt::CaseInsensitive)) {
+    const QString said = lastMessage(result);
+    if (refusals.join(QLatin1Char(' ')).contains(QLatin1String("currently logged in"),
+                                                 Qt::CaseInsensitive)) {
         *error = I18n::t(QStringLiteral("onepassword.logout_session_stuck"),
                          QStringLiteral("account"), account);
         return false;
     }
 
-    const QString said = lastMessage(result);
     *error = said.isEmpty() ? I18n::t(QStringLiteral("onepassword.logout_ignored"),
                                       QStringLiteral("account"), account)
                             : said;
