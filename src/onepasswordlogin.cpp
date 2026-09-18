@@ -62,14 +62,14 @@ void OnePasswordLogin::start(const QString &address, const QString &email, const
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("OP_SECRET_KEY"), secretKey.toString());
 
-    // --signin so the same run that adds the account hands back a session,
-    // saving a second round trip. Not --raw: the line op prints instead
-    // names the variable it wants the token back in.
+    // Only the account: the session comes from `op signin` right after, the
+    // one command that states the name of the variable it wants the token
+    // back in. `op account add --signin` cannot say it.
+    m_addingAccount = true;
     const QStringList args = {QStringLiteral("account"), QStringLiteral("add"),
                               QStringLiteral("--address"), address,
                               QStringLiteral("--email"), email,
-                              QStringLiteral("--shorthand"), m_shorthand,
-                              QStringLiteral("--signin")};
+                              QStringLiteral("--shorthand"), m_shorthand};
 
     runOp(args, env);
 }
@@ -83,8 +83,21 @@ void OnePasswordLogin::startSignIn(const QString &account, const Secret &passwor
     m_stopping = false;
     m_shorthand = account;
     m_password = password;
+    m_addingAccount = false;
 
-    runOp({QStringLiteral("signin"), QStringLiteral("--account"), account},
+    beginSignIn();
+}
+
+void OnePasswordLogin::beginSignIn() {
+    m_stdout.clear();
+    m_stderr.clear();
+    m_promptsSeen.clear();
+
+    // --force because op refuses to print the session line when something
+    // other than a shell is reading it — and under the pseudo terminal it is
+    // a terminal that reads.
+    runOp({QStringLiteral("signin"), QStringLiteral("--account"), m_shorthand,
+           QStringLiteral("--force")},
           QProcessEnvironment::systemEnvironment());
 }
 
@@ -96,7 +109,8 @@ void OnePasswordLogin::runOp(const QStringList &args, const QProcessEnvironment 
         m_awaitingPasswordPrompt = false;
         begin(QStringLiteral("op"), args, env);
         answer(m_password);
-        m_password.clear();
+        if (!m_addingAccount)
+            m_password.clear();
         return;
     }
 
@@ -152,6 +166,7 @@ void OnePasswordLogin::cancel() {
     m_secretKey.clear();
     m_password.clear();
     m_awaitingPasswordPrompt = false;
+    m_addingAccount = false;
     if (!m_process)
         return;
 
@@ -185,7 +200,9 @@ void OnePasswordLogin::onOutput() {
     }
     if (prompt == OpPrompt::Password && m_awaitingPasswordPrompt) {
         answer(m_password);
-        m_password.clear();
+        // Kept while adding: `op signin` asks for it again right after.
+        if (!m_addingAccount)
+            m_password.clear();
         m_awaitingPasswordPrompt = false;
         return;
     }
@@ -213,6 +230,17 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     m_process->deleteLater();
     m_process = nullptr;
     m_secretKey.clear();
+
+    if (status == QProcess::NormalExit && exitCode == 0 && m_addingAccount) {
+        // The account is on the device now; the session is a second run,
+        // which the same password answers again — so it is only dropped
+        // after that one.
+        m_addingAccount = false;
+        wipeBuffers();
+        beginSignIn();
+        return;
+    }
+
     m_password.clear();
 
     if (status == QProcess::NormalExit && exitCode == 0) {
