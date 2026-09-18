@@ -224,12 +224,41 @@ bool OnePasswordVault::hasAccount(const QString &account) {
     return false;
 }
 
-void OnePasswordVault::logout(const QString &account) {
+bool OnePasswordVault::logout(const QString &account, QString *error) {
     // `op signout --forget` only ends a session that is still live and fails
     // outright when there is none, leaving the account on the device;
     // `op account forget` is the one that drops its details.
     runProcess(QStringLiteral("op"), {QStringLiteral("signout"), QStringLiteral("--account"), account});
-    runProcess(QStringLiteral("op"), {QStringLiteral("account"), QStringLiteral("forget"), account});
+    ProcResult result = runProcess(QStringLiteral("op"),
+                                   {QStringLiteral("account"), QStringLiteral("forget"), account});
+
+    // Asking op again rather than trusting the exit code: what matters is
+    // whether the account is gone, and saying it is when it is not is worse
+    // than saying nothing.
+    if (!hasAccount(account))
+        return true;
+
+    // The shorthand is how omapass refers to the account everywhere else,
+    // but `op account forget` may want the id it gave the account itself.
+    OpAccount known;
+    {
+        const QMutexLocker locker(&accountsMutex);
+        known = knownAccounts.value(account);
+    }
+    for (const QString &other : {known.userUuid, known.accountUuid}) {
+        if (other.isEmpty())
+            continue;
+        result = runProcess(QStringLiteral("op"),
+                            {QStringLiteral("account"), QStringLiteral("forget"), other});
+        if (!hasAccount(account))
+            return true;
+    }
+
+    const QString said = lastMessage(result);
+    *error = said.isEmpty() ? I18n::t(QStringLiteral("onepassword.logout_ignored"),
+                                      QStringLiteral("account"), account)
+                            : said;
+    return false;
 }
 
 bool OnePasswordVault::signIn(const QString &account, const Secret &password, Secret *session,

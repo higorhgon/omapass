@@ -452,6 +452,9 @@ onepassword.stuck_prompt:
 onepassword.login_failed:
   pt-BR: "Falha ao entrar no 1Password."
   en: "1Password login failed."
+onepassword.logout_ignored:
+  pt-BR: "O op aceitou o comando, mas ainda lista a conta %{account}. Tente `op account forget %{account}` no terminal."
+  en: "op took the command but still lists the account %{account}. Try `op account forget %{account}` in a terminal."
 onepassword.logged_out:
   pt-BR: "Conta 1Password desconectada."
   en: "1Password account logged out."
