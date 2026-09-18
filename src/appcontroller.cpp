@@ -1,7 +1,7 @@
 #include "appcontroller.h"
 
 #include "bitwardenvault.h"
-#include "bwpin.h"
+#include "pin.h"
 #include "bwcache.h"
 #include "clipboard.h"
 #include "filter.h"
@@ -318,6 +318,9 @@ void AppController::lock() {
         return; // uma operação ainda usa o banco; o timer tenta de novo no próximo ciclo
 
     closeVault();
+    // Nothing is open any more, so no database is the PIN's subject until
+    // one is picked again.
+    refreshPinState();
     m_query.clear();
     refreshEntries();
 
@@ -378,14 +381,21 @@ QString AppController::bitwardenAccount() const {
     return QString();
 }
 
-// Looking a PIN up costs one quick secret-tool call, so it is refreshed
-// whenever the account in play changes rather than kept in sync by hand.
-void AppController::refreshPinState() {
-    const QString email = bitwardenAccount();
-    const bool configured = !email.isEmpty() && BwPin::hasPin(email);
+DbRef AppController::pinTarget() const {
+    if (!m_vault.isNull())
+        return {m_vault->path(), m_vault->kind()};
+    if (m_hasPendingDatabase)
+        return m_pendingDatabase;
+    return DbRef();
+}
 
-    const bool pending = m_hasPendingDatabase && m_pendingDatabase.kind == VaultKind::Bitwarden;
-    m_pinAvailable = pending && configured;
+// Looking a PIN up costs one quick secret-tool call, so it is refreshed
+// whenever the database in play changes rather than kept in sync by hand.
+void AppController::refreshPinState() {
+    const DbRef target = pinTarget();
+    const bool configured = !target.path.isEmpty() && Pin::hasPin(target.path);
+
+    m_pinAvailable = m_vault.isNull() && m_hasPendingDatabase && configured;
 
     if (m_pinConfigured != configured) {
         m_pinConfigured = configured;
@@ -517,42 +527,42 @@ void AppController::unlockWithPin(const QString &pin) {
     setUnlockError(QString());
 
     const DbRef ref = m_pendingDatabase;
-    const QString email = BitwardenVault::emailOf(ref.path);
+    const QString target = ref.path;
     struct PinUnlock {
-        BwPin::Result result = BwPin::Result::Missing;
+        Pin::Result result = Pin::Result::Missing;
         Secret password;
     };
 
     runInBackground(
-        [email, pin]() {
+        [target, pin]() {
             PinUnlock unlock;
-            unlock.result = BwPin::recover(email, pin, &unlock.password);
+            unlock.result = Pin::recover(target, pin, &unlock.password);
             return unlock;
         },
-        [this, ref, email](const PinUnlock &unlock) {
+        [this, ref, target](const PinUnlock &unlock) {
             switch (unlock.result) {
-            case BwPin::Result::Ok:
+            case Pin::Result::Ok:
                 break;
-            case BwPin::Result::WrongPin: {
-                const int left = BwPin::registerFailure(email);
+            case Pin::Result::WrongPin: {
+                const int left = Pin::registerFailure(target);
                 refreshPinState();
                 emit pendingDatabaseChanged();
                 setUnlockError(left > 0
-                    ? I18n::t(QStringLiteral("bitwarden.pin_wrong"), QStringLiteral("left"),
+                    ? I18n::t(QStringLiteral("pin.wrong"), QStringLiteral("left"),
                               QString::number(left))
-                    : I18n::t(QStringLiteral("bitwarden.pin_blocked")));
+                    : I18n::t(QStringLiteral("pin.blocked")));
                 return;
             }
-            case BwPin::Result::Missing:
-            case BwPin::Result::Unavailable:
-                BwPin::clear(email);
+            case Pin::Result::Missing:
+            case Pin::Result::Unavailable:
+                Pin::clear(target);
                 refreshPinState();
                 emit pendingDatabaseChanged();
-                setUnlockError(I18n::t(QStringLiteral("bitwarden.pin_missing")));
+                setUnlockError(I18n::t(QStringLiteral("pin.missing")));
                 return;
             }
 
-            BwPin::resetAttempts();
+            Pin::resetAttempts(target);
             const Secret password = unlock.password;
             runInBackground(
                 [ref, password]() {
@@ -560,17 +570,17 @@ void AppController::unlockWithPin(const QString &pin) {
                     result.vault = Vault::open(ref, password, &result.error);
                     return result;
                 },
-                [this, ref, email](const OpenResult &result) {
+                [this, ref, target](const OpenResult &result) {
                     if (result.vault) {
                         adoptVault(ref, result.vault);
                         return;
                     }
-                    // The stored password no longer opens the account (a
+                    // The stored password no longer opens the database (a
                     // changed master password, say): the PIN goes with it.
-                    BwPin::clear(email);
+                    Pin::clear(target);
                     refreshPinState();
                     emit pendingDatabaseChanged();
-                    setUnlockError(I18n::t(QStringLiteral("bitwarden.pin_stale")));
+                    setUnlockError(I18n::t(QStringLiteral("pin.stale")));
                 });
         });
 }
@@ -1023,7 +1033,7 @@ void AppController::logoutBitwarden() {
             BitwardenVault::logout();
             // An account nobody is signed into has no business leaving its
             // master password behind in the keyring.
-            BwPin::clear(email);
+            Pin::clear(BitwardenVault::refPath(email));
             return TaskResult{true, QString()};
         },
         [this](const TaskResult &) {
@@ -1120,6 +1130,7 @@ void AppController::logoutOnePassword() {
     runInBackground(
         [account]() {
             OnePasswordVault::logout(account);
+            Pin::clear(OnePasswordVault::refPath(account));
             return TaskResult{true, QString()};
         },
         [this](const TaskResult &) {
@@ -1129,65 +1140,57 @@ void AppController::logoutOnePassword() {
         });
 }
 
-void AppController::enableBitwardenPin(const QString &masterPassword, const QString &pin) {
-    const QString email = bitwardenAccount();
-    if (m_busy || email.isEmpty())
+void AppController::enablePin(const QString &password, const QString &pin, bool allowText) {
+    const DbRef target = pinTarget();
+    if (m_busy || target.path.isEmpty())
         return;
 
-    const QString invalid = BwPin::validate(pin, pin);
+    const QString invalid = Pin::validate(pin, pin, allowText);
     if (!invalid.isEmpty()) {
         showMessage(invalid, true);
         return;
     }
 
-    const Secret password(masterPassword);
+    const Secret secret(password);
     struct PinSetup {
         bool ok = false;
         QString error;
     };
 
     runInBackground(
-        [email, pin, password]() {
+        [target, pin, secret]() {
             PinSetup setup;
-            // The password is checked against bw's own encrypted copy before
-            // being stored, so a typo does not end up behind the PIN. When
-            // that copy is in a shape BwCache does not read, there is nothing
-            // to check it against locally and it is stored as typed; a wrong
-            // one then shows up on the next PIN unlock, which clears it.
-            if (const std::optional<BwCache> cache = BwCache::load()) {
-                QHash<QString, QJsonObject> items;
-                QHash<QString, QString> folders;
-                if (cache->decrypt(password, &items, &folders) == BwCache::Result::WrongPassword) {
-                    setup.error = I18n::t(QStringLiteral("backend.wrong_password"));
-                    return setup;
-                }
-            }
-            setup.ok = BwPin::store(email, pin, password, &setup.error);
+            // Checked before being stored, so a typo does not end up behind
+            // the PIN — without opening the database, which for an account
+            // backend would cost (and invalidate) a session.
+            if (!Vault::verifySecret(target, secret, &setup.error))
+                return setup;
+            setup.ok = Pin::store(target.path, pin, secret, &setup.error);
             return setup;
         },
         [this](const PinSetup &setup) {
             refreshPinState();
-            showMessage(setup.ok ? I18n::t(QStringLiteral("bitwarden.pin_enabled")) : setup.error,
-                        !setup.ok);
+            showMessage(setup.ok ? I18n::t(QStringLiteral("pin.enabled")) : setup.error, !setup.ok);
         });
 }
 
-void AppController::disableBitwardenPin() {
-    const QString email = bitwardenAccount();
-    if (email.isEmpty())
+void AppController::disablePin() {
+    const DbRef target = pinTarget();
+    if (target.path.isEmpty())
         return;
 
-    BwPin::clear(email);
+    Pin::clear(target.path);
     refreshPinState();
-    showMessage(I18n::t(QStringLiteral("bitwarden.pin_disabled")), false);
+    showMessage(I18n::t(QStringLiteral("pin.disabled")), false);
 }
 
-QString AppController::validatePin(const QString &pin, const QString &confirm) const {
-    return BwPin::validate(pin, confirm);
+QString AppController::validatePin(const QString &pin, const QString &confirm,
+                                   bool allowText) const {
+    return Pin::validate(pin, confirm, allowText);
 }
 
 QString AppController::pinWeakWarning(const QString &pin) const {
-    return BwPin::weakWarning(pin);
+    return Pin::weakWarning(pin);
 }
 
 void AppController::closeVault() {

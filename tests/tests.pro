@@ -12,7 +12,6 @@ SOURCES += \
     tst_omapass.cpp \
     ../src/bitwardenjson.cpp \
     ../src/bwcrypto.cpp \
-    ../src/bwpin.cpp \
     ../src/bwcache.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
@@ -22,6 +21,7 @@ SOURCES += \
     ../src/kdbx2pass.cpp \
     ../src/opjson.cpp \
     ../src/passstore.cpp \
+    ../src/pin.cpp \
     ../src/process.cpp \
     ../src/secret.cpp
 
@@ -29,7 +29,6 @@ HEADERS += \
     ../src/bitwardenjson.h \
     ../src/bwcache.h \
     ../src/bwcrypto.h \
-    ../src/bwpin.h \
     ../src/config.h \
     ../src/filter.h \
     ../src/generator.h \
@@ -38,6 +37,7 @@ HEADERS += \
     ../src/kdbx2pass.h \
     ../src/opjson.h \
     ../src/passstore.h \
+    ../src/pin.h \
     ../src/process.h \
     ../src/secret.h
 
