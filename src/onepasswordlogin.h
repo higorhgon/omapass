@@ -7,8 +7,10 @@
 #include "opjson.h"
 #include "secret.h"
 
-// One run of `op account add` or `op signin`, driven asynchronously, with
-// the two-step code asked of the user while the process waits.
+// Adding a 1Password account and opening a session for one, driven
+// asynchronously, with the two-step code asked of the user while the process
+// waits. Adding runs both in turn: `op account add` authorises this device
+// (which is what the code is for) and `op signin` then opens the session.
 //
 // Both run under a pseudo terminal (`script`, from util-linux), because with
 // stdin on a pipe `op` refuses to ask anything — and the two-step code is
@@ -47,6 +49,9 @@ private:
     void onFinished(int exitCode, QProcess::ExitStatus status);
     void answer(const Secret &secret);
     void runOp(const QStringList &args, const QProcessEnvironment &env);
+    // `op signin`, which the add flow chains into once the account is on the
+    // device.
+    void beginSignIn();
     void begin(const QString &program, const QStringList &args, const QProcessEnvironment &env);
     void wipeBuffers();
 
@@ -59,6 +64,9 @@ private:
     // Set while op is expected to ask for the password itself, rather than
     // read it from stdin without asking.
     bool m_awaitingPasswordPrompt = false;
+    // Set between adding the account and signing into it: the same password
+    // answers both, so it is held until the session is open.
+    bool m_addingAccount = false;
     QSet<int> m_promptsSeen;
     bool m_stopping = false;
 };
