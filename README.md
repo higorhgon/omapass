@@ -38,7 +38,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - `xdg-desktop-portal` e um backend de portal (para o modo claro/escuro e o tamanho de texto do desktop)
 - `wl-clipboard` (`wl-copy`) para copiar senhas
 - Para o desbloqueio por PIN (opcional, em qualquer banco): `secret-tool`, do `libsecret`, e um chaveiro do sistema destravado — o Omarchy já traz os dois. Sem isso, a opção de PIN simplesmente não aparece.
-- Botan 3 (`botan` no Arch/Omarchy, `libbotan-3-dev` no Debian/Ubuntu) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
+- Botan 3 (`botan` no Arch/Omarchy) ou Botan 2.19+ (`libbotan-2-dev` no Ubuntu 24.04 LTS, que ainda não tem o 3) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
 
 Para bancos **KeePassXC**:
 
@@ -67,6 +67,21 @@ cada coisa — é a resposta rápida para "por que tal backend não aparece?".
 A busca por bancos usa [`fd`](https://github.com/sharkdp/fd) quando disponível
 (bem mais rápido em um diretório home inteiro) e cai para uma varredura própria
 quando não está instalado.
+
+### No Ubuntu
+
+O omapass compila no Ubuntu 24.04 LTS (testado com Qt 6.4 e Botan 2.19) com:
+
+```bash
+sudo apt install build-essential cmake pkg-config qmake6 qt6-base-dev \
+  qt6-declarative-dev qt6-tools-dev qml6-module-qttest \
+  qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  libgl-dev libbotan-2-dev zlib1g-dev libminizip-dev libpcsclite-dev \
+  libusb-1.0-0-dev libreadline-dev libxkbcommon-dev
+```
+
+Daí em diante é igual ao Arch: `./bin/build` e `sudo make install`. O CI compila
+nas duas distribuições a cada mudança, então isso não volta a quebrar sem aviso.
 
 ## Instalação
 
