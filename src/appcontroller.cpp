@@ -1140,12 +1140,12 @@ void AppController::logoutOnePassword() {
         });
 }
 
-void AppController::enablePin(const QString &password, const QString &pin) {
+void AppController::enablePin(const QString &password, const QString &pin, bool allowText) {
     const DbRef target = pinTarget();
     if (m_busy || target.path.isEmpty())
         return;
 
-    const QString invalid = Pin::validate(pin, pin);
+    const QString invalid = Pin::validate(pin, pin, allowText);
     if (!invalid.isEmpty()) {
         showMessage(invalid, true);
         return;
@@ -1184,8 +1184,9 @@ void AppController::disablePin() {
     showMessage(I18n::t(QStringLiteral("pin.disabled")), false);
 }
 
-QString AppController::validatePin(const QString &pin, const QString &confirm) const {
-    return Pin::validate(pin, confirm);
+QString AppController::validatePin(const QString &pin, const QString &confirm,
+                                   bool allowText) const {
+    return Pin::validate(pin, confirm, allowText);
 }
 
 QString AppController::pinWeakWarning(const QString &pin) const {

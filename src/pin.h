@@ -27,9 +27,12 @@ namespace Pin {
 
 // Wrong PINs before the stored password is deleted.
 constexpr int maxAttempts = 5;
-// Shorter than this is refused; shorter than `recommendedLength` is warned about.
+// Shorter than this is refused.
 constexpr int minLength = 4;
-constexpr int recommendedLength = 6;
+// A PIN with fewer combinations than this is warned about: it is what six
+// digits give, which was the recommendation back when a PIN could only be
+// digits.
+constexpr qint64 weakBelowCombinations = 1000000;
 
 enum class Result { Ok, WrongPin, Missing, Unavailable };
 
@@ -47,10 +50,12 @@ QString buildBlob(const Blob &blob);
 std::optional<Blob> parseBlob(const QString &text);
 
 // Empty when the PIN is acceptable, otherwise the reason, translated.
-// `confirm` is only checked when given.
-QString validate(const QString &pin, const QString &confirm = QString());
-// Empty for a PIN of the recommended length or longer (and while one is
-// still being typed); otherwise says how few combinations it has.
+// `confirm` is only checked when given. A PIN is digits unless `allowText`
+// says otherwise — it is only ever used as the input to a KDF, so letters
+// and symbols cost nothing and buy a much larger alphabet.
+QString validate(const QString &pin, const QString &confirm = QString(), bool allowText = false);
+// Empty for a PIN with enough combinations to be worth the name (and while
+// one is still being typed); otherwise says how few it has.
 QString weakWarning(const QString &pin);
 
 // The keyring attribute a database's PIN lives under, and the settings key
