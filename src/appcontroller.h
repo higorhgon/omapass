@@ -137,11 +137,12 @@ public:
     // 1Password account
     Q_INVOKABLE void addOnePasswordAccount();
     Q_INVOKABLE void onePasswordLogin(const QString &address, const QString &email,
-                                      const QString &secretKey, const QString &password);
+                                      const QString &secretKey, const QString &password,
+                                      const QString &shorthand);
     Q_INVOKABLE void sendOnePasswordCode(const QString &code);
     Q_INVOKABLE void cancelOnePasswordLogin();
     Q_INVOKABLE bool isOnePasswordDatabase(int index) const;
-    Q_INVOKABLE void logoutOnePassword();
+    Q_INVOKABLE void logoutOnePassword(int index);
 
     // Entries
     Q_INVOKABLE bool isEmptyGroup(const QString &entry) const;

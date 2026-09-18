@@ -30,18 +30,17 @@ class OnePasswordVault : public Vault {
 public:
     static bool isAvailable();
 
-    // The account added through omapass, remembered so it can be listed
-    // without spawning `op` at start-up. Empty when none.
-    static QString rememberedAccount();
-    static void rememberAccount(const QString &account);
-    static void forgetAccount();
-
     static QString refPath(const QString &account);
     static QString accountOf(const QString &refPath);
 
-    // The accounts `op` is configured with on this device.
+    // The accounts `op` is configured with on this device, which is what the
+    // database list is built from — omapass keeps no account of its own.
     static QVector<OpAccount> accounts();
     static bool hasAccount(const QString &account);
+    // The account as the list shows it: the shorthand when it was chosen,
+    // the e-mail when `op` derived one from the address (`my` and the like,
+    // which says nothing about whose account it is).
+    static QString displayName(const QString &account);
     // Signs out and drops the account's details from this device.
     static void logout(const QString &account);
 

@@ -133,8 +133,8 @@ FocusScope {
         errorText: controller.unlockError
         busy: controller.busy
 
-        onCredentialsSubmitted: function(address, email, secretKey, password) {
-            controller.onePasswordLogin(address, email, secretKey, password);
+        onCredentialsSubmitted: function(address, email, secretKey, password, shorthand) {
+            controller.onePasswordLogin(address, email, secretKey, password, shorthand);
         }
         onCodeSubmitted: function(code) { controller.sendOnePasswordCode(code); }
         onDismissed: controller.cancelOnePasswordLogin()
@@ -176,7 +176,7 @@ FocusScope {
 
         onAccepted: {
             page.mode = "list";
-            controller.logoutOnePassword();
+            controller.logoutOnePassword(pane.currentIndex);
         }
         onDismissed: page.mode = "list"
     }

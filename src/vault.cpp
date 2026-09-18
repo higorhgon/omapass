@@ -132,6 +132,8 @@ QString Vault::kindLabel(VaultKind kind) {
         return QStringLiteral("pass");
     case VaultKind::Bitwarden:
         return QStringLiteral("Bitwarden");
+    case VaultKind::OnePassword:
+        return QStringLiteral("1Password");
     }
     return QString();
 }
@@ -140,7 +142,7 @@ QString Vault::displayName(const DbRef &ref) {
     if (ref.kind == VaultKind::Bitwarden)
         return BitwardenVault::emailOf(ref.path);
     if (ref.kind == VaultKind::OnePassword)
-        return OnePasswordVault::accountOf(ref.path);
+        return OnePasswordVault::displayName(OnePasswordVault::accountOf(ref.path));
     return QFileInfo(ref.path).fileName();
 }
 
@@ -169,9 +171,14 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
     if (!account.isEmpty() && BitwardenVault::isAvailable())
         databases.append({BitwardenVault::refPath(account), VaultKind::Bitwarden});
 
-    const QString opAccount = OnePasswordVault::rememberedAccount();
-    if (!opAccount.isEmpty() && OnePasswordVault::isAvailable())
-        databases.append({OnePasswordVault::refPath(opAccount), VaultKind::OnePassword});
+    // Every account `op` is configured with, not just one remembered here:
+    // it keeps the list honest when an account is added or dropped from a
+    // terminal, and reading op's own configuration takes milliseconds.
+    if (OnePasswordVault::isAvailable()) {
+        const QVector<OpAccount> accounts = OnePasswordVault::accounts();
+        for (const OpAccount &account : accounts)
+            databases.append({OnePasswordVault::refPath(account.key()), VaultKind::OnePassword});
+    }
 
     return databases;
 }

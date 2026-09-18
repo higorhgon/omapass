@@ -233,8 +233,9 @@ FocusScope {
                                                    theme.selection.b, 0.4)
                          : "transparent"
 
-                    readonly property string itemText: typeof modelData === "string"
-                        ? modelData : (modelData.path !== undefined ? modelData.path : "")
+                    readonly property string itemText: typeof modelData === "string" ? modelData
+                        : modelData.label !== undefined ? modelData.label
+                        : modelData.path !== undefined ? modelData.path : ""
                     readonly property string tag: pane.tagFor(modelData)
 
                     HoverHandler {
