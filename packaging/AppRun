@@ -8,4 +8,8 @@
 # and belong to the system. `omapass --doctor` says which ones it found.
 HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="$HERE/usr/bin:$PATH"
+# Qt plugins loaded at run time (the Wayland client buffer integration, for
+# one) link libraries that travel here too, and nothing patched their search
+# path — so it is given to them.
+export LD_LIBRARY_PATH="$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
 exec "$HERE/usr/bin/omapass" "$@"
