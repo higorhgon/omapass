@@ -14,13 +14,16 @@ license=('MIT')
 depends=('qt6-base' 'qt6-declarative' 'botan' 'wl-clipboard' 'hicolor-icon-theme'
          'zlib' 'minizip' 'pcsclite' 'libusb' 'readline')
 makedepends=('git' 'cmake' 'qt6-tools' 'pkgconf')
+# Os CLIs dos backends sao opcionais de proposito: cada um habilita um tipo
+# de banco, e quem usa so o KeePassXC (que vai no pacote) nao precisa de
+# nenhum. `omapass --doctor` diz o que foi encontrado.
 optdepends=('bitwarden-cli: contas Bitwarden'
             '1password-cli: contas 1Password'
             'pass: criar password-stores pela interface'
             'gnupg: bancos do pass'
             'libsecret: desbloqueio por PIN'
-            'util-linux: código de duas etapas do 1Password'
-            'fd: busca de bancos mais rápida'
+            'qt6-wayland: janela nativa em sessão Wayland (sem ele, via XWayland)'
+            'fd: varredura de bancos ~5x mais rápida numa home grande'
             'xdg-desktop-portal: modo claro/escuro e tamanho de texto do desktop')
 provides=('omapass')
 conflicts=('omapass')
