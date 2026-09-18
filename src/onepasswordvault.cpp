@@ -242,16 +242,27 @@ bool OnePasswordVault::hasAccount(const QString &account) {
 }
 
 bool OnePasswordVault::logout(const QString &account, QString *error) {
-    // Which command removes an account depends on whether a session is still
-    // live, and op refuses the wrong one either way: logged in, it answers
-    // "You are currently logged in to the account you are trying to forget.
-    // Use 'op signout --forget' instead"; logged out, `op signout --forget`
-    // is the one that fails. So both are tried, and what settles it is
-    // whether op still lists the account afterwards — not the exit code.
+    // A sign-out started by the last close() may still be running, and two
+    // of them at once is how op ends up unsure of what is signed in.
+    waitForPendingSignout();
+
+    // Which command removes an account depends on what op believes about it,
+    // and op refuses or quietly ignores the wrong one: while it thinks a
+    // session is live it answers `account forget` with "You are currently
+    // logged in… Use 'op signout --forget' instead"; with no session token
+    // to end, that same `op signout --forget` exits 0 and removes nothing.
+    // So every form is tried, and what settles it is whether op still lists
+    // the account — never the exit code.
     QVector<QStringList> attempts{
         {QStringLiteral("signout"), QStringLiteral("--account"), account, QStringLiteral("--forget")},
-        {QStringLiteral("account"), QStringLiteral("forget"), account},
     };
+
+    // Without --account, op signs out of the account it used last. That is
+    // only unambiguous when it knows one.
+    if (accounts().size() == 1)
+        attempts.append({QStringLiteral("signout"), QStringLiteral("--forget")});
+
+    attempts.append({QStringLiteral("account"), QStringLiteral("forget"), account});
 
     // `op account forget` may also want the id op gave the account rather
     // than the shorthand omapass refers to it by.
@@ -272,6 +283,17 @@ bool OnePasswordVault::logout(const QString &account, QString *error) {
             return true;
         qWarning().noquote() << "omapass: op" << args.join(QLatin1Char(' '))
                              << "did not remove the account:" << lastMessage(result);
+    }
+
+    // op is holding on to a session omapass cannot end, because ending one
+    // takes the token it was given — and that is gone with the vault. Saying
+    // so, with the two commands that do work in a terminal, beats a message
+    // that only says no.
+    if (classifyOpError(lastMessage(result)) != OpError::None
+        && lastMessage(result).contains(QLatin1String("currently logged in"), Qt::CaseInsensitive)) {
+        *error = I18n::t(QStringLiteral("onepassword.logout_session_stuck"),
+                         QStringLiteral("account"), account);
+        return false;
     }
 
     const QString said = lastMessage(result);
@@ -733,11 +755,21 @@ bool OnePasswordVault::removeGroup(const QString &group, QString *error) const {
 void OnePasswordVault::close() {
     // Detached: the round trip to the server is not something either locking
     // back to the database list or quitting the app should wait for. The
-    // account stays configured; only the session ends.
+    // account stays configured; only the session ends — and ending it here
+    // is what keeps `op` from believing, later, that it is still signed in
+    // and refusing to forget the account.
+    //
+    // Under the borrowed terminal, like every other op call that has turned
+    // out to answer differently without one.
+    const QStringList args{QStringLiteral("signout"), QStringLiteral("--account"), m_account};
+    const bool underTerminal = !QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty();
+
     QProcess process;
     process.setProcessEnvironment(opEnvironment(m_account, m_session, m_sessionVariable));
-    process.setProgram(QStringLiteral("op"));
-    process.setArguments({QStringLiteral("signout"), QStringLiteral("--account"), m_account});
+    process.setProgram(underTerminal ? QStringLiteral("script") : QStringLiteral("op"));
+    process.setArguments(underTerminal
+        ? QStringList{QStringLiteral("-qec"), opShellCommand(args), QStringLiteral("/dev/null")}
+        : args);
     process.setStandardOutputFile(QProcess::nullDevice());
     process.setStandardErrorFile(QProcess::nullDevice());
     // Without this the detached process inherits the terminal omapass was
