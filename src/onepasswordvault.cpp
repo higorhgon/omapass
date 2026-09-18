@@ -225,31 +225,32 @@ bool OnePasswordVault::hasAccount(const QString &account) {
 }
 
 bool OnePasswordVault::logout(const QString &account, QString *error) {
-    // `op signout --forget` only ends a session that is still live and fails
-    // outright when there is none, leaving the account on the device;
-    // `op account forget` is the one that drops its details.
-    runProcess(QStringLiteral("op"), {QStringLiteral("signout"), QStringLiteral("--account"), account});
-    ProcResult result = runProcess(QStringLiteral("op"),
-                                   {QStringLiteral("account"), QStringLiteral("forget"), account});
+    // Which command removes an account depends on whether a session is still
+    // live, and op refuses the wrong one either way: logged in, it answers
+    // "You are currently logged in to the account you are trying to forget.
+    // Use 'op signout --forget' instead"; logged out, `op signout --forget`
+    // is the one that fails. So both are tried, and what settles it is
+    // whether op still lists the account afterwards — not the exit code.
+    QVector<QStringList> attempts{
+        {QStringLiteral("signout"), QStringLiteral("--account"), account, QStringLiteral("--forget")},
+        {QStringLiteral("account"), QStringLiteral("forget"), account},
+    };
 
-    // Asking op again rather than trusting the exit code: what matters is
-    // whether the account is gone, and saying it is when it is not is worse
-    // than saying nothing.
-    if (!hasAccount(account))
-        return true;
-
-    // The shorthand is how omapass refers to the account everywhere else,
-    // but `op account forget` may want the id it gave the account itself.
+    // `op account forget` may also want the id op gave the account rather
+    // than the shorthand omapass refers to it by.
     OpAccount known;
     {
         const QMutexLocker locker(&accountsMutex);
         known = knownAccounts.value(account);
     }
-    for (const QString &other : {known.userUuid, known.accountUuid}) {
-        if (other.isEmpty())
-            continue;
-        result = runProcess(QStringLiteral("op"),
-                            {QStringLiteral("account"), QStringLiteral("forget"), other});
+    for (const QString &id : {known.userUuid, known.accountUuid}) {
+        if (!id.isEmpty())
+            attempts.append({QStringLiteral("account"), QStringLiteral("forget"), id});
+    }
+
+    ProcResult result;
+    for (const QStringList &args : std::as_const(attempts)) {
+        result = runProcess(QStringLiteral("op"), args);
         if (!hasAccount(account))
             return true;
     }
