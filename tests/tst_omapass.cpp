@@ -450,6 +450,37 @@ private slots:
         QCOMPARE(accounts.at(1).key(), accounts.at(1).userUuid);
     }
 
+    void onePasswordShellCommandQuotesItsArguments() {
+        QCOMPARE(opShellCommand({QStringLiteral("signin"), QStringLiteral("--account"),
+                                 QStringLiteral("minha")}),
+                 QStringLiteral("op 'signin' '--account' 'minha'"));
+        // A shorthand with a quote in it would otherwise end the string and
+        // let the rest be read as more shell.
+        QCOMPARE(opShellCommand({QStringLiteral("account"), QStringLiteral("forget"),
+                                 QStringLiteral("a'b")}),
+                 QStringLiteral("op 'account' 'forget' 'a'\\''b'"));
+    }
+
+    void onePasswordSignInNamesItsOwnSessionVariable() {
+        // What `op signin` prints without --raw, comments and all.
+        const OpSession named = parseOpSignIn(QStringLiteral(
+            "export OP_SESSION_abcdefghij=\"token-de-sessao\"\n"
+            "# This command is meant to be used with your shell's eval function.\n"
+            "# Run 'eval $(op signin --account minha)' to sign in.\n"));
+        QCOMPARE(named.variable, QStringLiteral("OP_SESSION_abcdefghij"));
+        QCOMPARE(named.token, QStringLiteral("token-de-sessao"));
+
+        // With --raw, or under a terminal that echoed the prompts back, only
+        // the token is there and the caller names the variable itself.
+        const OpSession raw = parseOpSignIn(QStringLiteral(
+            "Enter the password for pessoa@exemplo.com at my.1password.com: \r\n"
+            "token-de-sessao\r\n"));
+        QVERIFY(raw.variable.isEmpty());
+        QCOMPARE(raw.token, QStringLiteral("token-de-sessao"));
+
+        QVERIFY(parseOpSignIn(QString()).token.isEmpty());
+    }
+
     void onePasswordShorthandComesFromTheEmail() {
         // `op` would name the account after the address; the e-mail says
         // whose it is.
@@ -618,6 +649,18 @@ private slots:
         QCOMPARE(detectOpPrompt(QStringLiteral(
                      "Enter the password for pessoa@exemplo.com at minha.1password.com: \n"
                      "Enter your 6-digit authentication code: ")),
+                 OpPrompt::TwoFactorCode);
+        // What `op signin` actually prints for an account with two-step
+        // verification, spelled out rather than in digits.
+        QCOMPARE(detectOpPrompt(QStringLiteral(
+                     "Enter the password for pessoa@exemplo.com at my.1password.com:\r\n"
+                     "Enter your six-digit authentication code:")),
+                 OpPrompt::TwoFactorCode);
+        // Other wordings the code has been asked for: a prompt that goes
+        // unrecognised is a prompt nobody answers, and the run hangs.
+        QCOMPARE(detectOpPrompt(QStringLiteral("Enter your one-time password: ")),
+                 OpPrompt::TwoFactorCode);
+        QCOMPARE(detectOpPrompt(QStringLiteral("Enter the verification code we sent you: ")),
                  OpPrompt::TwoFactorCode);
         QCOMPARE(detectOpPrompt(QStringLiteral("carregando")), OpPrompt::None);
     }

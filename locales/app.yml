@@ -443,9 +443,21 @@ onepassword.wrong_secret_key:
 onepassword.invalid_code:
   pt-BR: "Código inválido!"
   en: "Invalid code!"
+onepassword.no_answer:
+  pt-BR: "O op parou de responder; tente de novo."
+  en: "op stopped responding; try again."
+onepassword.stuck_prompt:
+  pt-BR: "O op está esperando uma resposta que o omapass não soube dar: \"%{prompt}\""
+  en: "op is waiting for an answer omapass did not know how to give: \"%{prompt}\""
 onepassword.login_failed:
   pt-BR: "Falha ao entrar no 1Password."
   en: "1Password login failed."
+onepassword.logout_session_stuck:
+  pt-BR: "O op ainda considera a conta %{account} conectada e só aceita encerrar essa sessão com o token dela, que sai da memória ao travar o banco. No terminal: `eval $(op signin --account %{account})` e depois `op signout --account %{account} --forget`."
+  en: "op still considers the account %{account} signed in and will only end that session with its token, which is gone once the vault is locked. In a terminal: `eval $(op signin --account %{account})` then `op signout --account %{account} --forget`."
+onepassword.logout_ignored:
+  pt-BR: "O op aceitou o comando, mas ainda lista a conta %{account}. Tente `op account forget %{account}` no terminal."
+  en: "op took the command but still lists the account %{account}. Try `op account forget %{account}` in a terminal."
 onepassword.logged_out:
   pt-BR: "Conta 1Password desconectada."
   en: "1Password account logged out."

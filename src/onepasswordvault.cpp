@@ -56,19 +56,41 @@ QString lastMessage(const ProcResult &result) {
     return QString();
 }
 
-// `op` looks for the session token in OP_SESSION_<account>, and an account
-// shorthand can carry characters an environment variable cannot.
-QString sessionVariable(const QString &account) {
+// The name `op` printed alongside the token. Only if it did not say (an
+// older shape, or --raw) is one guessed from the account, the way `op` names
+// it — an account shorthand can carry characters a variable name cannot.
+QString sessionVariableFor(const QString &account, const QString &stated) {
+    if (!stated.isEmpty())
+        return stated;
+
     static const QRegularExpression invalid(QStringLiteral("[^A-Za-z0-9_]"));
     QString name = account;
     name.replace(invalid, QStringLiteral("_"));
     return QStringLiteral("OP_SESSION_") + name;
 }
 
-QProcessEnvironment opEnvironment(const QString &account, const Secret &session) {
+// Some `op` commands answer differently with nothing but a pipe on the
+// other side — signing out is one — so they get a terminal borrowed from
+// `script`, exactly as the sign-in does.
+ProcResult runOpUnderTerminal(const QStringList &args) {
+    if (QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty())
+        return runProcess(QStringLiteral("op"), args);
+
+    ProcResult result = runProcess(QStringLiteral("script"),
+                                   {QStringLiteral("-qec"), opShellCommand(args),
+                                    QStringLiteral("/dev/null")});
+    // Under the terminal there is no separate stderr; what op said is in the
+    // output either way.
+    if (result.err.trimmed().isEmpty())
+        result.err = result.out;
+    return result;
+}
+
+QProcessEnvironment opEnvironment(const QString &account, const Secret &session,
+                                  const QString &sessionVariable) {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     if (!session.isEmpty())
-        env.insert(sessionVariable(account), session.toString());
+        env.insert(sessionVariableFor(account, sessionVariable), session.toString());
     return env;
 }
 
@@ -82,9 +104,9 @@ QStringList withAccount(const QString &account, const QStringList &args) {
 }
 
 ProcResult runOp(const QString &account, const QStringList &args, const Secret &session,
-                 const QByteArray &stdinData = QByteArray()) {
+                 const QString &sessionVariable, const QByteArray &stdinData = QByteArray()) {
     ProcResult result = runProcess(QStringLiteral("op"), withAccount(account, args), stdinData,
-                                   opEnvironment(account, session));
+                                   opEnvironment(account, session, sessionVariable));
     if (!result.started)
         result.err = I18n::t(QStringLiteral("onepassword.spawn_error"), QStringLiteral("err"), result.err);
     else if (!result.success)
@@ -95,8 +117,8 @@ ProcResult runOp(const QString &account, const QStringList &args, const Secret &
 // Runs several read-only commands at once: each pays its own round trip to
 // the server, so side by side they take about as long as one.
 QVector<ProcResult> runOpParallel(const QString &account, const QVector<QStringList> &commands,
-                                  const Secret &session) {
-    const QProcessEnvironment env = opEnvironment(account, session);
+                                  const Secret &session, const QString &sessionVariable) {
+    const QProcessEnvironment env = opEnvironment(account, session, sessionVariable);
 
     QVector<QProcess *> processes;
     for (const QStringList &args : commands) {
@@ -219,26 +241,91 @@ bool OnePasswordVault::hasAccount(const QString &account) {
     return false;
 }
 
-void OnePasswordVault::logout(const QString &account) {
-    // `op signout --forget` only ends a session that is still live and fails
-    // outright when there is none, leaving the account on the device;
-    // `op account forget` is the one that drops its details.
-    runProcess(QStringLiteral("op"), {QStringLiteral("signout"), QStringLiteral("--account"), account});
-    runProcess(QStringLiteral("op"), {QStringLiteral("account"), QStringLiteral("forget"), account});
+bool OnePasswordVault::logout(const QString &account, QString *error) {
+    // A sign-out started by the last close() may still be running, and two
+    // of them at once is how op ends up unsure of what is signed in.
+    waitForPendingSignout();
+
+    // With the session already ended when the vault was locked, `op account
+    // forget` is the one that removes the account, so it goes first. The
+    // sign-out forms are for the state where op still believes a session is
+    // live: it then refuses to forget ("You are currently logged in… Use 'op
+    // signout --forget' instead") — and that sign-out, with no token left to
+    // end, exits 0 without removing anything. So every form is tried, and
+    // what settles it is whether op still lists the account, never the exit
+    // code.
+    QVector<QStringList> attempts{
+        {QStringLiteral("account"), QStringLiteral("forget"), account},
+        {QStringLiteral("signout"), QStringLiteral("--account"), account, QStringLiteral("--forget")},
+    };
+
+    // Without --account, op signs out of the account it used last. That is
+    // only unambiguous when it knows one.
+    if (accounts().size() == 1)
+        attempts.append({QStringLiteral("signout"), QStringLiteral("--forget")});
+
+    // `op account forget` may also want the id op gave the account rather
+    // than the shorthand omapass refers to it by.
+    OpAccount known;
+    {
+        const QMutexLocker locker(&accountsMutex);
+        known = knownAccounts.value(account);
+    }
+    for (const QString &id : {known.userUuid, known.accountUuid}) {
+        if (!id.isEmpty())
+            attempts.append({QStringLiteral("account"), QStringLiteral("forget"), id});
+    }
+
+    // Kept rather than logged as they happen: a form that does not apply to
+    // the state op is in fails as a matter of course, and saying so on the
+    // way to a removal that worked is just noise.
+    QStringList refusals;
+    ProcResult result;
+    for (const QStringList &args : std::as_const(attempts)) {
+        result = runOpUnderTerminal(args);
+        if (!hasAccount(account))
+            return true;
+        refusals << QStringLiteral("op ") + args.join(QLatin1Char(' ')) + QStringLiteral(": ")
+                + lastMessage(result);
+    }
+
+    for (const QString &refusal : std::as_const(refusals))
+        qWarning().noquote() << "omapass:" << refusal;
+
+    // op is holding on to a session omapass cannot end, because ending one
+    // takes the token it was given — and that is gone with the vault. Saying
+    // so, with the two commands that do work in a terminal, beats a message
+    // that only says no.
+    const QString said = lastMessage(result);
+    if (refusals.join(QLatin1Char(' ')).contains(QLatin1String("currently logged in"),
+                                                 Qt::CaseInsensitive)) {
+        *error = I18n::t(QStringLiteral("onepassword.logout_session_stuck"),
+                         QStringLiteral("account"), account);
+        return false;
+    }
+
+    *error = said.isEmpty() ? I18n::t(QStringLiteral("onepassword.logout_ignored"),
+                                      QStringLiteral("account"), account)
+                            : said;
+    return false;
 }
 
 bool OnePasswordVault::signIn(const QString &account, const Secret &password, Secret *session,
-                              QString *error) {
+                              QString *sessionVariable, QString *error) {
     waitForPendingSignout();
 
-    // The password goes in on stdin, never in argv. With the 1Password
+    // The password goes in on stdin, never in argv. No --raw: the shell line
+    // op prints instead carries the name of the variable it expects the
+    // token back in, which is not something to guess. With the 1Password
     // desktop app integration turned on, `op` authenticates through the app
     // and prints no token: an empty session is a working one, and the calls
-    // that follow simply carry no OP_SESSION variable.
+    // that follow simply carry no session variable.
     QByteArray input = password.bytes();
     input.append('\n');
-    ProcResult result = runOp(account, {QStringLiteral("signin"), QStringLiteral("--raw")}, Secret(),
-                              input);
+    // --force so op prints the session line instead of telling us to run it
+    // in a shell, the same reason the interactive path passes it.
+    ProcResult result = runOp(account, {QStringLiteral("signin"), QStringLiteral("--force")},
+                              Secret(), QString(), input);
     input.fill('\0');
 
     if (!result.success) {
@@ -246,8 +333,10 @@ bool OnePasswordVault::signIn(const QString &account, const Secret &password, Se
         return false;
     }
 
-    *session = Secret(result.out.trimmed());
+    const OpSession parsed = parseOpSignIn(result.out);
     wipe(&result.out);
+    *session = Secret(parsed.token);
+    *sessionVariable = parsed.variable;
     return true;
 }
 
@@ -259,14 +348,15 @@ OnePasswordVault *OnePasswordVault::unlock(const QString &account, const Secret 
     }
 
     Secret session;
-    if (!signIn(account, password, &session, error))
+    QString sessionVariable;
+    if (!signIn(account, password, &session, &sessionVariable, error))
         return nullptr;
-    return openWithSession(account, session, error);
+    return openWithSession(account, session, sessionVariable, error);
 }
 
 OnePasswordVault *OnePasswordVault::openWithSession(const QString &account, const Secret &session,
-                                                    QString *error) {
-    auto *vault = new OnePasswordVault(account, session);
+                                                    const QString &sessionVariable, QString *error) {
+    auto *vault = new OnePasswordVault(account, session, sessionVariable);
     if (!vault->reload(error)) {
         delete vault;
         return nullptr;
@@ -279,7 +369,7 @@ bool OnePasswordVault::reload(QString *error) const {
         m_account,
         {{QStringLiteral("vault"), QStringLiteral("list"), QStringLiteral("--format=json")},
          {QStringLiteral("item"), QStringLiteral("list"), QStringLiteral("--format=json")}},
-        m_session);
+        m_session, m_sessionVariable);
     const ProcResult &vaults = results[0];
     ProcResult &items = results[1];
 
@@ -348,7 +438,7 @@ bool OnePasswordVault::fullItem(const OpItemRef &ref, QJsonObject *item, QString
                               {QStringLiteral("item"), QStringLiteral("get"), ref.id,
                                QStringLiteral("--vault"), ref.vaultId,
                                QStringLiteral("--format=json"), QStringLiteral("--reveal")},
-                              m_session);
+                              m_session, m_sessionVariable);
     if (!result.success) {
         *error = translateError(result);
         return false;
@@ -391,7 +481,7 @@ bool OnePasswordVault::setTags(const QString &itemId, const QString &vaultId,
                                QStringLiteral("--vault"), vaultId, QStringLiteral("--tags"),
                                tags.join(QLatin1Char(',')), QStringLiteral("--format=json"),
                                QStringLiteral("--reveal")},
-                              m_session);
+                              m_session, m_sessionVariable);
     if (!result.success) {
         *error = translateError(result);
         return false;
@@ -446,7 +536,7 @@ bool OnePasswordVault::addEntry(const QString &entryPath, const QString &group, 
     ProcResult result = runOp(m_account,
                               {QStringLiteral("item"), QStringLiteral("create"), QStringLiteral("-"),
                                QStringLiteral("--format=json"), QStringLiteral("--reveal")},
-                              m_session, json);
+                              m_session, m_sessionVariable, json);
     json.fill('\0');
     if (!result.success) {
         *error = translateError(result);
@@ -487,7 +577,7 @@ bool OnePasswordVault::editEntry(const QString &oldPath, const QString &newPath,
                                   QStringLiteral("--current-vault"), ref.vaultId,
                                   QStringLiteral("--destination-vault"), vaultId,
                                   QStringLiteral("--format=json"), QStringLiteral("--reveal")},
-                                 m_session);
+                                 m_session, m_sessionVariable);
         if (!moved.success) {
             *error = translateError(moved);
             return false;
@@ -515,7 +605,7 @@ bool OnePasswordVault::editEntry(const QString &oldPath, const QString &newPath,
                               {QStringLiteral("item"), QStringLiteral("edit"), itemId,
                                QStringLiteral("--vault"), vaultId, QStringLiteral("--format=json"),
                                QStringLiteral("--reveal")},
-                              m_session, updated);
+                              m_session, m_sessionVariable, updated);
     updated.fill('\0');
     if (!result.success) {
         *error = translateError(result);
@@ -539,7 +629,7 @@ bool OnePasswordVault::removeEntry(const QString &entryPath, QString *error) con
     const ProcResult result = runOp(m_account,
                                     {QStringLiteral("item"), QStringLiteral("delete"), ref.id,
                                      QStringLiteral("--vault"), ref.vaultId},
-                                    m_session);
+                                    m_session, m_sessionVariable);
     if (!result.success) {
         *error = translateError(result);
         return false;
@@ -561,7 +651,7 @@ bool OnePasswordVault::renameGroup(const QString &oldGroup, const QString &newNa
         const ProcResult result = runOp(m_account,
                                         {QStringLiteral("vault"), QStringLiteral("edit"), vaultId,
                                          QStringLiteral("--name"), newName},
-                                        m_session);
+                                        m_session, m_sessionVariable);
         if (!result.success) {
             *error = translateError(result);
             return false;
@@ -623,7 +713,7 @@ bool OnePasswordVault::removeGroup(const QString &group, QString *error) const {
     if (tag.isEmpty()) {
         const ProcResult result = runOp(m_account,
                                         {QStringLiteral("vault"), QStringLiteral("delete"), vaultId},
-                                        m_session);
+                                        m_session, m_sessionVariable);
         if (!result.success) {
             *error = translateError(result);
             return false;
@@ -672,11 +762,21 @@ bool OnePasswordVault::removeGroup(const QString &group, QString *error) const {
 void OnePasswordVault::close() {
     // Detached: the round trip to the server is not something either locking
     // back to the database list or quitting the app should wait for. The
-    // account stays configured; only the session ends.
+    // account stays configured; only the session ends — and ending it here
+    // is what keeps `op` from believing, later, that it is still signed in
+    // and refusing to forget the account.
+    //
+    // Under the borrowed terminal, like every other op call that has turned
+    // out to answer differently without one.
+    const QStringList args{QStringLiteral("signout"), QStringLiteral("--account"), m_account};
+    const bool underTerminal = !QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty();
+
     QProcess process;
-    process.setProcessEnvironment(opEnvironment(m_account, m_session));
-    process.setProgram(QStringLiteral("op"));
-    process.setArguments({QStringLiteral("signout"), QStringLiteral("--account"), m_account});
+    process.setProcessEnvironment(opEnvironment(m_account, m_session, m_sessionVariable));
+    process.setProgram(underTerminal ? QStringLiteral("script") : QStringLiteral("op"));
+    process.setArguments(underTerminal
+        ? QStringList{QStringLiteral("-qec"), opShellCommand(args), QStringLiteral("/dev/null")}
+        : args);
     process.setStandardOutputFile(QProcess::nullDevice());
     process.setStandardErrorFile(QProcess::nullDevice());
     // Without this the detached process inherits the terminal omapass was

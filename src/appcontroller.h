@@ -200,6 +200,10 @@ private:
     // Whether the open vault can take a change right now; says why not on the
     // status line when it cannot.
     bool vaultReadyForChanges();
+    // Whether nothing else is running. Account actions used to return in
+    // silence while busy, which looks exactly like a shortcut that does
+    // nothing.
+    bool requireIdle();
     void startBackgroundSync();
     void applyLockSettings();
     void setSyncing(bool syncing);
@@ -254,6 +258,10 @@ private:
     QString m_loginEmail;
     // The 1Password sign-in address, kept while its login sheet is open.
     QString m_loginAddress;
+    // Whether the 1Password run in flight is adding an account or opening
+    // one that is already here: both can stop to ask for a two-step code,
+    // and they go back to different places when they fail.
+    bool m_onePasswordAdding = false;
     // Kept only while a login is in progress: choosing a two-step method
     // restarts `bw login`, which needs the password again.
     Secret m_loginPassword;

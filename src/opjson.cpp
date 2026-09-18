@@ -91,6 +91,7 @@ QVector<OpAccount> parseOpAccounts(const QByteArray &json) {
         account.email = object.value(QStringLiteral("email")).toString();
         account.url = object.value(QStringLiteral("url")).toString();
         account.userUuid = object.value(QStringLiteral("user_uuid")).toString();
+        account.accountUuid = object.value(QStringLiteral("account_uuid")).toString();
         if (!account.key().isEmpty())
             accounts.append(account);
     }
@@ -126,6 +127,41 @@ QString opDisplayName(const QString &name) {
     QString display = name;
     display.replace(QLatin1Char('/'), QChar(0x2215));
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
+}
+
+QString opShellCommand(const QStringList &args) {
+    QStringList quoted;
+    for (const QString &argument : args) {
+        QString escaped = argument;
+        escaped.replace(QLatin1Char('\''), QLatin1String("'\\''"));
+        quoted << QLatin1Char('\'') + escaped + QLatin1Char('\'');
+    }
+    return QStringLiteral("op ") + quoted.join(QLatin1Char(' '));
+}
+
+OpSession parseOpSignIn(const QString &output) {
+    // `export OP_SESSION_name="token"`, among the comment lines op adds.
+    static const QRegularExpression exported(
+        QStringLiteral("(OP_SESSION_[A-Za-z0-9_]+)\\s*=\\s*\"([^\"]+)\""));
+
+    OpSession session;
+    const QRegularExpressionMatch match = exported.match(output);
+    if (match.hasMatch()) {
+        session.variable = match.captured(1);
+        session.token = match.captured(2);
+        return session;
+    }
+
+    // --raw, or a shape this does not know: the token is the last thing
+    // printed, and the caller falls back to naming the variable itself.
+    const QStringList lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend() && session.token.isEmpty(); ++it) {
+        const QString line = it->trimmed();
+        // Comments and the prompts a terminal echoes back are not tokens.
+        if (!line.isEmpty() && !line.startsWith(QLatin1Char('#')) && !line.contains(QLatin1Char(' ')))
+            session.token = line;
+    }
+    return session;
 }
 
 QString opShorthandFor(const QString &email, const QString &address) {
@@ -387,7 +423,12 @@ OpPrompt detectOpPrompt(const QString &stderrText) {
     const int email = stderrText.lastIndexOf(QLatin1String("email address for your account"));
     const int secretKey = stderrText.lastIndexOf(QLatin1String("Enter the Secret Key"));
     const int password = stderrText.lastIndexOf(QLatin1String("Enter the password for"));
-    const int code = stderrText.lastIndexOf(QLatin1String("authentication code"));
+    // The code has been asked for in more than one wording across versions,
+    // and a prompt nobody answers hangs the run — so all of them count.
+    int code = -1;
+    for (const char *wording : {"authentication code", "verification code", "one-time password",
+                                "two-factor", "six-digit"})
+        code = std::max(code, int(stderrText.lastIndexOf(QLatin1String(wording))));
 
     const int latest = std::max({address, email, secretKey, password, code});
     if (latest < 0)
