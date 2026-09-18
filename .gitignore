@@ -1,5 +1,18 @@
 build/
 build-tests/
+dist/
+AppDir/
+.appimage-tools/
+
+# qmake deixa Makefile, moc_*, *.o e o binário ao lado do .pro quando se
+# compila um teste dentro do diretório dele; o bin/test compila fora, mas
+# quem rodar à mão não precisa sujar o repositório.
+tests/qml/Makefile
+tests/qml/.qmake.stash
+tests/qml/moc_*
+tests/qml/qrc_*
+tests/qml/*.o
+tests/qml/tst_qmlomapass
 
 # Submodules em vendor/ (dependências de build) seguem rastreados normalmente
 # via .gitmodules; isto só evita que buscas/exploradores baseados em ripgrep

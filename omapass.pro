@@ -1,7 +1,14 @@
 QT += core gui qml quick quickcontrols2 dbus concurrent
 
 CONFIG += c++20 release link_pkgconfig
-PKGCONFIG += botan-3
+# Botan 3 where the distribution has it (Arch), Botan 2 where it does not
+# (Ubuntu 24.04 LTS ships 2.19). Everything omapass asks of Botan exists in
+# both; the two calls whose spelling changed are handled in bwcrypto.cpp.
+packagesExist(botan-3) {
+    PKGCONFIG += botan-3
+} else {
+    PKGCONFIG += botan-2
+}
 TARGET = omapass
 TEMPLATE = app
 

@@ -1065,17 +1065,23 @@ void AppController::logoutBitwarden() {
     const QString email = BitwardenVault::rememberedAccount();
     runInBackground(
         [email]() {
-            BitwardenVault::logout();
+            TaskResult result;
+            result.ok = BitwardenVault::logout(&result.error);
             // An account nobody is signed into has no business leaving its
             // master password behind in the keyring.
-            Pin::clear(BitwardenVault::refPath(email));
-            return TaskResult{true, QString()};
+            if (result.ok)
+                Pin::clear(BitwardenVault::refPath(email));
+            return result;
         },
-        [this](const TaskResult &) {
-            BitwardenVault::forgetAccount();
+        [this](const TaskResult &result) {
+            // The account only leaves the list once bw has really let go of
+            // it; otherwise omapass would hide an account still logged in.
+            if (result.ok)
+                BitwardenVault::forgetAccount();
             refreshPinState();
             refreshDatabases();
-            showMessage(I18n::t(QStringLiteral("bitwarden.logged_out")), false);
+            showMessage(result.ok ? I18n::t(QStringLiteral("bitwarden.logged_out")) : result.error,
+                        !result.ok);
         });
 }
 

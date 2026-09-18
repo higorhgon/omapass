@@ -251,6 +251,7 @@ FocusScope {
                         spacing: Math.round(8 * pane.s)
 
                         Text {
+                            objectName: "rowTag"
                             visible: row.tag.length > 0
                             text: row.tag
                             color: theme.annotation
@@ -259,6 +260,7 @@ FocusScope {
                         }
 
                         Text {
+                            objectName: "rowText"
                             width: parent.width - (row.tag.length > 0 ? x : 0)
                             text: row.itemText
                             color: theme.base

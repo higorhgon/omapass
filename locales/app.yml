@@ -21,6 +21,45 @@ cli.help_version:
 cli.help_help:
   pt-BR: "Exibe esta mensagem de ajuda"
   en: "Show this help message"
+cli.help_doctor:
+  pt-BR: "Mostra o que o omapass encontrou no sistema"
+  en: "Show what omapass found on the system"
+cli.doctor_missing:
+  pt-BR: "não encontrado"
+  en: "not found"
+cli.doctor_keepassxc:
+  pt-BR: "bancos KeePassXC"
+  en: "KeePassXC databases"
+cli.doctor_gpg:
+  pt-BR: "stores do pass"
+  en: "pass stores"
+cli.doctor_pass:
+  pt-BR: "criar stores do pass"
+  en: "creating pass stores"
+cli.doctor_bw:
+  pt-BR: "contas Bitwarden"
+  en: "Bitwarden accounts"
+cli.doctor_op:
+  pt-BR: "contas 1Password"
+  en: "1Password accounts"
+cli.doctor_secret_tool:
+  pt-BR: "desbloqueio por PIN"
+  en: "PIN unlock"
+cli.doctor_script:
+  pt-BR: "código de duas etapas do 1Password"
+  en: "1Password two-step code"
+cli.doctor_wl_copy:
+  pt-BR: "copiar senhas"
+  en: "copying passwords"
+cli.doctor_fd:
+  pt-BR: "busca rápida de bancos (opcional)"
+  en: "faster database search (optional)"
+cli.doctor_wordlist_name:
+  pt-BR: "palavras"
+  en: "wordlist"
+cli.doctor_wordlist:
+  pt-BR: "frases do gerador (diceware)"
+  en: "generator passphrases (diceware)"
 cli.help_kdbx2pass_1:
   pt-BR: "Importa um banco KeePassXC para um password-store"
   en: "Imports a KeePassXC database into a password-store"
@@ -286,6 +325,9 @@ bitwarden.invalid_code:
 bitwarden.login_failed:
   pt-BR: "Falha no login do Bitwarden."
   en: "Bitwarden login failed."
+bitwarden.logout_failed:
+  pt-BR: "Não foi possível sair da conta Bitwarden; ela continua conectada no bw."
+  en: "Could not log out of the Bitwarden account; it is still logged in to bw."
 bitwarden.logged_out:
   pt-BR: "Conta Bitwarden desconectada."
   en: "Bitwarden account logged out."
