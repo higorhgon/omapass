@@ -210,9 +210,11 @@ tantas aparecem, e uma adicionada (ou removida) pelo terminal aparece (ou some) 
 - **Adicionando uma conta**: `Ctrl+A` → **1Password** → endereço (já vem preenchido com
   `my.1password.com`, o padrão do 1Password), e-mail, Secret Key, senha mestra e, se quiser,
   um **apelido**. Se a conta usa verificação em duas etapas, o omapass pede o código em
-  seguida. O apelido é o `--shorthand` do `op`: sem ele, o `op` inventa um a partir do
-  endereço (`my`), que não diz de quem é a conta — por isso a lista mostra o e-mail quando o
-  apelido não foi escolhido, e o apelido quando foi.
+  seguida. O apelido é o `--shorthand` do `op` e é como a conta aparece na lista; deixando
+  em branco, o omapass usa a parte do e-mail antes do @ (com um número no fim, se já houver
+  outra conta com esse nome). Isso porque o `op`, sozinho, nomearia a conta a partir do
+  endereço — `my` —, o que não diz de quem ela é. Contas adicionadas pelo terminal sem
+  apelido aparecem pelo e-mail.
 - **Abrindo**: abrir faz `op signin` e lista cofres e itens. A sessão do `op` expira depois
   de 30 minutos sem uso; quando isso acontece, o omapass avisa e volta a pedir a senha
   mestra — ele não guarda a senha depois de abrir.
@@ -233,9 +235,9 @@ tantas aparecem, e uma adicionada (ou removida) pelo terminal aparece (ou some) 
   do 1Password para essas.
 - **Excluir manda para "Excluídos recentemente"** (recuperável pelos aplicativos do
   1Password por 30 dias).
-- **Saindo de uma conta**: `Ctrl+X` sobre ela na tela de bancos faz
-  `op signout --forget --account <apelido>`, o que a tira do `op` — e, por consequência, da
-  lista. As outras contas continuam onde estavam.
+- **Saindo de uma conta**: `Ctrl+X` sobre ela na tela de bancos encerra a sessão e roda
+  `op account forget <apelido>`, que apaga os dados da conta deste computador — e, por
+  consequência, a tira da lista. As outras contas continuam onde estavam.
 - Cada comando do `op` é rápido (é um binário Go, com um daemon que guarda os itens
   cifrados em memória), mas cada um fala com o servidor. Por isso a listagem é carregada
   ao abrir e as senhas são buscadas na primeira vez que aparecem, ficando em memória

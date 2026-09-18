@@ -1089,6 +1089,19 @@ void AppController::onePasswordLogin(const QString &address, const QString &emai
         return;
     }
 
+    // Without a nickname of their own, the account is filed under the part
+    // of the e-mail before the @ — `op` would otherwise name it after the
+    // address ("my"), which tells two accounts apart by nothing.
+    QString nickname = shorthand.trimmed();
+    if (nickname.isEmpty())
+        nickname = opShorthandFor(trimmedEmail, trimmedAddress);
+
+    QStringList taken;
+    const QVector<OpAccount> known = OnePasswordVault::accounts();
+    for (const OpAccount &account : known)
+        taken.append(account.key());
+    nickname = opUniqueShorthand(nickname, taken);
+
     m_loginAddress = trimmedAddress;
     m_loginEmail = trimmedEmail;
     emit loginChanged();
@@ -1096,7 +1109,7 @@ void AppController::onePasswordLogin(const QString &address, const QString &emai
     setBusy(true);
     setUnlockError(QString());
     m_onePasswordLogin.start(trimmedAddress, trimmedEmail, Secret(secretKey), Secret(password),
-                             shorthand.trimmed());
+                             nickname);
 }
 
 void AppController::sendOnePasswordCode(const QString &code) {

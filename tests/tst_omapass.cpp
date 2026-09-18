@@ -450,6 +450,26 @@ private slots:
         QCOMPARE(accounts.at(1).key(), accounts.at(1).userUuid);
     }
 
+    void onePasswordShorthandComesFromTheEmail() {
+        // `op` would name the account after the address; the e-mail says
+        // whose it is.
+        QCOMPARE(opShorthandFor(QStringLiteral("Pessoa.Sobrenome@exemplo.com"),
+                                QStringLiteral("my.1password.com")),
+                 QStringLiteral("pessoa_sobrenome"));
+        QCOMPARE(opShorthandFor(QStringLiteral("pessoa+trabalho@exemplo.com"),
+                                QStringLiteral("my.1password.com")),
+                 QStringLiteral("pessoa_trabalho"));
+        // Nothing usable in the e-mail: back to what op itself would do.
+        QCOMPARE(opShorthandFor(QString(), QStringLiteral("Empresa.1password.com")),
+                 QStringLiteral("empresa"));
+
+        // The same person on two domains would collide, and op refuses the
+        // second account.
+        const QStringList taken{QStringLiteral("pessoa"), QStringLiteral("pessoa2")};
+        QCOMPARE(opUniqueShorthand(QStringLiteral("outra"), taken), QStringLiteral("outra"));
+        QCOMPARE(opUniqueShorthand(QStringLiteral("pessoa"), taken), QStringLiteral("pessoa3"));
+    }
+
     void onePasswordIndexNestsTagsUnderTheVault() {
         const OpIndex index = buildOpIndex(opFixture("items.json"), opFixture("vaults.json"));
 
