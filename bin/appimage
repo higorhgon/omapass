@@ -28,6 +28,32 @@ build_appimage() {
     rm -rf AppDir
     make install DESTDIR="$work/AppDir" PREFIX=/usr
 
+    qmake_bin="$(command -v qmake6 || command -v qmake)"
+    qt_plugins="$("$qmake_bin" -query QT_INSTALL_PLUGINS)"
+
+    # linuxdeploy carries the Wayland platform plugin but not the client
+    # buffer integration it loads at start-up. Without it the application
+    # dies on a Wayland session — "Failed to load client buffer integration:
+    # wayland-egl", then no GL context and an abort — so it is put in place
+    # before linuxdeploy runs, which then treats it like anything else it
+    # finds there.
+    extra_libraries=""
+    if [ -d "$qt_plugins/wayland-graphics-integration-client" ]; then
+        mkdir -p AppDir/usr/plugins
+        cp -a "$qt_plugins/wayland-graphics-integration-client" AppDir/usr/plugins/
+
+        # Those plugins link Qt libraries of their own
+        # (libQt6WaylandEglClientHwIntegration, say). linuxdeploy only
+        # follows what it copied itself, so they are named to it.
+        for plugin in AppDir/usr/plugins/wayland-graphics-integration-client/*.so; do
+            for library in $(ldd "$plugin" 2>/dev/null | awk '/=> \//{print $3}'); do
+                case "$library" in
+                    *libQt6*) extra_libraries="$extra_libraries --library=$library" ;;
+                esac
+            done
+        done
+    fi
+
     # linuxdeploy bundles Qt and the QML modules the sources import. Both
     # tools are AppImages themselves, extracted rather than mounted, because
     # a container has no FUSE.
@@ -44,7 +70,7 @@ build_appimage() {
     APPIMAGE_EXTRACT_AND_RUN=1
     PATH="$tools:$PATH"
     QML_SOURCES_PATHS="$work/src"
-    QMAKE="$(command -v qmake6 || command -v qmake)"
+    QMAKE="$qmake_bin"
     VERSION="$version"
     # Only xcb travels by default, which on a Wayland-only session means the
     # application does not start at all; offscreen is what lets the finished
@@ -54,7 +80,9 @@ build_appimage() {
     export APPIMAGE_EXTRACT_AND_RUN PATH QML_SOURCES_PATHS QMAKE VERSION
     export EXTRA_PLATFORM_PLUGINS EXTRA_QT_PLUGINS
 
-    linuxdeploy --appdir AppDir --plugin qt \
+    # Unquoted on purpose: each --library=… is its own argument.
+    # shellcheck disable=SC2086
+    linuxdeploy --appdir AppDir --plugin qt $extra_libraries \
         --desktop-file AppDir/usr/share/applications/omapass.desktop \
         --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/omapass.svg \
         --custom-apprun "$work/packaging/AppRun" \
