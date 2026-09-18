@@ -139,7 +139,8 @@ suportado — servidores próprios (Vaultwarden, self-hosted) não.
   métodos cadastrados, pergunta antes qual usar: aplicativo autenticador, e-mail ou
   YubiKey). Num dispositivo novo, o Bitwarden manda um código por e-mail, que é pedido
   do mesmo jeito. Se o `bw` já estiver logado pelo terminal, a conta é só adicionada
-  à lista e pede a senha mestra.
+  à lista e pede a senha mestra. O `bw` mantém **uma** conta por vez, então o omapass avisa
+  se você tentar adicionar outra sem sair da atual.
 - **Abrindo**: a conta aparece na lista com o e-mail; abrir pede só a senha mestra.
   O omapass decifra sozinho a cópia local cifrada que o próprio `bw` mantém
   (`~/.config/Bitwarden CLI/data.json`), sem iniciar o `bw` — a lista aparece em
@@ -202,14 +203,16 @@ chave nova na primeira vez que o banco é aberto.
 
 ### Usando o 1Password
 
-O omapass conversa com o 1Password pelo `op`, então a conta fica configurada no próprio
-`op` (a mesma que `op account list` mostra no terminal).
+O omapass conversa com o 1Password pelo `op`, e a lista de bancos é montada a partir do
+que `op account list` mostra — não há uma cópia à parte. Quantas contas você tiver no `op`,
+tantas aparecem, e uma adicionada (ou removida) pelo terminal aparece (ou some) sozinha.
 
-- **Adicionando a conta**: `Ctrl+A` → **1Password** → endereço (`minha.1password.com`),
-  e-mail, Secret Key e senha mestra. Se a conta usa verificação em duas etapas, o omapass
-  pede o código em seguida. Quando o `op` já tem exatamente uma conta configurada pelo
-  terminal, ela é só adicionada à lista e pede a senha mestra. O omapass lista **uma**
-  conta 1Password por vez.
+- **Adicionando uma conta**: `Ctrl+A` → **1Password** → endereço (já vem preenchido com
+  `my.1password.com`, o padrão do 1Password), e-mail, Secret Key, senha mestra e, se quiser,
+  um **apelido**. Se a conta usa verificação em duas etapas, o omapass pede o código em
+  seguida. O apelido é o `--shorthand` do `op`: sem ele, o `op` inventa um a partir do
+  endereço (`my`), que não diz de quem é a conta — por isso a lista mostra o e-mail quando o
+  apelido não foi escolhido, e o apelido quando foi.
 - **Abrindo**: abrir faz `op signin` e lista cofres e itens. A sessão do `op` expira depois
   de 30 minutos sem uso; quando isso acontece, o omapass avisa e volta a pedir a senha
   mestra — ele não guarda a senha depois de abrir.
@@ -230,8 +233,9 @@ O omapass conversa com o 1Password pelo `op`, então a conta fica configurada no
   do 1Password para essas.
 - **Excluir manda para "Excluídos recentemente"** (recuperável pelos aplicativos do
   1Password por 30 dias).
-- **Saindo da conta**: `Ctrl+X` sobre a conta na tela de bancos faz `op signout --forget`,
-  tira a conta do `op` e da lista.
+- **Saindo de uma conta**: `Ctrl+X` sobre ela na tela de bancos faz
+  `op signout --forget --account <apelido>`, o que a tira do `op` — e, por consequência, da
+  lista. As outras contas continuam onde estavam.
 - Cada comando do `op` é rápido (é um binário Go, com um daemon que guarda os itens
   cifrados em memória), mas cada um fala com o servidor. Por isso a listagem é carregada
   ao abrir e as senhas são buscadas na primeira vez que aparecem, ficando em memória

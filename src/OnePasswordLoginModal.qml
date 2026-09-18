@@ -8,14 +8,16 @@ Modal {
     id: root
 
     property string step: "opCredentials"
-    property string address: ""
+    // 1Password's own default, which is what most accounts use.
+    property string address: "my.1password.com"
     property string email: ""
     property string errorText: ""
     property bool busy: false
 
     readonly property bool askingCode: step === "opCode"
 
-    signal credentialsSubmitted(string address, string email, string secretKey, string password)
+    signal credentialsSubmitted(string address, string email, string secretKey, string password,
+                                string shorthand)
     signal codeSubmitted(string code)
 
     heading: i18n.t("onepassword.login_title")
@@ -45,6 +47,7 @@ Modal {
     onShown: {
         addressField.text = root.address;
         emailField.text = root.email;
+        shorthandField.text = "";
         secretKeyField.text = "";
         passwordField.text = "";
         codeField.text = "";
@@ -75,7 +78,7 @@ Modal {
             passwordField.field.forceActiveFocus();
         else
             root.credentialsSubmitted(addressField.text, emailField.text, secretKeyField.text,
-                                      passwordField.text);
+                                      passwordField.text, shorthandField.text);
     }
 
     Field {
@@ -126,9 +129,23 @@ Modal {
         echoMode: TextInput.Password
         enabled: !root.busy
 
+        onSubmitted: shorthandField.field.forceActiveFocus()
+        onNextRequested: shorthandField.field.forceActiveFocus()
+        onPreviousRequested: secretKeyField.field.forceActiveFocus()
+        onCancelled: root.dismissed()
+    }
+
+    Field {
+        id: shorthandField
+        width: parent.width
+        visible: !root.askingCode
+        label: i18n.t("onepassword.shorthand_label")
+        placeholderText: i18n.t("onepassword.shorthand_hint")
+        enabled: !root.busy
+
         onSubmitted: root.submitCredentials()
         onNextRequested: addressField.field.forceActiveFocus()
-        onPreviousRequested: secretKeyField.field.forceActiveFocus()
+        onPreviousRequested: passwordField.field.forceActiveFocus()
         onCancelled: root.dismissed()
     }
 

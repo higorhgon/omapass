@@ -325,6 +325,9 @@ bitwarden.method_email:
 bitwarden.method_yubikey:
   pt-BR: "YubiKey"
   en: "YubiKey"
+bitwarden.one_account:
+  pt-BR: "O bw mantém uma conta por vez: saia da atual com Ctrl+X antes de adicionar outra."
+  en: "bw keeps one account at a time: leave the current one with Ctrl+X before adding another."
 bitwarden.logout_confirm:
   pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
   en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
@@ -453,8 +456,8 @@ onepassword.logging_in:
   pt-BR: "Conectando ao 1Password…"
   en: "Connecting to 1Password…"
 onepassword.address_label:
-  pt-BR: " Endereço (ex.: minha.1password.com) "
-  en: " Sign-in address (e.g. my.1password.com) "
+  pt-BR: " Endereço de acesso "
+  en: " Sign-in address "
 onepassword.email_label:
   pt-BR: " E-mail "
   en: " E-mail "
@@ -464,6 +467,15 @@ onepassword.secret_key_label:
 onepassword.master_password_label:
   pt-BR: " Senha mestra "
   en: " Master password "
+onepassword.shorthand_label:
+  pt-BR: " Apelido "
+  en: " Nickname "
+onepassword.shorthand_hint:
+  pt-BR: "opcional — como a conta aparece na lista"
+  en: "optional — how the account shows up in the list"
+onepassword.account_gone:
+  pt-BR: "Esta conta não está mais configurada no op."
+  en: "This account is no longer set up in op."
 onepassword.code_label:
   pt-BR: " Código de verificação "
   en: " Verification code "

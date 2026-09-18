@@ -30,14 +30,14 @@ QString OnePasswordLogin::shorthandFor(const QString &address) {
 }
 
 void OnePasswordLogin::start(const QString &address, const QString &email, const Secret &secretKey,
-                             const Secret &password) {
+                             const Secret &password, const QString &shorthand) {
     cancel();
 
     m_stdout.clear();
     m_stderr.clear();
     m_promptsSeen.clear();
     m_stopping = false;
-    m_shorthand = shorthandFor(address);
+    m_shorthand = shorthand.isEmpty() ? shorthandFor(address) : shorthand;
     m_password = password;
 
     m_process = new QProcess(this);
@@ -51,12 +51,14 @@ void OnePasswordLogin::start(const QString &address, const QString &email, const
     m_process->setProcessEnvironment(env);
 
     // --signin --raw so the same run that adds the account hands back a
-    // session token, saving a second round trip.
-    const QStringList args = {QStringLiteral("account"), QStringLiteral("add"),
-                              QStringLiteral("--address"), address,
-                              QStringLiteral("--email"), email,
-                              QStringLiteral("--shorthand"), m_shorthand,
-                              QStringLiteral("--signin"), QStringLiteral("--raw")};
+    // session token, saving a second round trip. The shorthand is only
+    // passed when the user chose one; otherwise op picks it.
+    QStringList args = {QStringLiteral("account"), QStringLiteral("add"),
+                        QStringLiteral("--address"), address,
+                        QStringLiteral("--email"), email};
+    if (!shorthand.isEmpty())
+        args << QStringLiteral("--shorthand") << shorthand;
+    args << QStringLiteral("--signin") << QStringLiteral("--raw");
 
     connect(m_process, &QProcess::readyReadStandardError, this, &OnePasswordLogin::onOutput);
     connect(m_process, &QProcess::readyReadStandardOutput, this, &OnePasswordLogin::onOutput);

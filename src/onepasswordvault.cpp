@@ -18,8 +18,13 @@
 
 namespace {
 
-const auto accountSetting = QStringLiteral("onepassword/account");
 const auto refPrefix = QStringLiteral("1password:");
+
+// What the last `op account list` said, so a row can be labelled without
+// spawning op again for each one. Written by accounts(), read by
+// displayName().
+QMutex accountsMutex;
+QHash<QString, OpAccount> knownAccounts;
 
 // The `op signout` started by the last close(), which runs detached.
 std::atomic<qint64> pendingSignoutPid{0};
@@ -164,18 +169,6 @@ bool OnePasswordVault::isAvailable() {
     return !QStandardPaths::findExecutable(QStringLiteral("op")).isEmpty();
 }
 
-QString OnePasswordVault::rememberedAccount() {
-    return QSettings().value(accountSetting).toString();
-}
-
-void OnePasswordVault::rememberAccount(const QString &account) {
-    QSettings().setValue(accountSetting, account);
-}
-
-void OnePasswordVault::forgetAccount() {
-    QSettings().remove(accountSetting);
-}
-
 QString OnePasswordVault::refPath(const QString &account) {
     return refPrefix + account;
 }
@@ -190,7 +183,31 @@ QVector<OpAccount> OnePasswordVault::accounts() {
     const ProcResult result = runProcess(QStringLiteral("op"),
                                          {QStringLiteral("account"), QStringLiteral("list"),
                                           QStringLiteral("--format=json")});
-    return result.success ? parseOpAccounts(result.out.toUtf8()) : QVector<OpAccount>();
+    if (!result.success)
+        return QVector<OpAccount>();
+
+    const QVector<OpAccount> accounts = parseOpAccounts(result.out.toUtf8());
+    const QMutexLocker locker(&accountsMutex);
+    knownAccounts.clear();
+    for (const OpAccount &account : accounts)
+        knownAccounts.insert(account.key(), account);
+    return accounts;
+}
+
+QString OnePasswordVault::displayName(const QString &account) {
+    OpAccount known;
+    {
+        const QMutexLocker locker(&accountsMutex);
+        known = knownAccounts.value(account);
+    }
+    if (known.email.isEmpty())
+        return account;
+
+    // `op` makes a shorthand out of the address when none is given
+    // (`my.1password.com` becomes `my`), which would tell two accounts apart
+    // by nothing useful. One the user chose is worth showing.
+    const QString derived = known.url.section(QLatin1Char('.'), 0, 0);
+    return known.shorthand.isEmpty() || known.shorthand == derived ? known.email : known.shorthand;
 }
 
 bool OnePasswordVault::hasAccount(const QString &account) {
@@ -659,6 +676,10 @@ void OnePasswordVault::close() {
     process.setArguments({QStringLiteral("signout"), QStringLiteral("--account"), m_account});
     process.setStandardOutputFile(QProcess::nullDevice());
     process.setStandardErrorFile(QProcess::nullDevice());
+    // Without this the detached process inherits the terminal omapass was
+    // started from, and `op` asks questions on it ("Do you want to add an
+    // account manually now?") that nobody is there to answer.
+    process.setStandardInputFile(QProcess::nullDevice());
     qint64 pid = 0;
     if (process.startDetached(&pid))
         pendingSignoutPid = pid;
