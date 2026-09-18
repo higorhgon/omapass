@@ -61,6 +61,9 @@ Para contas **1Password**:
 - Uma conta em que você possa usar a senha mestra e a Secret Key (as contas que entram só por SSO não têm senha mestra, e o `op` não as adiciona desse jeito).
 - `script`, do `util-linux` (já presente em qualquer instalação): o `op` só pergunta o código de verificação em duas etapas quando está falando com um terminal, então o omapass empresta um a ele. Sem o `script`, contas **sem** duas etapas continuam abrindo normalmente.
 
+`omapass --doctor` mostra, num relance, o que ele encontrou no seu sistema e para que serve
+cada coisa — é a resposta rápida para "por que tal backend não aparece?".
+
 A busca por bancos usa [`fd`](https://github.com/sharkdp/fd) quando disponível
 (bem mais rápido em um diretório home inteiro) e cai para uma varredura própria
 quando não está instalado.
