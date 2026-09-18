@@ -122,10 +122,12 @@ public:
     Q_INVOKABLE void cancelBitwardenLogin();
     Q_INVOKABLE bool isBitwardenDatabase(int index) const;
     Q_INVOKABLE void logoutBitwarden();
-    Q_INVOKABLE void enableBitwardenPin(const QString &masterPassword, const QString &pin);
-    Q_INVOKABLE void disableBitwardenPin();
     Q_INVOKABLE QString validatePin(const QString &pin, const QString &confirm) const;
     Q_INVOKABLE QString pinWeakWarning(const QString &pin) const;
+
+    // PIN unlock, one PIN per database
+    Q_INVOKABLE void enablePin(const QString &password, const QString &pin);
+    Q_INVOKABLE void disablePin();
 
     // 1Password account
     Q_INVOKABLE void addOnePasswordAccount();
@@ -204,6 +206,9 @@ private:
     void setLoginStep(const QString &step);
     // Account of the open vault, or of the one waiting to be unlocked.
     QString bitwardenAccount() const;
+    // The database a PIN would belong to: the open one, or the one waiting
+    // to be unlocked.
+    DbRef pinTarget() const;
     void refreshPinState();
     void closeVault();
     void showClipboardMessage(const QString &text);

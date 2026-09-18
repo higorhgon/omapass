@@ -6,19 +6,24 @@
 
 #include "secret.h"
 
-// PIN unlock for a Bitwarden account.
+// PIN unlock for any database omapass can open.
 //
-// `bw` knows nothing but the master password, so a PIN cannot replace it:
-// what omapass keeps is the master password itself, encrypted with a key
-// derived from the PIN (PBKDF2-SHA256, 600000 rounds, random salt), in the
-// system keyring through `secret-tool`. The right PIN decrypts it and the
-// usual unlock goes ahead unchanged.
+// No backend takes a PIN: `bw` and `op` know nothing but the master
+// password, a .kdbx is encrypted with its own, and a pass store wants the
+// GPG passphrase. So what omapass keeps is that password itself, encrypted
+// with a key derived from the PIN (PBKDF2-SHA256, 600000 rounds, random
+// salt), in the system keyring through `secret-tool`. The right PIN decrypts
+// it and the usual unlock goes ahead unchanged.
+//
+// Every database has its own PIN, kept under the path that identifies it in
+// the list: a .kdbx file, a pass store's directory, `bitwarden:<e-mail>` or
+// `1password:<account>`.
 //
 // Be honest about what this buys: a four-digit PIN is 10000 candidates, and
 // whoever can read the keyring can try them all offline — the KDF cost is
 // the only thing in the way. The attempt limit below is an interface
 // deterrent, not a defence against that.
-namespace BwPin {
+namespace Pin {
 
 // Wrong PINs before the stored password is deleted.
 constexpr int maxAttempts = 5;
@@ -48,20 +53,26 @@ QString validate(const QString &pin, const QString &confirm = QString());
 // still being typed); otherwise says how few combinations it has.
 QString weakWarning(const QString &pin);
 
+// The keyring attribute a database's PIN lives under, and the settings key
+// its attempt counter uses. Exposed for testing: what matters is that they
+// are unique per database and the same on every run.
+QString accountAttribute(const QString &vaultPath);
+QString attemptsKey(const QString &vaultPath);
+
 // `secret-tool` (libsecret) present; without it there is no PIN unlock.
 bool isAvailable();
-bool hasPin(const QString &email);
+bool hasPin(const QString &vaultPath);
 
-bool store(const QString &email, const QString &pin, const Secret &masterPassword, QString *error);
-Result recover(const QString &email, const QString &pin, Secret *masterPassword);
-void clear(const QString &email);
+bool store(const QString &vaultPath, const QString &pin, const Secret &password, QString *error);
+Result recover(const QString &vaultPath, const QString &pin, Secret *password);
+void clear(const QString &vaultPath);
 
-// Wrong attempts since the last success, kept across runs so closing the
-// window is not a way around the limit.
-int failedAttempts();
+// Wrong attempts since the last success, per database, kept across runs so
+// closing the window is not a way around the limit.
+int failedAttempts(const QString &vaultPath);
 // Counts one wrong PIN and returns how many are left; deletes the stored
 // password (and returns 0) on the last one.
-int registerFailure(const QString &email);
-void resetAttempts();
+int registerFailure(const QString &vaultPath);
+void resetAttempts(const QString &vaultPath);
 
 }
