@@ -1,0 +1,133 @@
+#!/bin/sh
+# Stand-in for the 1Password CLI, so the parts of omapass that drive it can
+# be tested without an account, a network or a real `op`.
+#
+# It reproduces the behaviours that actually bit us, each one seen in the
+# real thing:
+# - it only prompts when something is reading it from a terminal;
+# - `op signin` refuses to print the session line without --force;
+# - `op account forget` refuses while it believes a session is live, and
+#   points at `op signout --forget`, which without a token to end exits 0
+#   and removes nothing;
+# - `op account add` can end with something to say over an account it did
+#   add.
+#
+# State lives in the files named by OP_FAKE_ACCOUNTS (one shorthand per
+# line) and OP_FAKE_SESSION (present means "signed in"). OP_FAKE_PASSWORD
+# and OP_FAKE_CODE are what it accepts.
+
+accounts_file="${OP_FAKE_ACCOUNTS:?}"
+session_file="${OP_FAKE_SESSION:?}"
+password="${OP_FAKE_PASSWORD:-senha-certa}"
+code="${OP_FAKE_CODE:-123456}"
+
+list_accounts() {
+    printf '['
+    separator=""
+    while read -r account; do
+        [ -n "$account" ] || continue
+        printf '%s{"url":"my.1password.com","email":"%s@exemplo.com","user_uuid":"U-%s","account_uuid":"A-%s","shorthand":"%s"}' \
+            "$separator" "$account" "$account" "$account" "$account"
+        separator=","
+    done < "$accounts_file"
+    printf ']\n'
+}
+
+forget_account() {
+    grep -vx "$1" "$accounts_file" > "$accounts_file.tmp"
+    mv "$accounts_file.tmp" "$accounts_file"
+}
+
+# `op account forget` takes the shorthand or either of the ids.
+resolve_account() {
+    case "$1" in
+        U-*|A-*) printf '%s' "${1#?-}" ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+on_a_terminal() {
+    [ -t 1 ]
+}
+
+case "$1 $2" in
+    "account list")
+        list_accounts
+        exit 0
+        ;;
+    "account forget")
+        if [ -f "$session_file" ]; then
+            printf "[ERROR] You are currently logged in to the account you are trying to forget. Use 'op signout --account %s --forget' instead.\n" "$3" >&2
+            exit 1
+        fi
+        account=$(resolve_account "$3")
+        grep -qx "$account" "$accounts_file" || { printf '[ERROR] account not found\n' >&2; exit 1; }
+        forget_account "$account"
+        printf 'Removed the saved details for "%s" from this device.\n' "$account"
+        exit 0
+        ;;
+    "account add")
+        on_a_terminal || { printf '[ERROR] missing OP_SECRET_KEY environment variable\n' >&2; exit 1; }
+        printf 'Enter the Secret Key for teste@exemplo.com on my.1password.com: '
+        read -r secret_key
+        printf '\n'
+        printf 'Enter the password for teste@exemplo.com at my.1password.com: '
+        read -r given_password
+        printf '\n'
+        printf 'Enter your six-digit authentication code: '
+        read -r given_code
+        printf '\n'
+        if [ "$given_password" != "$password" ] || [ "$given_code" != "$code" ]; then
+            printf '[ERROR] username/password authentication failed\n' >&2
+            exit 1
+        fi
+        echo "teste" >> "$accounts_file"
+        # Added, and still with something to say on the way out.
+        printf "[ERROR] Output of 'op signin' is meant to be executed by your terminal. Please run 'eval \$(op signin)'.\n" >&2
+        exit 1
+        ;;
+esac
+
+if [ "$1" = "signout" ]; then
+    account=""
+    forget=""
+    previous=""
+    for argument in "$@"; do
+        [ "$previous" = "--account" ] && account="$argument"
+        [ "$argument" = "--forget" ] && forget="yes"
+        previous="$argument"
+    done
+    # No session token to end: nothing happens, successfully. OP_FAKE_STUCK
+    # is the state omapass cannot talk its way out of — op believes a session
+    # is live and no sign-out reaches it.
+    [ -n "$OP_FAKE_STUCK" ] && exit 0
+    [ -f "$session_file" ] || exit 0
+    rm -f "$session_file"
+    [ -n "$forget" ] && [ -n "$account" ] && forget_account "$account"
+    exit 0
+fi
+
+if [ "$1" = "signin" ]; then
+    on_a_terminal || { printf '[ERROR] no terminal\n' >&2; exit 1; }
+    case " $* " in
+        *" --force "*|*" -f "*) ;;
+        *)
+            printf "[ERROR] Output of 'op signin' is meant to be executed by your terminal. Please run 'eval \$(op signin)'. You can use the '-f' flag to override this warning.\n" >&2
+            exit 1
+            ;;
+    esac
+    printf 'Enter the password for teste@exemplo.com at my.1password.com: '
+    read -r given_password
+    printf '\n'
+    if [ "$given_password" != "$password" ]; then
+        printf '[ERROR] username/password authentication failed\n' >&2
+        exit 1
+    fi
+    touch "$session_file"
+    printf 'export OP_SESSION_qwertyuiopasdfgh="TOKEN-DE-SESSAO"\n'
+    printf "# This command is meant to be used with your shell's eval function.\n"
+    exit 0
+fi
+
+printf '[ERROR] fake op: unsupported command: %s\n' "$*" >&2
+exit 1

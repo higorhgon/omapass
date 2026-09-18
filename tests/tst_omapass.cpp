@@ -10,6 +10,8 @@
 #include "history.h"
 #include "i18n.h"
 #include "kdbx2pass.h"
+#include "onepasswordlogin.h"
+#include "onepasswordvault.h"
 #include "opjson.h"
 #include "passstore.h"
 #include "secret.h"
@@ -22,6 +24,49 @@ QJsonObject bwFixture(const char *name) {
         qFatal("missing fixture %s", name);
     return QJsonDocument::fromJson(file.readAll()).object();
 }
+
+// The fake `op` (tests/fakes/op) ahead of the real one, with its state in a
+// directory of the test's own. It is the only way to drive the parts that
+// talk to a CLI — prompts, sessions, removing an account — without an
+// account, a network, or luck.
+struct FakeOp {
+    QTemporaryDir directory;
+    QByteArray originalPath;
+
+    FakeOp() {
+        originalPath = qgetenv("PATH");
+        qputenv("PATH", QByteArray(OMAPASS_FAKE_CLIS ":") + originalPath);
+        qputenv("OP_FAKE_ACCOUNTS", accountsFile().toUtf8());
+        qputenv("OP_FAKE_SESSION", sessionFile().toUtf8());
+        setAccounts({QStringLiteral("teste")});
+    }
+
+    ~FakeOp() {
+        qputenv("PATH", originalPath);
+        qunsetenv("OP_FAKE_ACCOUNTS");
+        qunsetenv("OP_FAKE_SESSION");
+    }
+
+    QString accountsFile() const { return directory.filePath(QStringLiteral("accounts")); }
+    QString sessionFile() const { return directory.filePath(QStringLiteral("session")); }
+
+    void setAccounts(const QStringList &accounts) {
+        QFile file(accountsFile());
+        file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        file.write(accounts.join(QLatin1Char('\n')).toUtf8() + '\n');
+    }
+
+    void setSignedIn(bool signedIn) {
+        if (!signedIn) {
+            QFile::remove(sessionFile());
+            return;
+        }
+        QFile file(sessionFile());
+        file.open(QIODevice::WriteOnly);
+    }
+
+    bool signedIn() const { return QFile::exists(sessionFile()); }
+};
 
 QByteArray opFixture(const char *name) {
     QFile file(QStringLiteral(OMAPASS_OP_FIXTURES "/") + QLatin1String(name));
@@ -448,6 +493,102 @@ private slots:
         QCOMPARE(accounts.at(0).key(), QStringLiteral("minha"));
         QCOMPARE(accounts.at(0).email, QStringLiteral("pessoa@exemplo.com"));
         QCOMPARE(accounts.at(1).key(), accounts.at(1).userUuid);
+    }
+
+    void onePasswordSignInAnswersTheTwoStepPrompt() {
+        FakeOp op;
+
+        OnePasswordLogin login;
+        QString variable;
+        QString token;
+        QString error;
+        bool finished = false;
+        connect(&login, &OnePasswordLogin::promptShown, &login, [&login](OpPrompt prompt) {
+            if (prompt == OpPrompt::TwoFactorCode)
+                login.sendCode(QStringLiteral("123456"));
+        });
+        connect(&login, &OnePasswordLogin::succeeded, &login,
+                [&](const QString &, const QString &sessionVariable, const Secret &session) {
+            variable = sessionVariable;
+            token = session.toString();
+            finished = true;
+        });
+        connect(&login, &OnePasswordLogin::failed, &login, [&](const QString &message, OpError) {
+            error = message;
+            finished = true;
+        });
+
+        login.startSignIn(QStringLiteral("teste"), Secret(QStringLiteral("senha-certa")));
+
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        // The name comes from what op printed, not from the account: naming
+        // it here is how a session ends up unused.
+        QCOMPARE(variable, QStringLiteral("OP_SESSION_qwertyuiopasdfgh"));
+        QCOMPARE(token, QStringLiteral("TOKEN-DE-SESSAO"));
+    }
+
+    void onePasswordAddKeepsGoingWhenOpComplainsAboutAnAccountItAdded() {
+        FakeOp op;
+        op.setAccounts({});
+
+        OnePasswordLogin login;
+        QString token;
+        QString error;
+        bool finished = false;
+        connect(&login, &OnePasswordLogin::promptShown, &login, [&login](OpPrompt prompt) {
+            if (prompt == OpPrompt::TwoFactorCode)
+                login.sendCode(QStringLiteral("123456"));
+        });
+        connect(&login, &OnePasswordLogin::succeeded, &login,
+                [&](const QString &, const QString &, const Secret &session) {
+            token = session.toString();
+            finished = true;
+        });
+        connect(&login, &OnePasswordLogin::failed, &login, [&](const QString &message, OpError) {
+            error = message;
+            finished = true;
+        });
+
+        login.start(QStringLiteral("my.1password.com"), QStringLiteral("teste@exemplo.com"),
+                    Secret(QStringLiteral("A3-CHAVE")), Secret(QStringLiteral("senha-certa")),
+                    QStringLiteral("teste"));
+
+        QTRY_VERIFY_WITH_TIMEOUT(finished, 20000);
+        // `op account add` ends with something to say over an account it did
+        // add; what settles it is op listing the account, and the session
+        // follows.
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(token, QStringLiteral("TOKEN-DE-SESSAO"));
+    }
+
+    void onePasswordLogoutRemovesTheAccountEitherWay() {
+        FakeOp op;
+
+        // With no session, `op account forget` is the one that removes it.
+        QString error;
+        QVERIFY2(OnePasswordVault::logout(QStringLiteral("teste"), &error), qPrintable(error));
+        QVERIFY(!OnePasswordVault::hasAccount(QStringLiteral("teste")));
+
+        // With one, op refuses that and points at the sign-out instead.
+        op.setAccounts({QStringLiteral("teste")});
+        op.setSignedIn(true);
+        QVERIFY2(OnePasswordVault::logout(QStringLiteral("teste"), &error), qPrintable(error));
+        QVERIFY(!OnePasswordVault::hasAccount(QStringLiteral("teste")));
+    }
+
+    void onePasswordLogoutSaysSoWhenOpWillNotLetGo() {
+        FakeOp op;
+        // op believes a session is live and no sign-out can end it without
+        // the token: the state omapass cannot talk its way out of.
+        op.setSignedIn(true);
+        qputenv("OP_FAKE_STUCK", "1");
+
+        QString error;
+        QVERIFY(!OnePasswordVault::logout(QStringLiteral("teste"), &error));
+        QVERIFY(!error.isEmpty());
+        QVERIFY(OnePasswordVault::hasAccount(QStringLiteral("teste")));
+        qunsetenv("OP_FAKE_STUCK");
     }
 
     void onePasswordShellCommandQuotesItsArguments() {
