@@ -1,6 +1,7 @@
 #include "opjson.h"
 
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QJsonDocument>
 
 #include <algorithm>
@@ -125,6 +126,33 @@ QString opDisplayName(const QString &name) {
     QString display = name;
     display.replace(QLatin1Char('/'), QChar(0x2215));
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
+}
+
+QString opShorthandFor(const QString &email, const QString &address) {
+    static const QRegularExpression invalid(QStringLiteral("[^a-z0-9_]"));
+
+    QString shorthand = email.section(QLatin1Char('@'), 0, 0).trimmed().toLower();
+    shorthand.replace(invalid, QStringLiteral("_"));
+    while (shorthand.startsWith(QLatin1Char('_')))
+        shorthand.remove(0, 1);
+    if (!shorthand.isEmpty())
+        return shorthand;
+
+    // No e-mail to go by: fall back to what op itself would have done.
+    shorthand = address.section(QLatin1Char('.'), 0, 0).trimmed().toLower();
+    shorthand.replace(invalid, QStringLiteral("_"));
+    return shorthand.isEmpty() ? QStringLiteral("omapass") : shorthand;
+}
+
+QString opUniqueShorthand(const QString &wanted, const QStringList &taken) {
+    if (!taken.contains(wanted))
+        return wanted;
+    for (int suffix = 2; suffix < 100; ++suffix) {
+        const QString candidate = wanted + QString::number(suffix);
+        if (!taken.contains(candidate))
+            return candidate;
+    }
+    return wanted;
 }
 
 QString opVaultOf(const QString &path) {

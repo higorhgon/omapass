@@ -82,6 +82,17 @@ QString opNormalizeTag(const QString &tag);
 // the one that places the item in the tree.
 QStringList opItemTags(const QJsonObject &item);
 
+// The shorthand a new account is added under: what `op` calls it from then
+// on, and what the list shows. `op` makes one out of the address when none
+// is given (`my.1password.com` becomes `my`), which says nothing about whose
+// account it is — so the part of the e-mail before the @ is used instead.
+QString opShorthandFor(const QString &email, const QString &address);
+
+// The same shorthand, made unique among the ones `op` already has: two
+// accounts of the same person on different domains would otherwise collide
+// and `op` would refuse the second.
+QString opUniqueShorthand(const QString &wanted, const QStringList &taken);
+
 // The fields omapass shows, read from an item object.
 EntryData opEntryData(const QJsonObject &item);
 

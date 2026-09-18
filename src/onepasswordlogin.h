@@ -19,17 +19,12 @@ public:
     explicit OnePasswordLogin(QObject *parent = nullptr);
     ~OnePasswordLogin() override;
 
-    // `shorthand` is what `op` will know the account by; empty lets op make
-    // one out of the address.
+    // `shorthand` is what `op` will know the account by, and what the list
+    // shows; the caller picks it (see opShorthandFor).
     void start(const QString &address, const QString &email, const Secret &secretKey,
-               const Secret &password, const QString &shorthand = QString());
+               const Secret &password, const QString &shorthand);
     void sendCode(const QString &code);
     void cancel();
-
-    // The shorthand `op` derives from an address when none is given
-    // (`my.1password.com` → `my`). Exposed so the caller can guess the name
-    // the account will answer to.
-    static QString shorthandFor(const QString &address);
 
 signals:
     // Waiting on the user; the only prompt that reaches here is the

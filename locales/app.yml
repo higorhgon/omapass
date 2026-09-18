@@ -471,8 +471,8 @@ onepassword.shorthand_label:
   pt-BR: " Apelido "
   en: " Nickname "
 onepassword.shorthand_hint:
-  pt-BR: "opcional — como a conta aparece na lista"
-  en: "optional — how the account shows up in the list"
+  pt-BR: "opcional — o padrão é o e-mail antes do @"
+  en: "optional — defaults to the e-mail before the @"
 onepassword.account_gone:
   pt-BR: "Esta conta não está mais configurada no op."
   en: "This account is no longer set up in op."

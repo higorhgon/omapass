@@ -220,8 +220,11 @@ bool OnePasswordVault::hasAccount(const QString &account) {
 }
 
 void OnePasswordVault::logout(const QString &account) {
-    runProcess(QStringLiteral("op"), {QStringLiteral("signout"), QStringLiteral("--account"), account,
-                                      QStringLiteral("--forget")});
+    // `op signout --forget` only ends a session that is still live and fails
+    // outright when there is none, leaving the account on the device;
+    // `op account forget` is the one that drops its details.
+    runProcess(QStringLiteral("op"), {QStringLiteral("signout"), QStringLiteral("--account"), account});
+    runProcess(QStringLiteral("op"), {QStringLiteral("account"), QStringLiteral("forget"), account});
 }
 
 bool OnePasswordVault::signIn(const QString &account, const Secret &password, Secret *session,
