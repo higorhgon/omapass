@@ -1,9 +1,11 @@
 #include "vault.h"
 
 #include "bitwardenvault.h"
+#include "bwcache.h"
 #include "config.h"
 #include "i18n.h"
 #include "keepassvault.h"
+#include "onepasswordvault.h"
 #include "passstore.h"
 #include "passvault.h"
 #include "process.h"
@@ -130,6 +132,8 @@ QString Vault::kindLabel(VaultKind kind) {
         return QStringLiteral("pass");
     case VaultKind::Bitwarden:
         return QStringLiteral("Bitwarden");
+    case VaultKind::OnePassword:
+        return QStringLiteral("1Password");
     }
     return QString();
 }
@@ -137,6 +141,8 @@ QString Vault::kindLabel(VaultKind kind) {
 QString Vault::displayName(const DbRef &ref) {
     if (ref.kind == VaultKind::Bitwarden)
         return BitwardenVault::emailOf(ref.path);
+    if (ref.kind == VaultKind::OnePassword)
+        return OnePasswordVault::displayName(OnePasswordVault::accountOf(ref.path));
     return QFileInfo(ref.path).fileName();
 }
 
@@ -164,6 +170,15 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
     const QString account = BitwardenVault::rememberedAccount();
     if (!account.isEmpty() && BitwardenVault::isAvailable())
         databases.append({BitwardenVault::refPath(account), VaultKind::Bitwarden});
+
+    // Every account `op` is configured with, not just one remembered here:
+    // it keeps the list honest when an account is added or dropped from a
+    // terminal, and reading op's own configuration takes milliseconds.
+    if (OnePasswordVault::isAvailable()) {
+        const QVector<OpAccount> accounts = OnePasswordVault::accounts();
+        for (const OpAccount &account : accounts)
+            databases.append({OnePasswordVault::refPath(account.key()), VaultKind::OnePassword});
+    }
 
     return databases;
 }
@@ -193,9 +208,51 @@ bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
     return true;
 }
 
+bool Vault::verifySecret(const DbRef &ref, const Secret &secret, QString *error) {
+    switch (ref.kind) {
+    case VaultKind::Keepass: {
+        const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},
+                                         {secret});
+        if (!result.started) {
+            *error = result.err;
+            return false;
+        }
+        if (!result.success) {
+            *error = I18n::t(QStringLiteral("backend.wrong_password"));
+            return false;
+        }
+        return true;
+    }
+    case VaultKind::Pass: {
+        const PassStore store(ref.path);
+        return store.verifyPassphrase(secret, error);
+    }
+    case VaultKind::Bitwarden: {
+        // bw's own encrypted copy answers this without a network call. When
+        // it is in a shape BwCache does not read, there is nothing to check
+        // against locally and the password is taken as given.
+        if (const std::optional<BwCache> cache = BwCache::load()) {
+            QHash<QString, QJsonObject> items;
+            QHash<QString, QString> folders;
+            if (cache->decrypt(secret, &items, &folders) == BwCache::Result::WrongPassword) {
+                *error = I18n::t(QStringLiteral("backend.wrong_password"));
+                return false;
+            }
+        }
+        return true;
+    }
+    case VaultKind::OnePassword:
+        return true;
+    }
+    return true;
+}
+
 Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
     if (ref.kind == VaultKind::Bitwarden)
         return BitwardenVault::unlock(BitwardenVault::emailOf(ref.path), secret, error);
+
+    if (ref.kind == VaultKind::OnePassword)
+        return OnePasswordVault::unlock(OnePasswordVault::accountOf(ref.path), secret, error);
 
     if (ref.kind == VaultKind::Keepass) {
         const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},

@@ -562,6 +562,9 @@ void BitwardenVault::close() {
     process.setArguments({QStringLiteral("lock")});
     process.setStandardOutputFile(QProcess::nullDevice());
     process.setStandardErrorFile(QProcess::nullDevice());
+    // Detached processes otherwise inherit the terminal omapass was started
+    // from, and a CLI that decides to ask something would ask it there.
+    process.setStandardInputFile(QProcess::nullDevice());
     qint64 pid = 0;
     if (process.startDetached(&pid))
         pendingLockPid = pid;

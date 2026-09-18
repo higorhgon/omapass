@@ -12,7 +12,6 @@ HEADERS += \
     src/bitwardenvault.h \
     src/bwcache.h \
     src/bwcrypto.h \
-    src/bwpin.h \
     src/clipboard.h \
     src/config.h \
     src/filter.h \
@@ -21,9 +20,13 @@ HEADERS += \
     src/i18n.h \
     src/keepassvault.h \
     src/kdbx2pass.h \
+    src/onepasswordlogin.h \
+    src/onepasswordvault.h \
+    src/opjson.h \
     src/palette.h \
     src/passstore.h \
     src/passvault.h \
+    src/pin.h \
     src/process.h \
     src/secret.h \
     src/sessionlock.h \
@@ -38,7 +41,6 @@ SOURCES += \
     src/bitwardenvault.cpp \
     src/bwcache.cpp \
     src/bwcrypto.cpp \
-    src/bwpin.cpp \
     src/clipboard.cpp \
     src/config.cpp \
     src/filter.cpp \
@@ -47,9 +49,13 @@ SOURCES += \
     src/i18n.cpp \
     src/keepassvault.cpp \
     src/kdbx2pass.cpp \
+    src/onepasswordlogin.cpp \
+    src/onepasswordvault.cpp \
+    src/opjson.cpp \
     src/palette.cpp \
     src/passstore.cpp \
     src/passvault.cpp \
+    src/pin.cpp \
     src/process.cpp \
     src/secret.cpp \
     src/sessionlock.cpp \

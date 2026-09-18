@@ -19,6 +19,7 @@
         <file alias="EntryInfoModal.qml">EntryInfoModal.qml</file>
         <file alias="HelpModal.qml">HelpModal.qml</file>
         <file alias="LoginModal.qml">LoginModal.qml</file>
+        <file alias="OnePasswordLoginModal.qml">OnePasswordLoginModal.qml</file>
         <file alias="RenameGroupModal.qml">RenameGroupModal.qml</file>
         <file alias="SettingsModal.qml">SettingsModal.qml</file>
         <file alias="UnlockModal.qml">UnlockModal.qml</file>

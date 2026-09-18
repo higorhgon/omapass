@@ -1,7 +1,8 @@
 import QtQuick
 
 // First stage: pick a database, then unlock it. Also where new KeePassXC
-// databases and pass stores are created, and Bitwarden accounts logged into.
+// databases and pass stores are created, and Bitwarden and 1Password
+// accounts logged into.
 FocusScope {
     id: page
 
@@ -42,6 +43,8 @@ FocusScope {
         onDeleteRequested: {
             if (controller.isBitwardenDatabase(currentIndex))
                 page.mode = "confirmLogout";
+            else if (controller.isOnePasswordDatabase(currentIndex))
+                page.mode = "confirmLogoutOp";
         }
         onHelpRequested: page.mode = "help"
         onQuitRequested: Qt.quit()
@@ -56,20 +59,37 @@ FocusScope {
         onDismissed: Qt.quit()
     }
 
+    // Built as a list rather than written out, so a backend whose CLI is not
+    // installed simply drops out without shifting what the others do.
     ChoiceModal {
+        id: typeChoice
+
+        readonly property var choices: {
+            const list = [{"label": "KeePassXC (.kdbx)", "action": "createDb"},
+                          {"label": "pass", "action": "createPass"}];
+            if (controller.bitwardenAvailable)
+                list.push({"label": "Bitwarden", "action": "bitwarden"});
+            if (controller.onePasswordAvailable)
+                list.push({"label": "1Password", "action": "onepassword"});
+            return list;
+        }
+
         visible: page.mode === "chooseType"
         heading: i18n.t("db_app.new_db_title")
         hint: i18n.t("db_app.footer_choose_type")
         cardWidth: Math.round(360 * window.s)
-        options: controller.bitwardenAvailable ? ["KeePassXC (.kdbx)", "pass", "Bitwarden"]
-                                               : ["KeePassXC (.kdbx)", "pass"]
+        options: choices.map(function(choice) { return choice.label; })
 
         onChosen: function(index) {
-            if (index === 2) {
+            const action = typeChoice.choices[index].action;
+            if (action === "bitwarden") {
                 page.mode = "list";
                 controller.addBitwardenAccount();
+            } else if (action === "onepassword") {
+                page.mode = "list";
+                controller.addOnePasswordAccount();
             } else {
-                page.mode = index === 0 ? "createDb" : "createPass";
+                page.mode = action;
             }
         }
         onDismissed: page.mode = controller.anyDatabaseFound ? "list" : "confirmCreate"
@@ -106,6 +126,20 @@ FocusScope {
         onDismissed: controller.cancelBitwardenLogin()
     }
 
+    OnePasswordLoginModal {
+        visible: controller.loginStep === "opCredentials" || controller.loginStep === "opCode"
+        step: controller.loginStep
+        email: controller.loginEmail
+        errorText: controller.unlockError
+        busy: controller.busy
+
+        onCredentialsSubmitted: function(address, email, secretKey, password, shorthand) {
+            controller.onePasswordLogin(address, email, secretKey, password, shorthand);
+        }
+        onCodeSubmitted: function(code) { controller.sendOnePasswordCode(code); }
+        onDismissed: controller.cancelOnePasswordLogin()
+    }
+
     // Shown when the account has several two-step methods: bw would ask with
     // a menu of its own, so the choice is made here and bw is started again
     // with it. The values are bw's TwoFactorProviderType.
@@ -131,6 +165,18 @@ FocusScope {
         onAccepted: {
             page.mode = "list";
             controller.logoutBitwarden();
+        }
+        onDismissed: page.mode = "list"
+    }
+
+    ConfirmModal {
+        visible: page.mode === "confirmLogoutOp"
+        accentColor: theme.alertWarn
+        question: i18n.t("onepassword.logout_confirm")
+
+        onAccepted: {
+            page.mode = "list";
+            controller.logoutOnePassword(pane.currentIndex);
         }
         onDismissed: page.mode = "list"
     }
@@ -164,7 +210,7 @@ FocusScope {
                 "title": i18n.t("help.actions_section"),
                 "items": [["ENTER", i18n.t("db_app.help_select_db")],
                           ["CTRL-A", i18n.t("db_app.help_create_new_db")],
-                          ["CTRL-X", i18n.t("bitwarden.help_logout")]]
+                          ["CTRL-X", i18n.t("db_app.help_logout")]]
             },
             {
                 "title": i18n.t("help.search_section"),
