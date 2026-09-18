@@ -151,36 +151,28 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             setLoginStep(QStringLiteral("opCode"));
     });
     connect(&m_onePasswordLogin, &OnePasswordLogin::succeeded, this,
-            [this](const QString &shorthand, const Secret &session) {
-        // Which account `op` actually ended up with: it makes a shorthand of
-        // its own when none was given, and that is the name to talk to it by.
-        QString account = shorthand;
-        const QVector<OpAccount> known = OnePasswordVault::accounts();
-        for (const OpAccount &candidate : known) {
-            if (candidate.email.compare(m_loginEmail, Qt::CaseInsensitive) != 0)
-                continue;
-            account = candidate.key();
-            if (candidate.url.compare(m_loginAddress, Qt::CaseInsensitive) == 0)
-                break;
+            [this](const QString &account, const QString &sessionVariable, const Secret &session) {
+        const bool adding = m_onePasswordAdding;
+        if (adding) {
+            refreshDatabases();
+            emit databaseCreated();
         }
 
-        refreshDatabases();
-        emit databaseCreated();
-
-        // The login sheet stays up, busy, until the vault is open: flashing
-        // the unlock sheet in between would ask for a password that was just
-        // given.
+        // Whatever sheet asked for the password stays up, busy, until the
+        // vault is open: swapping to another one in between would ask for
+        // something that was just given.
         const DbRef ref{OnePasswordVault::refPath(account), VaultKind::OnePassword};
         runInBackground(
-            [account, session]() {
+            [account, sessionVariable, session]() {
                 OpenResult result;
-                result.vault = OnePasswordVault::openWithSession(account, session, &result.error);
+                result.vault = OnePasswordVault::openWithSession(account, session, sessionVariable,
+                                                                 &result.error);
                 return result;
             },
-            [this, ref](const OpenResult &result) {
+            [this, ref, adding](const OpenResult &result) {
                 if (!result.vault) {
                     setUnlockError(result.error);
-                    setLoginStep(QStringLiteral("opCredentials"));
+                    setLoginStep(adding ? QStringLiteral("opCredentials") : QString());
                     return;
                 }
                 setLoginStep(QString());
@@ -205,9 +197,10 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             setUnlockError(error.isEmpty() ? I18n::t(QStringLiteral("onepassword.login_failed")) : error);
             break;
         }
-        // The process is over either way, so the next try starts from the
-        // credentials again, with what was typed still there.
-        setLoginStep(QStringLiteral("opCredentials"));
+        // The process is over either way: adding an account starts over from
+        // the credentials, opening one goes back to the unlock sheet, where
+        // the error is shown.
+        setLoginStep(m_onePasswordAdding ? QStringLiteral("opCredentials") : QString());
     });
 
     refreshDatabases();
@@ -241,6 +234,7 @@ void AppController::applyLockSettings() {
 
 AppController::~AppController() {
     m_bitwardenLogin.cancel();
+    m_onePasswordLogin.cancel();
     m_task.waitForFinished();
     m_syncTask.waitForFinished();
     closeVault();
@@ -262,6 +256,13 @@ void AppController::runInBackground(Work work, Done done) {
     const QFuture<Result> future = QtConcurrent::run(std::move(work));
     m_task = QFuture<void>(future);
     watcher->setFuture(future);
+}
+
+bool AppController::requireIdle() {
+    if (!m_busy)
+        return true;
+    showMessage(I18n::t(QStringLiteral("app.working")), true);
+    return false;
 }
 
 bool AppController::vaultReadyForChanges() {
@@ -504,6 +505,9 @@ void AppController::selectDatabase(int index) {
 }
 
 void AppController::cancelUnlock() {
+    // A sign-in waiting on a two-step code would otherwise sit there.
+    m_onePasswordLogin.cancel();
+    setBusy(false);
     m_hasPendingDatabase = false;
     setUnlockError(QString());
     emit pendingDatabaseChanged();
@@ -514,6 +518,17 @@ void AppController::unlock(const QString &password) {
         return;
 
     setUnlockError(QString());
+
+    // `op signin` can stop to ask for a two-step code, and that needs the
+    // process kept alive while the interface asks for it — which the
+    // background open, a single blocking call, cannot do.
+    if (m_pendingDatabase.kind == VaultKind::OnePassword) {
+        m_onePasswordAdding = false;
+        setBusy(true);
+        m_onePasswordLogin.startSignIn(OnePasswordVault::accountOf(m_pendingDatabase.path),
+                                       Secret(password));
+        return;
+    }
 
     const Secret secret(password);
     const DbRef ref = m_pendingDatabase;
@@ -963,7 +978,7 @@ void AppController::setLoginStep(const QString &step) {
 }
 
 void AppController::addBitwardenAccount() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     setUnlockError(QString());
@@ -1044,7 +1059,7 @@ bool AppController::isBitwardenDatabase(int index) const {
 }
 
 void AppController::logoutBitwarden() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     const QString email = BitwardenVault::rememberedAccount();
@@ -1065,12 +1080,13 @@ void AppController::logoutBitwarden() {
 }
 
 void AppController::addOnePasswordAccount() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     // Always the login sheet: every account `op` already has is in the list
     // on its own, so getting here means adding one more.
     setUnlockError(QString());
+    m_onePasswordAdding = true;
     m_loginEmail.clear();
     m_loginAddress.clear();
     setLoginStep(QStringLiteral("opCredentials"));
@@ -1106,6 +1122,7 @@ void AppController::onePasswordLogin(const QString &address, const QString &emai
     m_loginEmail = trimmedEmail;
     emit loginChanged();
 
+    m_onePasswordAdding = true;
     setBusy(true);
     setUnlockError(QString());
     m_onePasswordLogin.start(trimmedAddress, trimmedEmail, Secret(secretKey), Secret(password),
@@ -1134,7 +1151,7 @@ bool AppController::isOnePasswordDatabase(int index) const {
 }
 
 void AppController::logoutOnePassword(int index) {
-    if (m_busy || !isOnePasswordDatabase(index))
+    if (!requireIdle() || !isOnePasswordDatabase(index))
         return;
 
     const DbRef ref = m_filteredDatabases.at(index);
@@ -1142,14 +1159,17 @@ void AppController::logoutOnePassword(int index) {
     const QString path = ref.path;
     runInBackground(
         [account, path]() {
-            OnePasswordVault::logout(account);
-            Pin::clear(path);
-            return TaskResult{true, QString()};
+            TaskResult result;
+            result.ok = OnePasswordVault::logout(account, &result.error);
+            if (result.ok)
+                Pin::clear(path);
+            return result;
         },
-        [this](const TaskResult &) {
+        [this](const TaskResult &result) {
             refreshPinState();
             refreshDatabases();
-            showMessage(I18n::t(QStringLiteral("onepassword.logged_out")), false);
+            showMessage(result.ok ? I18n::t(QStringLiteral("onepassword.logged_out")) : result.error,
+                        !result.ok);
         });
 }
 

@@ -19,6 +19,7 @@ struct OpAccount {
     QString email;
     QString url;
     QString userUuid;
+    QString accountUuid;
 
     // What `--account` takes: the shorthand when the account has one, the
     // user id otherwise (an account added without --shorthand has none).
@@ -26,6 +27,22 @@ struct OpAccount {
 };
 
 QVector<OpAccount> parseOpAccounts(const QByteArray &json);
+
+// The `op` command line as a single string, quoted for a shell — which is
+// how a command is handed to `script`, the terminal `op` borrows when it
+// will only answer to one. Nothing secret goes on it.
+QString opShellCommand(const QStringList &args);
+
+// What `op signin` hands back. Without --raw it prints the shell line
+// `export OP_SESSION_<name>="<token>"`, which is the only place the name of
+// the variable is stated — and `op` picks it, so guessing it is how a
+// session ends up unused ("you are not currently signed in").
+struct OpSession {
+    QString variable;   // empty when the output only had the token
+    QString token;
+};
+
+OpSession parseOpSignIn(const QString &output);
 
 // One item as the entry list knows it. `title` and the vault name are kept
 // as 1Password has them, not as the path shows them.

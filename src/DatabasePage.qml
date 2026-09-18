@@ -182,7 +182,9 @@ FocusScope {
     }
 
     UnlockModal {
-        visible: page.unlocking
+        // While `op` asks for a two-step code, the login sheet is the one on
+        // screen; this one comes back with the error if it fails.
+        visible: page.unlocking && !page.loggingIn
         databaseName: controller.pendingDatabase.name || ""
         errorText: controller.unlockError
         busy: controller.busy
