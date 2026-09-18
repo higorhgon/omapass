@@ -62,13 +62,14 @@ void OnePasswordLogin::start(const QString &address, const QString &email, const
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("OP_SECRET_KEY"), secretKey.toString());
 
-    // --signin --raw so the same run that adds the account hands back a
-    // session token, saving a second round trip.
+    // --signin so the same run that adds the account hands back a session,
+    // saving a second round trip. Not --raw: the line op prints instead
+    // names the variable it wants the token back in.
     const QStringList args = {QStringLiteral("account"), QStringLiteral("add"),
                               QStringLiteral("--address"), address,
                               QStringLiteral("--email"), email,
                               QStringLiteral("--shorthand"), m_shorthand,
-                              QStringLiteral("--signin"), QStringLiteral("--raw")};
+                              QStringLiteral("--signin")};
 
     runOp(args, env);
 }
@@ -83,7 +84,7 @@ void OnePasswordLogin::startSignIn(const QString &account, const Secret &passwor
     m_shorthand = account;
     m_password = password;
 
-    runOp({QStringLiteral("signin"), QStringLiteral("--account"), account, QStringLiteral("--raw")},
+    runOp({QStringLiteral("signin"), QStringLiteral("--account"), account},
           QProcessEnvironment::systemEnvironment());
 }
 
@@ -215,18 +216,16 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     m_password.clear();
 
     if (status == QProcess::NormalExit && exitCode == 0) {
-        // --raw prints the session token on its own line, after whatever
-        // prompts were echoed.
+        // op prints `export OP_SESSION_<name>="<token>"`, after whatever
+        // prompts the terminal echoed; the name is op's own and is carried
+        // along rather than guessed.
         QString out = stripAnsi(m_stdout);
-        QString token;
-        const QStringList lines = out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        for (auto it = lines.crbegin(); it != lines.crend() && token.isEmpty(); ++it)
-            token = it->trimmed();
-        const Secret session(token);
-        token.fill(QChar(0));
+        OpSession parsed = parseOpSignIn(out);
         out.fill(QChar(0));
+        const Secret session(parsed.token);
+        parsed.token.fill(QChar(0));
         wipeBuffers();
-        emit succeeded(m_shorthand, session);
+        emit succeeded(m_shorthand, parsed.variable, session);
         return;
     }
 

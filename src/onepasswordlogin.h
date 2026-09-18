@@ -37,7 +37,9 @@ signals:
     // two-step code, since the rest is answered from what was typed in the
     // login sheet.
     void promptShown(OpPrompt prompt);
-    void succeeded(const QString &shorthand, const Secret &session);
+    // `sessionVariable` is the name op printed with the token, empty when
+    // it did not say.
+    void succeeded(const QString &shorthand, const QString &sessionVariable, const Secret &session);
     void failed(const QString &error, OpError kind);
 
 private:
