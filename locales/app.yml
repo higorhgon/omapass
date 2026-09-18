@@ -443,6 +443,12 @@ onepassword.wrong_secret_key:
 onepassword.invalid_code:
   pt-BR: "Código inválido!"
   en: "Invalid code!"
+onepassword.no_answer:
+  pt-BR: "O op parou de responder; tente de novo."
+  en: "op stopped responding; try again."
+onepassword.stuck_prompt:
+  pt-BR: "O op está esperando uma resposta que o omapass não soube dar: \"%{prompt}\""
+  en: "op is waiting for an answer omapass did not know how to give: \"%{prompt}\""
 onepassword.login_failed:
   pt-BR: "Falha ao entrar no 1Password."
   en: "1Password login failed."

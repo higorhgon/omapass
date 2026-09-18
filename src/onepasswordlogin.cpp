@@ -26,6 +26,18 @@ void wipe(QString *text) {
     text->clear();
 }
 
+// The last thing a run said: its error, or the prompt it is waiting on.
+QString lastLine(const QString &text) {
+    static const QRegularExpression breaks(QStringLiteral("\\x1b\\[[0-9;?]*[A-Za-z]|\\r|\\n"));
+    const QStringList lines = text.split(breaks, Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+        const QString line = it->trimmed();
+        if (!line.isEmpty())
+            return line;
+    }
+    return QString();
+}
+
 QString stripAnsi(const QString &text) {
     static const QRegularExpression ansi(QStringLiteral("\\x1b\\[[0-9;?]*[A-Za-z]"));
     QString clean = text;
@@ -35,7 +47,16 @@ QString stripAnsi(const QString &text) {
 
 }
 
-OnePasswordLogin::OnePasswordLogin(QObject *parent) : QObject(parent) {}
+// How long `op` may go without saying anything before the run is given up
+// on. It answers its own prompts in well under a second; the wait is this
+// long only so a slow network is never mistaken for a stuck prompt.
+constexpr int silenceTimeoutMs = 30000;
+
+OnePasswordLogin::OnePasswordLogin(QObject *parent) : QObject(parent) {
+    m_silence.setSingleShot(true);
+    m_silence.setInterval(silenceTimeoutMs);
+    connect(&m_silence, &QTimer::timeout, this, &OnePasswordLogin::onSilence);
+}
 
 OnePasswordLogin::~OnePasswordLogin() {
     cancel();
@@ -143,6 +164,22 @@ void OnePasswordLogin::begin(const QString &program, const QStringList &args,
     });
 
     m_process->start(program, args);
+    m_silence.start();
+}
+
+// Nothing from `op` for a while: either it is waiting on a prompt omapass
+// does not know how to answer, or it is stuck. Either way the run ends, and
+// the message carries the last thing it said, which is the prompt itself.
+void OnePasswordLogin::onSilence() {
+    if (!m_process)
+        return;
+
+    const QString last = lastLine(stripAnsi(m_stderr + QLatin1Char('\n') + m_stdout));
+    cancel();
+    emit failed(last.isEmpty() ? I18n::t(QStringLiteral("onepassword.no_answer"))
+                               : I18n::t(QStringLiteral("onepassword.stuck_prompt"),
+                                         QStringLiteral("prompt"), last),
+                OpError::Other);
 }
 
 void OnePasswordLogin::answer(const Secret &secret) {
@@ -163,6 +200,7 @@ void OnePasswordLogin::sendCode(const QString &code) {
 }
 
 void OnePasswordLogin::cancel() {
+    m_silence.stop();
     m_secretKey.clear();
     m_password.clear();
     m_awaitingPasswordPrompt = false;
@@ -179,6 +217,7 @@ void OnePasswordLogin::cancel() {
 }
 
 void OnePasswordLogin::onOutput() {
+    m_silence.start();
     m_stdout += QString::fromUtf8(m_process->readAllStandardOutput());
     m_stderr += QString::fromUtf8(m_process->readAllStandardError());
 
@@ -227,6 +266,7 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
 
     m_stdout += QString::fromUtf8(m_process->readAllStandardOutput());
     m_stderr += QString::fromUtf8(m_process->readAllStandardError());
+    m_silence.stop();
     m_process->deleteLater();
     m_process = nullptr;
     m_secretKey.clear();
@@ -262,13 +302,8 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     // read. Prompts are redrawn with escape sequences instead of newlines,
     // so those mark line boundaries too; the error op printed is the last
     // line.
-    static const QRegularExpression breaks(QStringLiteral("\\x1b\\[[0-9;?]*[A-Za-z]|\\r|\\n"));
     const QString output = m_stderr + QLatin1Char('\n') + m_stdout;
-    QString message;
-    const QStringList lines = output.split(breaks, Qt::SkipEmptyParts);
-    for (auto it = lines.crbegin(); it != lines.crend() && message.isEmpty(); ++it)
-        message = it->trimmed();
-
+    const QString message = lastLine(output);
     const OpError kind = classifyOpError(output);
     wipeBuffers();
     emit failed(message, kind);

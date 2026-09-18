@@ -413,7 +413,12 @@ OpPrompt detectOpPrompt(const QString &stderrText) {
     const int email = stderrText.lastIndexOf(QLatin1String("email address for your account"));
     const int secretKey = stderrText.lastIndexOf(QLatin1String("Enter the Secret Key"));
     const int password = stderrText.lastIndexOf(QLatin1String("Enter the password for"));
-    const int code = stderrText.lastIndexOf(QLatin1String("authentication code"));
+    // The code has been asked for in more than one wording across versions,
+    // and a prompt nobody answers hangs the run — so all of them count.
+    int code = -1;
+    for (const char *wording : {"authentication code", "verification code", "one-time password",
+                                "two-factor", "six-digit"})
+        code = std::max(code, int(stderrText.lastIndexOf(QLatin1String(wording))));
 
     const int latest = std::max({address, email, secretKey, password, code});
     if (latest < 0)
