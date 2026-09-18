@@ -318,6 +318,9 @@ void AppController::lock() {
         return; // uma operação ainda usa o banco; o timer tenta de novo no próximo ciclo
 
     closeVault();
+    // Nothing is open any more, so no database is the PIN's subject until
+    // one is picked again.
+    refreshPinState();
     m_query.clear();
     refreshEntries();
 
