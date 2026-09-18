@@ -111,12 +111,18 @@ std::optional<BwKey> deriveMasterKey(const Secret &password, const QString &salt
     try {
         // HKDF-Expand only (no extract step), as the SDK's stretch does.
         const auto hkdf = Botan::KDF::create_or_throw("HKDF-Expand(SHA-256)");
-        // The pointer form, which both Botan 2 and 3 spell the same way; no
-        // salt, since this is HKDF-Expand only, as the SDK's stretch does.
+        // No salt: this is HKDF-Expand only, as the SDK's stretch does.
+        // Botan 3 deprecated the pointer form that Botan 2 only has.
         const auto expand = [&hkdf, &material](const char *label) {
+#if BOTAN_VERSION_MAJOR >= 3
+            return hkdf->derive_key(32, *material, std::span<const uint8_t>(),
+                                    std::span(reinterpret_cast<const uint8_t *>(label),
+                                              std::strlen(label)));
+#else
             return hkdf->derive_key(32, material->data(), material->size(),
                                     static_cast<const uint8_t *>(nullptr), size_t(0),
                                     reinterpret_cast<const uint8_t *>(label), std::strlen(label));
+#endif
         };
 
         BwKey key;
