@@ -1,0 +1,5 @@
+[
+  { "id": "v1", "name": "Pessoal", "content_version": 7 },
+  { "id": "v2", "name": "Trabalho", "content_version": 3 },
+  { "id": "v3", "name": "Vazio", "content_version": 0 }
+]

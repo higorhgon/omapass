@@ -7,11 +7,12 @@
 #include "secret.h"
 
 // Abstraction over the supported password backends: KeePassXC (through
-// `keepassxc-cli`, see keepassvault.h), pass (through gpg, see passvault.h)
-// and Bitwarden (through `bw`, see bitwardenvault.h). The rest of the app only ever talks to Vault/DbRef, so no
-// backend's command shapes leak into the interface.
+// `keepassxc-cli`, see keepassvault.h), pass (through gpg, see passvault.h),
+// Bitwarden (through `bw`, see bitwardenvault.h) and 1Password (through
+// `op`, see onepasswordvault.h). The rest of the app only ever talks to
+// Vault/DbRef, so no backend's command shapes leak into the interface.
 
-enum class VaultKind { Keepass, Pass, Bitwarden };
+enum class VaultKind { Keepass, Pass, Bitwarden, OnePassword };
 
 // A database found by the search, before it is opened.
 struct DbRef {
@@ -64,13 +65,14 @@ public:
     static QString emptyGroupSuffix();
     static QString kindLabel(VaultKind kind);
     // How a database is named in the list: the file or directory name, or
-    // the account e-mail for Bitwarden.
+    // the account for Bitwarden and 1Password.
     static QString displayName(const DbRef &ref);
 
     // Finds KeePassXC databases (.kdbx) and pass stores (any directory with a
     // .gpg-id) under `searchPath` — the same configurable directory for both,
     // so a store anywhere below it is found, not just ~/.password-store —
-    // plus the Bitwarden account added through omapass, if any.
+    // plus the Bitwarden and 1Password accounts added through omapass, if
+    // any.
     static QVector<DbRef> findDatabases(const QString &searchPath);
 
     static bool createKeepassDatabase(const QString &name, const Secret &password,
@@ -79,6 +81,14 @@ public:
     // Opens and authenticates against `ref`, validating the password or
     // passphrase before handing back a usable Vault.
     static Vault *open(const DbRef &ref, const Secret &secret, QString *error);
+
+    // Checks a password without opening the database, for storing it behind
+    // a PIN: opening would cost a session the caller does not want (and, for
+    // the account backends, would end the one already open). A 1Password
+    // account has nothing local to check against, so it accepts what it is
+    // given — a wrong password shows up at the first PIN unlock, which then
+    // drops the PIN.
+    static bool verifySecret(const DbRef &ref, const Secret &secret, QString *error);
 
     VaultKind kind() const { return m_kind; }
     QString path() const { return m_path; }

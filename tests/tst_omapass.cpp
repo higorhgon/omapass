@@ -2,7 +2,7 @@
 
 #include "bitwardenjson.h"
 #include "bwcache.h"
-#include "bwpin.h"
+#include "pin.h"
 #include "bwcrypto.h"
 #include "config.h"
 #include "filter.h"
@@ -10,6 +10,7 @@
 #include "history.h"
 #include "i18n.h"
 #include "kdbx2pass.h"
+#include "opjson.h"
 #include "passstore.h"
 #include "secret.h"
 
@@ -20,6 +21,13 @@ QJsonObject bwFixture(const char *name) {
     if (!file.open(QIODevice::ReadOnly))
         qFatal("missing fixture %s", name);
     return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+QByteArray opFixture(const char *name) {
+    QFile file(QStringLiteral(OMAPASS_OP_FIXTURES "/") + QLatin1String(name));
+    if (!file.open(QIODevice::ReadOnly))
+        qFatal("missing fixture %s", name);
+    return file.readAll();
 }
 
 BwBytes bwHex(const QString &hex) {
@@ -434,6 +442,186 @@ private slots:
         QCOMPARE(detectBwPrompt(QStringLiteral("loading")), BwPrompt::None);
     }
 
+    void onePasswordAccountsFallBackToTheUserId() {
+        const QVector<OpAccount> accounts = parseOpAccounts(opFixture("accounts.json"));
+        QCOMPARE(accounts.size(), 2);
+        QCOMPARE(accounts.at(0).key(), QStringLiteral("minha"));
+        QCOMPARE(accounts.at(0).email, QStringLiteral("pessoa@exemplo.com"));
+        QCOMPARE(accounts.at(1).key(), accounts.at(1).userUuid);
+    }
+
+    void onePasswordShorthandComesFromTheEmail() {
+        // `op` would name the account after the address; the e-mail says
+        // whose it is.
+        QCOMPARE(opShorthandFor(QStringLiteral("Pessoa.Sobrenome@exemplo.com"),
+                                QStringLiteral("my.1password.com")),
+                 QStringLiteral("pessoa_sobrenome"));
+        QCOMPARE(opShorthandFor(QStringLiteral("pessoa+trabalho@exemplo.com"),
+                                QStringLiteral("my.1password.com")),
+                 QStringLiteral("pessoa_trabalho"));
+        // Nothing usable in the e-mail: back to what op itself would do.
+        QCOMPARE(opShorthandFor(QString(), QStringLiteral("Empresa.1password.com")),
+                 QStringLiteral("empresa"));
+
+        // The same person on two domains would collide, and op refuses the
+        // second account.
+        const QStringList taken{QStringLiteral("pessoa"), QStringLiteral("pessoa2")};
+        QCOMPARE(opUniqueShorthand(QStringLiteral("outra"), taken), QStringLiteral("outra"));
+        QCOMPARE(opUniqueShorthand(QStringLiteral("pessoa"), taken), QStringLiteral("pessoa3"));
+    }
+
+    void onePasswordIndexNestsTagsUnderTheVault() {
+        const OpIndex index = buildOpIndex(opFixture("items.json"), opFixture("vaults.json"));
+
+        QCOMPARE(index.groups, QStringList({QStringLiteral("Pessoal"),
+                                            QStringLiteral("Pessoal/Streaming"),
+                                            QStringLiteral("Trabalho"),
+                                            QStringLiteral("Trabalho/Assinaturas"),
+                                            QStringLiteral("Trabalho/Trabalho"),
+                                            QStringLiteral("Trabalho/Trabalho/Deploy"),
+                                            QStringLiteral("Vazio")}));
+
+        // A password item sits at its vault's root; a credit card is not
+        // shown at all; a tag with stray spaces and empty segments is the
+        // same group as the tidy one.
+        QVERIFY(index.items.contains(QStringLiteral("Pessoal/Cofre do roteador")));
+        QVERIFY(index.items.contains(QStringLiteral("Trabalho/Trabalho/Deploy/Servidor")));
+        for (const QString &entry : std::as_const(index.entries))
+            QVERIFY(!entry.contains(QStringLiteral("Cartao")));
+
+        QCOMPARE(index.vaults.value(QStringLiteral("Pessoal")), QStringLiteral("v1"));
+        QCOMPARE(index.vaults.value(QStringLiteral("Vazio")), QStringLiteral("v3"));
+    }
+
+    void onePasswordIndexFilesAnItemUnderItsFirstTag() {
+        const OpIndex index = buildOpIndex(opFixture("items.json"), opFixture("vaults.json"));
+
+        // "GitLab / CI" carries both "Trabalho/Deploy" and "Assinaturas";
+        // the first in alphabetical order is the one that places it, and the
+        // slash in the title is shown as a look-alike.
+        const QString path = QStringLiteral("Trabalho/Assinaturas/GitLab ") + QChar(0x2215)
+            + QStringLiteral(" CI");
+        QVERIFY(index.items.contains(path));
+        const OpItemRef ref = index.items.value(path);
+        QCOMPARE(ref.title, QStringLiteral("GitLab / CI"));
+        QCOMPARE(ref.vaultId, QStringLiteral("v2"));
+        QCOMPARE(ref.tagPath, QStringLiteral("Assinaturas"));
+    }
+
+    void onePasswordIndexDisambiguatesDuplicateTitles() {
+        const OpIndex index = buildOpIndex(opFixture("items.json"), opFixture("vaults.json"));
+        QVERIFY(index.items.contains(QStringLiteral("Pessoal/Streaming/Netflix [i1]")));
+        QVERIFY(index.items.contains(QStringLiteral("Pessoal/Streaming/Netflix [i2]")));
+        QVERIFY(!index.items.contains(QStringLiteral("Pessoal/Streaming/Netflix")));
+    }
+
+    void onePasswordEntryDataReadsThePrimaryUrl() {
+        const QJsonObject item = QJsonDocument::fromJson(opFixture("item.json")).object();
+        const EntryData data = opEntryData(item);
+        QCOMPARE(data.username, QStringLiteral("pessoa@empresa.com"));
+        QCOMPARE(data.password.toString(), QStringLiteral("senha-antiga"));
+        QCOMPARE(data.url, QStringLiteral("https://gitlab.exemplo.com"));
+        QCOMPARE(data.notes, QStringLiteral("nota antiga"));
+        QVERIFY(!opHasPasskey(item));
+    }
+
+    void onePasswordEditKeepsFieldsItDoesNotModel() {
+        EntryData data;
+        data.username = QStringLiteral("nova-pessoa");
+        data.password = Secret(QStringLiteral("nova-senha"));
+        data.url = QStringLiteral("https://novo.exemplo.com");
+        data.notes = QStringLiteral("nota nova");
+
+        const QJsonObject item = QJsonDocument::fromJson(
+            applyOpEntryData(opFixture("item.json"), QStringLiteral("GitLab"),
+                             QStringLiteral("Producao"), data)).object();
+
+        QCOMPARE(item.value(QStringLiteral("title")).toString(), QStringLiteral("GitLab"));
+        // The tag that placed the item gives way to the new group; the other
+        // one is the user's own filing and stays.
+        QCOMPARE(item.value(QStringLiteral("tags")).toVariant().toStringList(),
+                 QStringList({QStringLiteral("Producao"), QStringLiteral("Trabalho/Deploy")}));
+        QCOMPARE(item.value(QStringLiteral("sections")).toArray().size(), 1);
+
+        const QJsonArray fields = item.value(QStringLiteral("fields")).toArray();
+        QCOMPARE(fields.size(), 5);
+        QCOMPARE(fields.at(0).toObject().value(QStringLiteral("value")).toString(),
+                 QStringLiteral("nova-pessoa"));
+        QCOMPARE(fields.at(1).toObject().value(QStringLiteral("value")).toString(),
+                 QStringLiteral("nova-senha"));
+        QVERIFY(fields.at(1).toObject().contains(QStringLiteral("password_details")));
+        QCOMPARE(fields.at(3).toObject().value(QStringLiteral("type")).toString(),
+                 QStringLiteral("OTP"));
+        QCOMPARE(fields.at(4).toObject().value(QStringLiteral("value")).toString(),
+                 QStringLiteral("producao"));
+
+        const QJsonArray urls = item.value(QStringLiteral("urls")).toArray();
+        QCOMPARE(urls.size(), 2);
+        QCOMPARE(urls.at(0).toObject().value(QStringLiteral("href")).toString(),
+                 QStringLiteral("https://novo.exemplo.com"));
+        QCOMPARE(urls.at(1).toObject().value(QStringLiteral("href")).toString(),
+                 QStringLiteral("https://espelho.exemplo.com"));
+    }
+
+    void onePasswordNewItemCarriesTheVaultAndTheTag() {
+        EntryData data;
+        data.password = Secret(QStringLiteral("p"));
+
+        const QJsonObject item = QJsonDocument::fromJson(
+            opNewItemJson(QStringLiteral("Site"), QStringLiteral("v1"),
+                          QStringLiteral(" Casa / Rede "), data)).object();
+
+        QCOMPARE(item.value(QStringLiteral("category")).toString(), QStringLiteral("LOGIN"));
+        QCOMPARE(item.value(QStringLiteral("vault")).toObject().value(QStringLiteral("id")).toString(),
+                 QStringLiteral("v1"));
+        QCOMPARE(item.value(QStringLiteral("tags")).toVariant().toStringList(),
+                 QStringList({QStringLiteral("Casa/Rede")}));
+        // Only the password was filled in, so no empty username or notes
+        // field is invented.
+        const QJsonArray fields = item.value(QStringLiteral("fields")).toArray();
+        QCOMPARE(fields.size(), 1);
+        QCOMPARE(fields.at(0).toObject().value(QStringLiteral("purpose")).toString(),
+                 QStringLiteral("PASSWORD"));
+        QVERIFY(item.value(QStringLiteral("urls")).toArray().isEmpty());
+    }
+
+    void onePasswordErrorsAreClassified() {
+        QCOMPARE(classifyOpError(QStringLiteral(
+                     "[ERROR] 2026/09/17 12:00:00 session expired, sign in to create a new session")),
+                 OpError::SessionExpired);
+        QCOMPARE(classifyOpError(QStringLiteral(
+                     "You are not currently signed in. Please run `op signin --help` for instructions")),
+                 OpError::NotSignedIn);
+        QCOMPARE(classifyOpError(QStringLiteral("No accounts configured for use with 1Password CLI.")),
+                 OpError::NoAccount);
+        QCOMPARE(classifyOpError(QStringLiteral("[ERROR] Incorrect Secret Key")), OpError::WrongSecretKey);
+        QCOMPARE(classifyOpError(QStringLiteral("[ERROR] username/password authentication failed")),
+                 OpError::WrongPassword);
+        QCOMPARE(classifyOpError(QStringLiteral("[ERROR] rate limit exceeded")), OpError::RateLimited);
+        QCOMPARE(classifyOpError(QStringLiteral("outra coisa qualquer")), OpError::Other);
+        QCOMPARE(classifyOpError(QString()), OpError::None);
+    }
+
+    void onePasswordPromptsAreDetected() {
+        QCOMPARE(detectOpPrompt(QStringLiteral("Enter your sign-in address (example.1password.com): ")),
+                 OpPrompt::SignInAddress);
+        QCOMPARE(detectOpPrompt(QStringLiteral(
+                     "Enter the email address for your account on minha.1password.com: ")),
+                 OpPrompt::Email);
+        QCOMPARE(detectOpPrompt(QStringLiteral(
+                     "Enter the Secret Key for pessoa@exemplo.com on minha.1password.com: ")),
+                 OpPrompt::SecretKey);
+        QCOMPARE(detectOpPrompt(QStringLiteral(
+                     "Enter the Secret Key for pessoa@exemplo.com on minha.1password.com: \n"
+                     "Enter the password for pessoa@exemplo.com at minha.1password.com: ")),
+                 OpPrompt::Password);
+        QCOMPARE(detectOpPrompt(QStringLiteral(
+                     "Enter the password for pessoa@exemplo.com at minha.1password.com: \n"
+                     "Enter your 6-digit authentication code: ")),
+                 OpPrompt::TwoFactorCode);
+        QCOMPARE(detectOpPrompt(QStringLiteral("carregando")), OpPrompt::None);
+    }
+
     void bitwardenKdfMatchesTheSdk() {
         const QJsonObject v = bwFixture("vectors.json");
         const Secret password(v.value("password").toString());
@@ -618,13 +806,13 @@ private slots:
         QVERIFY(items.isEmpty());
     }
 
-    void bitwardenPinBlobRoundTrips() {
-        const BwPin::Blob blob{QStringLiteral("c2FsdA=="), 600000,
+    void pinBlobRoundTrips() {
+        const Pin::Blob blob{QStringLiteral("c2FsdA=="), 600000,
                                QStringLiteral("2.aXY=|Y3Q=|bWFj")};
-        const QString text = BwPin::buildBlob(blob);
+        const QString text = Pin::buildBlob(blob);
         QVERIFY(text.startsWith(QLatin1String("omapass-pin.v1|")));
 
-        const std::optional<BwPin::Blob> parsed = BwPin::parseBlob(text);
+        const std::optional<Pin::Blob> parsed = Pin::parseBlob(text);
         QVERIFY(parsed);
         QCOMPARE(parsed->salt, blob.salt);
         QCOMPARE(parsed->iterations, blob.iterations);
@@ -633,26 +821,59 @@ private slots:
 
         // Another version, a missing field or a body that is not an EncString
         // leave the PIN unused rather than half understood.
-        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v2|c2FsdA==|600000|2.aXY=|Y3Q=|bWFj")));
-        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000")));
-        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|0|2.aXY=|Y3Q=|bWFj")));
-        QVERIFY(!BwPin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000|7.aXY=|Y3Q=|bWFj")));
-        QVERIFY(!BwPin::parseBlob(QString()));
+        QVERIFY(!Pin::parseBlob(QStringLiteral("omapass-pin.v2|c2FsdA==|600000|2.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!Pin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000")));
+        QVERIFY(!Pin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|0|2.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!Pin::parseBlob(QStringLiteral("omapass-pin.v1|c2FsdA==|600000|7.aXY=|Y3Q=|bWFj")));
+        QVERIFY(!Pin::parseBlob(QString()));
     }
 
-    void bitwardenPinValidationAndWeakWarning() {
-        QVERIFY(BwPin::validate(QStringLiteral("123456")).isEmpty());
-        QVERIFY(!BwPin::validate(QStringLiteral("123")).isEmpty());
-        QVERIFY(!BwPin::validate(QStringLiteral("12ab")).isEmpty());
-        QVERIFY(BwPin::validate(QStringLiteral("1234"), QStringLiteral("1234")).isEmpty());
-        QVERIFY(!BwPin::validate(QStringLiteral("1234"), QStringLiteral("4321")).isEmpty());
+    void pinValidationAndWeakWarning() {
+        QVERIFY(Pin::validate(QStringLiteral("123456")).isEmpty());
+        QVERIFY(!Pin::validate(QStringLiteral("123")).isEmpty());
+        QVERIFY(Pin::validate(QStringLiteral("1234"), QStringLiteral("1234")).isEmpty());
+        QVERIFY(!Pin::validate(QStringLiteral("1234"), QStringLiteral("4321")).isEmpty());
 
-        // Four and five digits are accepted, but said out loud.
-        QVERIFY(BwPin::weakWarning(QStringLiteral("1234")).contains(QStringLiteral("4")));
-        QVERIFY(!BwPin::weakWarning(QStringLiteral("12345")).isEmpty());
-        QVERIFY(BwPin::weakWarning(QStringLiteral("123456")).isEmpty());
+        // Letters and symbols are refused unless they were asked for; the
+        // length rule holds either way.
+        QVERIFY(!Pin::validate(QStringLiteral("12ab")).isEmpty());
+        QVERIFY(Pin::validate(QStringLiteral("12ab"), QString(), true).isEmpty());
+        QVERIFY(Pin::validate(QStringLiteral("k7$w"), QString(), true).isEmpty());
+        QVERIFY(!Pin::validate(QStringLiteral("ab"), QString(), true).isEmpty());
+
+        // The warning goes by how many combinations the PIN gives, not by
+        // how long it is: six digits are a million and pass, five are not.
+        QVERIFY(!Pin::weakWarning(QStringLiteral("1234")).isEmpty());
+        QVERIFY(!Pin::weakWarning(QStringLiteral("12345")).isEmpty());
+        QVERIFY(Pin::weakWarning(QStringLiteral("123456")).isEmpty());
+        // Four lowercase letters are 456976 — still short of it.
+        QVERIFY(!Pin::weakWarning(QStringLiteral("abcd")).isEmpty());
+        // The same four with a digit and a symbol are 69^4, over 22 million.
+        QVERIFY(Pin::weakWarning(QStringLiteral("k7$w")).isEmpty());
         // Nothing flashes up while a PIN is still being typed.
-        QVERIFY(BwPin::weakWarning(QStringLiteral("12")).isEmpty());
+        QVERIFY(Pin::weakWarning(QStringLiteral("12")).isEmpty());
+    }
+
+    void pinKeysAreScopedToEachDatabase() {
+        const QString kdbx = QStringLiteral("/home/user/cofre.kdbx");
+        const QString store = QStringLiteral("/home/user/.password-store");
+        const QString bitwarden = QStringLiteral("bitwarden:pessoa@exemplo.com");
+        const QString onePassword = QStringLiteral("1password:minha");
+
+        // The keyring attribute carries the path, so two databases never
+        // share a PIN and the entry says which one it belongs to.
+        QCOMPARE(Pin::accountAttribute(kdbx), QStringLiteral("pin:") + kdbx);
+        QCOMPARE(Pin::accountAttribute(bitwarden), QStringLiteral("pin:") + bitwarden);
+        QVERIFY(Pin::accountAttribute(store) != Pin::accountAttribute(onePassword));
+
+        // The attempt counter hangs off a digest instead: a settings key
+        // cannot hold slashes, and the file has no business listing where
+        // every database is.
+        const QString key = Pin::attemptsKey(kdbx);
+        QVERIFY(key.startsWith(QLatin1String("pin/attempts/")));
+        QVERIFY(!key.contains(QLatin1String("cofre")));
+        QCOMPARE(key, Pin::attemptsKey(kdbx));
+        QVERIFY(key != Pin::attemptsKey(store));
     }
 
     void generatorArgumentsFollowTheOptions() {
