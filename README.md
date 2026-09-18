@@ -237,9 +237,11 @@ tantas aparecem, e uma adicionada (ou removida) pelo terminal aparece (ou some) 
   do 1Password para essas.
 - **Excluir manda para "Excluídos recentemente"** (recuperável pelos aplicativos do
   1Password por 30 dias).
-- **Saindo de uma conta**: `Ctrl+X` sobre ela na tela de bancos encerra a sessão e roda
-  `op account forget <apelido>`, que apaga os dados da conta deste computador — e, por
-  consequência, a tira da lista. As outras contas continuam onde estavam.
+- **Saindo de uma conta**: `Ctrl+X` sobre ela na tela de bancos apaga os dados da conta
+  deste computador — e, por consequência, a tira da lista. Qual comando faz isso depende de
+  haver uma sessão aberta (`op signout --forget` quando há, `op account forget` quando não),
+  então o omapass tenta os dois e só diz que desconectou depois de conferir que o `op` parou
+  de listar a conta. As outras contas continuam onde estavam.
 - Cada comando do `op` é rápido (é um binário Go, com um daemon que guarda os itens
   cifrados em memória), mas cada um fala com o servidor. Por isso a listagem é carregada
   ao abrir e as senhas são buscadas na primeira vez que aparecem, ficando em memória
