@@ -59,6 +59,7 @@ Para contas **1Password**:
 
 - [`1password-cli`](https://developer.1password.com/docs/cli/) (o comando `op`) no PATH — no Arch/Omarchy, `sudo pacman -S 1password-cli`. Sem ele, a opção 1Password não aparece no menu de novo banco.
 - Uma conta em que você possa usar a senha mestra e a Secret Key (as contas que entram só por SSO não têm senha mestra, e o `op` não as adiciona desse jeito).
+- `script`, do `util-linux` (já presente em qualquer instalação): o `op` só pergunta o código de verificação em duas etapas quando está falando com um terminal, então o omapass empresta um a ele. Sem o `script`, contas **sem** duas etapas continuam abrindo normalmente.
 
 A busca por bancos usa [`fd`](https://github.com/sharkdp/fd) quando disponível
 (bem mais rápido em um diretório home inteiro) e cai para uma varredura própria
@@ -210,7 +211,8 @@ tantas aparecem, e uma adicionada (ou removida) pelo terminal aparece (ou some) 
 - **Adicionando uma conta**: `Ctrl+A` → **1Password** → endereço (já vem preenchido com
   `my.1password.com`, o padrão do 1Password), e-mail, Secret Key, senha mestra e, se quiser,
   um **apelido**. Se a conta usa verificação em duas etapas, o omapass pede o código em
-  seguida. O apelido é o `--shorthand` do `op` e é como a conta aparece na lista; deixando
+  seguida — tanto ao adicionar a conta quanto ao abri-la depois, já que o 1Password pede o
+  código a cada nova sessão. O apelido é o `--shorthand` do `op` e é como a conta aparece na lista; deixando
   em branco, o omapass usa a parte do e-mail antes do @ (com um número no fim, se já houver
   outra conta com esse nome). Isso porque o `op`, sozinho, nomearia a conta a partir do
   endereço — `my` —, o que não diz de quem ela é. Contas adicionadas pelo terminal sem
