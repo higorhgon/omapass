@@ -13,8 +13,18 @@ else
   exit 1
 fi
 
+JOBS="$(nproc 2>/dev/null || echo 1)"
+
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 "$QMAKE" "$ROOT/tests/tests.pro"
-make -j"$(nproc 2>/dev/null || echo 1)"
+make -j"$JOBS"
 QT_QPA_PLATFORM=offscreen ./tst_omapass
+
+# The interface tests draw the real components in a window of their own,
+# offscreen, and take the test files from the source tree.
+mkdir -p "$BUILD_DIR/qml"
+cd "$BUILD_DIR/qml"
+"$QMAKE" "$ROOT/tests/qml/qml.pro"
+make -j"$JOBS"
+QT_QPA_PLATFORM=offscreen ./tst_qmlomapass -input "$ROOT/tests/qml"

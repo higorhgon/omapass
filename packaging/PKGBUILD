@@ -1,0 +1,62 @@
+# Maintainer: Higor Henrique <higorlhp2@gmail.com>
+#
+# Builds from the repository's current HEAD, keepassxc-cli submodule and all.
+# There are no releases yet; when there are, this becomes a plain `omapass`
+# with a source tarball and a fixed pkgver.
+
+pkgname=omapass-git
+pkgver=r0
+pkgrel=1
+pkgdesc="Gerenciador de senhas em Qt Quick para KeePassXC, pass, Bitwarden e 1Password"
+arch=('x86_64')
+url="https://github.com/higorhgon/omapass"
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'botan' 'wl-clipboard' 'hicolor-icon-theme'
+         'zlib' 'minizip' 'pcsclite' 'libusb' 'readline')
+makedepends=('git' 'cmake' 'qt6-tools' 'pkgconf')
+# Os CLIs dos backends sao opcionais de proposito: cada um habilita um tipo
+# de banco, e quem usa so o KeePassXC (que vai no pacote) nao precisa de
+# nenhum. `omapass --doctor` diz o que foi encontrado.
+optdepends=('bitwarden-cli: contas Bitwarden'
+            '1password-cli: contas 1Password'
+            'pass: criar password-stores pela interface'
+            'gnupg: bancos do pass'
+            'libsecret: desbloqueio por PIN'
+            'qt6-wayland: janela nativa em sessão Wayland (sem ele, via XWayland)'
+            'fd: varredura de bancos ~5x mais rápida numa home grande'
+            'xdg-desktop-portal: modo claro/escuro e tamanho de texto do desktop')
+provides=('omapass')
+conflicts=('omapass')
+source=("$pkgname::git+$url.git"
+        "keepassxc-cli::git+https://github.com/higorhgon/keepassxc-cli.git")
+sha256sums=('SKIP' 'SKIP')
+
+pkgver() {
+    cd "$srcdir/$pkgname"
+    printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$srcdir/$pkgname"
+    # The fork is already cloned above, so the submodule is pointed at it
+    # rather than fetched again.
+    git submodule init
+    git config submodule.vendor/keepassxc.url "$srcdir/keepassxc-cli"
+    git -c protocol.file.allow=always submodule update
+}
+
+build() {
+    cd "$srcdir/$pkgname"
+    ./bin/build
+}
+
+check() {
+    cd "$srcdir/$pkgname"
+    ./bin/test
+}
+
+package() {
+    cd "$srcdir/$pkgname"
+    make DESTDIR="$pkgdir" PREFIX=/usr install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

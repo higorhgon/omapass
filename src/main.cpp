@@ -7,6 +7,7 @@
 #include <QQmlContext>
 #include <QQmlError>
 #include <QQuickStyle>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QUrl>
 
@@ -23,6 +24,52 @@ namespace {
 
 const auto applicationVersion = QStringLiteral("2.0.0");
 
+// What omapass needs from the system, and what each thing is for. The list
+// is here rather than in each backend because the point of `--doctor` is to
+// answer "why does this not show up?" in one place — with four CLIs, a
+// keyring, a clipboard and a wordlist in play, that question came up often
+// enough to deserve an answer that does not need reading the README.
+struct Tool {
+    const char *program;
+    const char *purposeKey;
+};
+
+const Tool tools[] = {
+    {"keepassxc-cli", "cli.doctor_keepassxc"},
+    {"gpg", "cli.doctor_gpg"},
+    {"pass", "cli.doctor_pass"},
+    {"bw", "cli.doctor_bw"},
+    {"op", "cli.doctor_op"},
+    {"secret-tool", "cli.doctor_secret_tool"},
+    {"script", "cli.doctor_script"},
+    {"wl-copy", "cli.doctor_wl_copy"},
+    {"fd", "cli.doctor_fd"},
+};
+
+void printDoctor(QTextStream &out) {
+    const AppConfig config = Config::load();
+    Generator::configure(config.wordlist, config.language);
+
+    out << I18n::t(QStringLiteral("cli.version"), QStringLiteral("version"), applicationVersion)
+        << "\n\n";
+
+    const QString missing = I18n::t(QStringLiteral("cli.doctor_missing"));
+    for (const Tool &tool : tools) {
+        const QString program = QString::fromLatin1(tool.program);
+        const QString found = QStandardPaths::findExecutable(program);
+        out << QStringLiteral("%1 %2 %3\n")
+                   .arg(program, -14)
+                   .arg(found.isEmpty() ? missing : found, -34)
+                   .arg(I18n::t(QString::fromLatin1(tool.purposeKey)));
+    }
+
+    const QString wordlist = Generator::wordlistPath();
+    out << QStringLiteral("%1 %2 %3\n")
+               .arg(I18n::t(QStringLiteral("cli.doctor_wordlist_name")), -14)
+               .arg(wordlist.isEmpty() ? missing : wordlist, -34)
+               .arg(I18n::t(QStringLiteral("cli.doctor_wordlist")));
+}
+
 void printHelp(QTextStream &out) {
     out << I18n::t(QStringLiteral("cli.help_title")) << "\n\n"
         << I18n::t(QStringLiteral("cli.help_usage_header")) << '\n'
@@ -31,6 +78,7 @@ void printHelp(QTextStream &out) {
         << I18n::t(QStringLiteral("cli.help_options_header")) << '\n'
         << "  -v, --version      " << I18n::t(QStringLiteral("cli.help_version")) << '\n'
         << "  -h, --help         " << I18n::t(QStringLiteral("cli.help_help")) << '\n'
+        << "  --doctor           " << I18n::t(QStringLiteral("cli.help_doctor")) << '\n'
         << "  --kdbx2pass        " << I18n::t(QStringLiteral("cli.help_kdbx2pass_1")) << '\n'
         << "                     " << I18n::t(QStringLiteral("cli.help_kdbx2pass_2")) << '\n';
 }
@@ -53,6 +101,11 @@ int runCommandLine(int argc, char *argv[], const QStringList &args, bool *handle
 
     if (command == QStringLiteral("-h") || command == QStringLiteral("--help")) {
         printHelp(out);
+        return 0;
+    }
+
+    if (command == QStringLiteral("--doctor")) {
+        printDoctor(out);
         return 0;
     }
 

@@ -1,0 +1,148 @@
+#!/usr/bin/env sh
+# Builds a portable omapass: one file carrying Qt, the QML it uses, the
+# bundled keepassxc-cli and the wordlists.
+#
+# By default it builds inside an Ubuntu 24.04 container, and that is not a
+# detail: an AppImage only runs where glibc is at least as new as the one it
+# was built against, so building on Arch would produce a file that runs on
+# Arch. Ubuntu LTS is old enough to cover most of what people have.
+#
+#   bin/appimage            builds in a container (docker or podman)
+#   bin/appimage --native   builds on this machine, to try it out here
+set -eu
+
+version_of() {
+    sed -n 's/.*applicationVersion = QStringLiteral("\([^"]*\)").*/\1/p' "$1/src/main.cpp"
+}
+
+# Everything from a built tree to the finished file. Also called from inside
+# the container, which sources this script for it.
+build_appimage() {
+    work="$1"
+    out="$2"
+    version="$3"
+
+    cd "$work"
+    ./bin/build
+
+    rm -rf AppDir
+    make install DESTDIR="$work/AppDir" PREFIX=/usr
+
+    qmake_bin="$(command -v qmake6 || command -v qmake)"
+    qt_plugins="$("$qmake_bin" -query QT_INSTALL_PLUGINS)"
+
+    # linuxdeploy carries the Wayland platform plugin but not the client
+    # buffer integration it loads at start-up. Without it the application
+    # dies on a Wayland session — "Failed to load client buffer integration:
+    # wayland-egl", then no GL context and an abort — so it is put in place
+    # before linuxdeploy runs, which then treats it like anything else it
+    # finds there.
+    extra_libraries=""
+    if [ -d "$qt_plugins/wayland-graphics-integration-client" ]; then
+        mkdir -p AppDir/usr/plugins
+        cp -a "$qt_plugins/wayland-graphics-integration-client" AppDir/usr/plugins/
+
+        # Those plugins link Qt libraries of their own
+        # (libQt6WaylandEglClientHwIntegration, say). linuxdeploy only
+        # follows what it copied itself, so they are named to it.
+        for plugin in AppDir/usr/plugins/wayland-graphics-integration-client/*.so; do
+            for library in $(ldd "$plugin" 2>/dev/null | awk '/=> \//{print $3}'); do
+                case "$library" in
+                    *libQt6*) extra_libraries="$extra_libraries --library=$library" ;;
+                esac
+            done
+        done
+    fi
+
+    # linuxdeploy bundles Qt and the QML modules the sources import. Both
+    # tools are AppImages themselves, extracted rather than mounted, because
+    # a container has no FUSE.
+    tools="$work/.appimage-tools"
+    mkdir -p "$tools"
+    for tool in linuxdeploy linuxdeploy-plugin-qt; do
+        if [ ! -x "$tools/$tool" ]; then
+            curl -sSL -o "$tools/$tool" \
+                "https://github.com/linuxdeploy/$tool/releases/download/continuous/$tool-x86_64.AppImage"
+            chmod +x "$tools/$tool"
+        fi
+    done
+
+    APPIMAGE_EXTRACT_AND_RUN=1
+    PATH="$tools:$PATH"
+    QML_SOURCES_PATHS="$work/src"
+    QMAKE="$qmake_bin"
+    VERSION="$version"
+    # Only xcb travels by default, which on a Wayland-only session means the
+    # application does not start at all; offscreen is what lets the finished
+    # file be checked without a screen.
+    EXTRA_PLATFORM_PLUGINS="libqwayland-generic.so;libqwayland-egl.so;libqoffscreen.so"
+    EXTRA_QT_PLUGINS="wayland-decoration-client;wayland-graphics-integration-client;wayland-shell-integration"
+    export APPIMAGE_EXTRACT_AND_RUN PATH QML_SOURCES_PATHS QMAKE VERSION
+    export EXTRA_PLATFORM_PLUGINS EXTRA_QT_PLUGINS
+
+    # Unquoted on purpose: each --library=… is its own argument.
+    # shellcheck disable=SC2086
+    linuxdeploy --appdir AppDir --plugin qt $extra_libraries \
+        --desktop-file AppDir/usr/share/applications/omapass.desktop \
+        --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/omapass.svg \
+        --custom-apprun "$work/packaging/AppRun" \
+        --output appimage
+
+    # linuxdeploy names the file after the desktop entry's Name, which is
+    # capitalised; the release keeps the command's spelling.
+    mkdir -p "$out"
+    mv ./*.AppImage "$out/omapass-$version-x86_64.AppImage"
+}
+
+# The container step sources this file to reuse build_appimage(), and stops
+# here. Through a variable rather than an argument because `.` does not pass
+# arguments to the sourced file in dash, which is what /bin/sh is on Ubuntu.
+if [ "${OMAPASS_APPIMAGE_SOURCE_ONLY:-}" = "1" ]; then
+    return 0
+fi
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+DIST="$ROOT/dist"
+IMAGE="omapass-appimage:ubuntu-24.04"
+
+if [ "${1:-}" = "--native" ]; then
+    build_appimage "$ROOT" "$DIST" "$(version_of "$ROOT")"
+    echo "Gerado: $DIST/omapass-$(version_of "$ROOT")-x86_64.AppImage"
+    echo "Feito nesta máquina: roda só onde a glibc for pelo menos tão nova quanto a daqui."
+    exit 0
+fi
+
+if command -v docker >/dev/null 2>&1; then
+    engine=docker
+elif command -v podman >/dev/null 2>&1; then
+    engine=podman
+else
+    echo "docker ou podman são necessários para gerar um AppImage portátil." >&2
+    echo "Use 'bin/appimage --native' para gerar um que rode só nesta máquina." >&2
+    exit 1
+fi
+
+mkdir -p "$DIST"
+
+# Built once and reused; only the omapass build itself is paid for again.
+echo "Preparando o ambiente de build ($IMAGE)…"
+"$engine" build -q -t "$IMAGE" -f "$ROOT/packaging/appimage.Dockerfile" "$ROOT/packaging" >/dev/null
+
+"$engine" run --rm \
+    -v "$ROOT":/src:ro \
+    -v "$DIST":/out \
+    -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+    "$IMAGE" sh -c '
+set -eu
+cp -a /src /work
+rm -rf /work/build /work/build-tests /work/dist
+cd /work
+export OMAPASS_APPIMAGE_SOURCE_ONLY=1
+. ./bin/appimage
+unset OMAPASS_APPIMAGE_SOURCE_ONLY
+build_appimage /work /out "$(version_of /work)"
+chown "$HOST_UID:$HOST_GID" /out/omapass-*.AppImage
+'
+
+echo "Gerado em $DIST:"
+ls -1 "$DIST"

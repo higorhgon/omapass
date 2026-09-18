@@ -38,7 +38,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - `xdg-desktop-portal` e um backend de portal (para o modo claro/escuro e o tamanho de texto do desktop)
 - `wl-clipboard` (`wl-copy`) para copiar senhas
 - Para o desbloqueio por PIN (opcional, em qualquer banco): `secret-tool`, do `libsecret`, e um chaveiro do sistema destravado — o Omarchy já traz os dois. Sem isso, a opção de PIN simplesmente não aparece.
-- Botan 3 (`botan` no Arch/Omarchy, `libbotan-3-dev` no Debian/Ubuntu) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
+- Botan 3 (`botan` no Arch/Omarchy) ou Botan 2.19+ (`libbotan-2-dev` no Ubuntu 24.04 LTS, que ainda não tem o 3) — usado para abrir contas Bitwarden sem passar pelo `bw`, e já exigido para compilar o `keepassxc-cli`
 
 Para bancos **KeePassXC**:
 
@@ -61,9 +61,30 @@ Para contas **1Password**:
 - Uma conta em que você possa usar a senha mestra e a Secret Key (as contas que entram só por SSO não têm senha mestra, e o `op` não as adiciona desse jeito).
 - `script`, do `util-linux` (já presente em qualquer instalação): o `op` só pergunta o código de verificação em duas etapas quando está falando com um terminal, então o omapass empresta um a ele. Sem o `script`, contas **sem** duas etapas continuam abrindo normalmente.
 
+`omapass --doctor` mostra, num relance, o que ele encontrou no seu sistema e para que serve
+cada coisa — é a resposta rápida para "por que tal backend não aparece?".
+
 A busca por bancos usa [`fd`](https://github.com/sharkdp/fd) quando disponível
 (bem mais rápido em um diretório home inteiro) e cai para uma varredura própria
 quando não está instalado.
+
+### No Ubuntu
+
+O omapass compila no Ubuntu 24.04 LTS (testado com Qt 6.4 e Botan 2.19) com:
+
+```bash
+sudo apt install build-essential cmake pkg-config qmake6 qt6-base-dev \
+  qt6-declarative-dev qt6-tools-dev qml6-module-qtquick \
+  qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qttest \
+  libgl-dev libbotan-2-dev zlib1g-dev libminizip-dev libpcsclite-dev \
+  libusb-1.0-0-dev libreadline-dev libxkbcommon-dev
+```
+
+Daí em diante é igual ao Arch: `./bin/build` (que compila o `keepassxc-cli` junto) e
+`sudo make install`. Verificado num container `ubuntu:24.04` — Qt 6.4.2, Botan 2.19.3 —
+com os testes passando e os dois binários gerados. O CI compila nas duas distribuições a
+cada mudança, então isso não volta a quebrar sem aviso.
 
 ## Instalação
 
@@ -102,6 +123,32 @@ sudo make uninstall
 ```
 
 `PREFIX` e `DESTDIR` são configuráveis, por exemplo `make install PREFIX=/usr DESTDIR="$pkgdir"` para empacotamento.
+
+### AppImage
+
+`make appimage` gera um arquivo único — Qt, os módulos QML, o `keepassxc-cli` e as listas de
+palavras, tudo dentro — em `dist/omapass-<versão>-x86_64.AppImage`:
+
+```bash
+make appimage          # compila num container Ubuntu 24.04 (docker ou podman)
+bin/appimage --native  # compila nesta máquina, para experimentar
+```
+
+Ele compila **dentro de um container Ubuntu LTS** de propósito: um AppImage só roda onde a
+glibc for pelo menos tão nova quanto a da máquina que o gerou, então um feito no Arch rodaria
+só em sistemas igualmente recentes. `bin/appimage --native` existe para experimentar
+localmente, e avisa disso.
+
+Os CLIs dos backends **não** vão dentro: `bw`, `op`, `gpg` e `pass` continuam sendo do
+sistema, porque são eles que guardam as suas contas e chaves. O `keepassxc-cli` vai, porque o
+omapass o compila junto. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
+em que ele estiver rodando.
+
+### Empacotando para o Arch
+
+`packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório, submodule
+incluído (`makepkg -si` dentro dele). Quando houver versões marcadas, ele vira um
+`omapass` comum com tarball e `pkgver` fixo.
 
 ## Uso
 

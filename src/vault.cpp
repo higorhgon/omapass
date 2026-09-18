@@ -33,7 +33,13 @@ QStringList findFiles(const QString &pattern, const QString &path, bool includeH
         args << QStringLiteral("--hidden") << QStringLiteral("--no-ignore");
     args << pattern << path;
 
-    const ProcResult fd = runProcess(QStringLiteral("fd"), args);
+    // Debian and Ubuntu ship the same tool as `fdfind`, the name having been
+    // taken; looking only for `fd` there means always walking by hand, which
+    // on a home of half a million files is seconds instead of a tenth of one.
+    ProcResult fd = runProcess(QStringLiteral("fd"), args);
+    if (!fd.started)
+        fd = runProcess(QStringLiteral("fdfind"), args);
+
     if (fd.started) {
         const auto lines = fd.out.split(QLatin1Char('\n'));
         for (const QString &line : lines) {
@@ -48,10 +54,14 @@ QStringList findFiles(const QString &pattern, const QString &path, bool includeH
     if (includeHidden)
         filters |= QDir::Hidden;
 
+    // Compiled once: this loop sees every file under the search path, and
+    // building the expression inside it was most of what the walk cost.
+    const QRegularExpression expression(pattern);
+
     QDirIterator it(path, filters, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         it.next();
-        if (QRegularExpression(pattern).match(it.fileName()).hasMatch())
+        if (expression.match(it.fileName()).hasMatch())
             results.append(it.filePath());
     }
     return results;
