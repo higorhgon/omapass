@@ -42,8 +42,9 @@ public:
     // the e-mail when `op` derived one from the address (`my` and the like,
     // which says nothing about whose account it is).
     static QString displayName(const QString &account);
-    // Signs out and drops the account's details from this device.
-    static void logout(const QString &account);
+    // Signs out and drops the account's details from this device, checking
+    // afterwards that `op` really stopped listing it.
+    static bool logout(const QString &account, QString *error);
 
     // Signs in with the master password and loads the account.
     static OnePasswordVault *unlock(const QString &account, const Secret &password, QString *error);

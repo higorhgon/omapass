@@ -1158,14 +1158,17 @@ void AppController::logoutOnePassword(int index) {
     const QString path = ref.path;
     runInBackground(
         [account, path]() {
-            OnePasswordVault::logout(account);
-            Pin::clear(path);
-            return TaskResult{true, QString()};
+            TaskResult result;
+            result.ok = OnePasswordVault::logout(account, &result.error);
+            if (result.ok)
+                Pin::clear(path);
+            return result;
         },
-        [this](const TaskResult &) {
+        [this](const TaskResult &result) {
             refreshPinState();
             refreshDatabases();
-            showMessage(I18n::t(QStringLiteral("onepassword.logged_out")), false);
+            showMessage(result.ok ? I18n::t(QStringLiteral("onepassword.logged_out")) : result.error,
+                        !result.ok);
         });
 }
 
