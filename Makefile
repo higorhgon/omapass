@@ -13,7 +13,7 @@ TARGET := omapass
 BUILD_DIR := build
 TEST_BUILD_DIR := build-tests
 
-.PHONY: all build test install uninstall clean distclean
+.PHONY: all build test appimage install uninstall clean distclean
 
 all: build
 
@@ -22,6 +22,11 @@ build:
 
 test:
 	./bin/test
+
+# Um arquivo só, com o Qt e o keepassxc-cli dentro, compilado num container
+# Ubuntu LTS para rodar também em distribuições mais antigas.
+appimage:
+	./bin/appimage
 
 install: build
 	install -Dm755 $(BUILD_DIR)/$(TARGET) $(BINDIR)/$(TARGET)
@@ -44,6 +49,6 @@ uninstall:
 	@echo "omapass removido de $(BINDIR)/$(TARGET)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(TEST_BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(TEST_BUILD_DIR) AppDir dist .appimage-tools
 
 distclean: clean

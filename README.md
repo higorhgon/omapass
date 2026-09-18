@@ -124,6 +124,26 @@ sudo make uninstall
 
 `PREFIX` e `DESTDIR` são configuráveis, por exemplo `make install PREFIX=/usr DESTDIR="$pkgdir"` para empacotamento.
 
+### AppImage
+
+`make appimage` gera um arquivo único — Qt, os módulos QML, o `keepassxc-cli` e as listas de
+palavras, tudo dentro — em `dist/omapass-<versão>-x86_64.AppImage`:
+
+```bash
+make appimage          # compila num container Ubuntu 24.04 (docker ou podman)
+bin/appimage --native  # compila nesta máquina, para experimentar
+```
+
+Ele compila **dentro de um container Ubuntu LTS** de propósito: um AppImage só roda onde a
+glibc for pelo menos tão nova quanto a da máquina que o gerou, então um feito no Arch rodaria
+só em sistemas igualmente recentes. `bin/appimage --native` existe para experimentar
+localmente, e avisa disso.
+
+Os CLIs dos backends **não** vão dentro: `bw`, `op`, `gpg` e `pass` continuam sendo do
+sistema, porque são eles que guardam as suas contas e chaves. O `keepassxc-cli` vai, porque o
+omapass o compila junto. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
+em que ele estiver rodando.
+
 ### Empacotando para o Arch
 
 `packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório, submodule
