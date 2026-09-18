@@ -200,6 +200,10 @@ private:
     // Whether the open vault can take a change right now; says why not on the
     // status line when it cannot.
     bool vaultReadyForChanges();
+    // Whether nothing else is running. Account actions used to return in
+    // silence while busy, which looks exactly like a shortcut that does
+    // nothing.
+    bool requireIdle();
     void startBackgroundSync();
     void applyLockSettings();
     void setSyncing(bool syncing);

@@ -257,6 +257,13 @@ void AppController::runInBackground(Work work, Done done) {
     watcher->setFuture(future);
 }
 
+bool AppController::requireIdle() {
+    if (!m_busy)
+        return true;
+    showMessage(I18n::t(QStringLiteral("app.working")), true);
+    return false;
+}
+
 bool AppController::vaultReadyForChanges() {
     if (m_vault.isNull() || m_busy)
         return false;
@@ -970,7 +977,7 @@ void AppController::setLoginStep(const QString &step) {
 }
 
 void AppController::addBitwardenAccount() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     setUnlockError(QString());
@@ -1051,7 +1058,7 @@ bool AppController::isBitwardenDatabase(int index) const {
 }
 
 void AppController::logoutBitwarden() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     const QString email = BitwardenVault::rememberedAccount();
@@ -1072,7 +1079,7 @@ void AppController::logoutBitwarden() {
 }
 
 void AppController::addOnePasswordAccount() {
-    if (m_busy)
+    if (!requireIdle())
         return;
 
     // Always the login sheet: every account `op` already has is in the list
@@ -1143,7 +1150,7 @@ bool AppController::isOnePasswordDatabase(int index) const {
 }
 
 void AppController::logoutOnePassword(int index) {
-    if (m_busy || !isOnePasswordDatabase(index))
+    if (!requireIdle() || !isOnePasswordDatabase(index))
         return;
 
     const DbRef ref = m_filteredDatabases.at(index);

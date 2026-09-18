@@ -645,6 +645,12 @@ private slots:
                      "Enter the password for pessoa@exemplo.com at my.1password.com:\r\n"
                      "Enter your six-digit authentication code:")),
                  OpPrompt::TwoFactorCode);
+        // Other wordings the code has been asked for: a prompt that goes
+        // unrecognised is a prompt nobody answers, and the run hangs.
+        QCOMPARE(detectOpPrompt(QStringLiteral("Enter your one-time password: ")),
+                 OpPrompt::TwoFactorCode);
+        QCOMPARE(detectOpPrompt(QStringLiteral("Enter the verification code we sent you: ")),
+                 OpPrompt::TwoFactorCode);
         QCOMPARE(detectOpPrompt(QStringLiteral("carregando")), OpPrompt::None);
     }
 

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QSet>
+#include <QTimer>
 
 #include "opjson.h"
 #include "secret.h"
@@ -49,6 +50,7 @@ private:
     void onFinished(int exitCode, QProcess::ExitStatus status);
     void answer(const Secret &secret);
     void runOp(const QStringList &args, const QProcessEnvironment &env);
+    void onSilence();
     // `op signin`, which the add flow chains into once the account is on the
     // device.
     void beginSignIn();
@@ -68,5 +70,9 @@ private:
     // answers both, so it is held until the session is open.
     bool m_addingAccount = false;
     QSet<int> m_promptsSeen;
+    // `op` waiting on something omapass did not recognise would otherwise
+    // hang the run, and with it every action in the window, with nothing on
+    // screen to say why.
+    QTimer m_silence;
     bool m_stopping = false;
 };
