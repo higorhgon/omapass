@@ -1,6 +1,13 @@
 QT += core testlib
 CONFIG += testcase c++20 link_pkgconfig
-PKGCONFIG += botan-3
+# Botan 3 where the distribution has it (Arch), Botan 2 where it does not
+# (Ubuntu 24.04 LTS ships 2.19). Everything omapass asks of Botan exists in
+# both; the two calls whose spelling changed are handled in bwcrypto.cpp.
+packagesExist(botan-3) {
+    PKGCONFIG += botan-3
+} else {
+    PKGCONFIG += botan-2
+}
 DEFINES += OMAPASS_BW_FIXTURES=\\\"$$PWD/fixtures/bitwarden\\\"
 DEFINES += OMAPASS_OP_FIXTURES=\\\"$$PWD/fixtures/onepassword\\\"
 DEFINES += OMAPASS_FAKE_CLIS=\\\"$$PWD/fakes\\\"

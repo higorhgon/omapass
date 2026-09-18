@@ -13,8 +13,33 @@
 #include <botan/pubkey.h>
 #include <botan/pwdhash.h>
 #include <botan/system_rng.h>
+#include <botan/version.h>
+
+#include <cstring>
 
 namespace {
+
+// Botan 3 scoped what Botan 2 left loose, and dropped a parameter PKCS#8
+// loading no longer needs. Everything else omapass uses is spelled the same
+// in both, which is what lets a build on Ubuntu 24.04 (Botan 2.19) work.
+#if BOTAN_VERSION_MAJOR >= 3
+constexpr auto decryptDirection = Botan::Cipher_Dir::Decryption;
+constexpr auto encryptDirection = Botan::Cipher_Dir::Encryption;
+#else
+constexpr auto decryptDirection = Botan::DECRYPTION;
+constexpr auto encryptDirection = Botan::ENCRYPTION;
+#endif
+
+std::unique_ptr<Botan::Private_Key> loadPrivateKey(Botan::DataSource &source) {
+#if BOTAN_VERSION_MAJOR >= 3
+    return Botan::PKCS8::load_key(source);
+#else
+    // Botan 2 hands back a raw pointer, and wants an RNG it no longer needs.
+    Botan::System_RNG rng;
+    return std::unique_ptr<Botan::Private_Key>(Botan::PKCS8::load_key(source, rng));
+#endif
+}
+
 
 BwBytes fromBase64(const QString &text) {
     const QByteArray decoded = QByteArray::fromBase64(text.toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
@@ -49,8 +74,10 @@ std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &
         if (kdf.type == 0) {
             const auto family = Botan::PasswordHashFamily::create_or_throw("PBKDF2(SHA-256)");
             const auto hash = family->from_params(size_t(kdf.iterations));
-            hash->hash(out, std::string_view(password.bytes().constData(), size_t(password.bytes().size())),
-                       std::span(reinterpret_cast<const uint8_t *>(saltBytes.constData()), size_t(saltBytes.size())));
+            hash->derive_key(out.data(), out.size(), password.bytes().constData(),
+                             size_t(password.bytes().size()),
+                             reinterpret_cast<const uint8_t *>(saltBytes.constData()),
+                             size_t(saltBytes.size()));
             return out;
         }
 
@@ -66,8 +93,8 @@ std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &
             const auto family = Botan::PasswordHashFamily::create_or_throw("Argon2id");
             const auto hash = family->from_params(size_t(kdf.memory) * 1024, size_t(kdf.iterations),
                                                   size_t(kdf.parallelism));
-            hash->hash(out, std::string_view(password.bytes().constData(), size_t(password.bytes().size())),
-                       std::span(hashedSalt.data(), hashedSalt.size()));
+            hash->derive_key(out.data(), out.size(), password.bytes().constData(),
+                             size_t(password.bytes().size()), hashedSalt.data(), hashedSalt.size());
             return out;
         }
     } catch (const std::exception &) {
@@ -84,13 +111,17 @@ std::optional<BwKey> deriveMasterKey(const Secret &password, const QString &salt
     try {
         // HKDF-Expand only (no extract step), as the SDK's stretch does.
         const auto hkdf = Botan::KDF::create_or_throw("HKDF-Expand(SHA-256)");
-        const std::string_view enc = "enc";
-        const std::string_view mac = "mac";
+        // The pointer form, which both Botan 2 and 3 spell the same way; no
+        // salt, since this is HKDF-Expand only, as the SDK's stretch does.
+        const auto expand = [&hkdf, &material](const char *label) {
+            return hkdf->derive_key(32, material->data(), material->size(),
+                                    static_cast<const uint8_t *>(nullptr), size_t(0),
+                                    reinterpret_cast<const uint8_t *>(label), std::strlen(label));
+        };
+
         BwKey key;
-        key.enc = hkdf->derive_key(32, *material, std::span<const uint8_t>(),
-                                   std::span(reinterpret_cast<const uint8_t *>(enc.data()), enc.size()));
-        key.mac = hkdf->derive_key(32, *material, std::span<const uint8_t>(),
-                                   std::span(reinterpret_cast<const uint8_t *>(mac.data()), mac.size()));
+        key.enc = expand("enc");
+        key.mac = expand("mac");
         return key;
     } catch (const std::exception &) {
         return std::nullopt;
@@ -129,7 +160,7 @@ std::optional<BwBytes> decrypt(const QString &encString, const BwKey &key) {
         if (!hmac->verify_mac(mac))
             return std::nullopt;
 
-        const auto aes = Botan::Cipher_Mode::create_or_throw("AES-256/CBC/PKCS7", Botan::Cipher_Dir::Decryption);
+        const auto aes = Botan::Cipher_Mode::create_or_throw("AES-256/CBC/PKCS7", decryptDirection);
         aes->set_key(key.enc);
         aes->start(iv);
         aes->finish(data);
@@ -147,7 +178,7 @@ std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key) {
         const BwBytes iv = randomBytes(16);
         BwBytes data(plaintext.cbegin(), plaintext.cend());
 
-        const auto aes = Botan::Cipher_Mode::create_or_throw("AES-256/CBC/PKCS7", Botan::Cipher_Dir::Encryption);
+        const auto aes = Botan::Cipher_Mode::create_or_throw("AES-256/CBC/PKCS7", encryptDirection);
         aes->set_key(key.enc);
         aes->start(iv);
         aes->finish(data);
@@ -206,7 +237,7 @@ std::optional<BwBytes> rsaDecrypt(const QString &encString, const BwBytes &pkcs8
 
     try {
         Botan::DataSource_Memory source(pkcs8PrivateKey);
-        const std::unique_ptr<Botan::Private_Key> privateKey = Botan::PKCS8::load_key(source);
+        const std::unique_ptr<Botan::Private_Key> privateKey = loadPrivateKey(source);
         Botan::System_RNG rng;
         Botan::PK_Decryptor_EME decryptor(*privateKey, rng, padding);
         const BwBytes data = fromBase64(body);
