@@ -129,6 +129,16 @@ QString opDisplayName(const QString &name) {
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
 }
 
+QString opShellCommand(const QStringList &args) {
+    QStringList quoted;
+    for (const QString &argument : args) {
+        QString escaped = argument;
+        escaped.replace(QLatin1Char('\''), QLatin1String("'\\''"));
+        quoted << QLatin1Char('\'') + escaped + QLatin1Char('\'');
+    }
+    return QStringLiteral("op ") + quoted.join(QLatin1Char(' '));
+}
+
 OpSession parseOpSignIn(const QString &output) {
     // `export OP_SESSION_name="token"`, among the comment lines op adds.
     static const QRegularExpression exported(

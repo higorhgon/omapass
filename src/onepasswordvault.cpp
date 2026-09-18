@@ -69,6 +69,23 @@ QString sessionVariableFor(const QString &account, const QString &stated) {
     return QStringLiteral("OP_SESSION_") + name;
 }
 
+// Some `op` commands answer differently with nothing but a pipe on the
+// other side — signing out is one — so they get a terminal borrowed from
+// `script`, exactly as the sign-in does.
+ProcResult runOpUnderTerminal(const QStringList &args) {
+    if (QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty())
+        return runProcess(QStringLiteral("op"), args);
+
+    ProcResult result = runProcess(QStringLiteral("script"),
+                                   {QStringLiteral("-qec"), opShellCommand(args),
+                                    QStringLiteral("/dev/null")});
+    // Under the terminal there is no separate stderr; what op said is in the
+    // output either way.
+    if (result.err.trimmed().isEmpty())
+        result.err = result.out;
+    return result;
+}
+
 QProcessEnvironment opEnvironment(const QString &account, const Secret &session,
                                   const QString &sessionVariable) {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -250,9 +267,11 @@ bool OnePasswordVault::logout(const QString &account, QString *error) {
 
     ProcResult result;
     for (const QStringList &args : std::as_const(attempts)) {
-        result = runProcess(QStringLiteral("op"), args);
+        result = runOpUnderTerminal(args);
         if (!hasAccount(account))
             return true;
+        qWarning().noquote() << "omapass: op" << args.join(QLatin1Char(' '))
+                             << "did not remove the account:" << lastMessage(result);
     }
 
     const QString said = lastMessage(result);
@@ -274,7 +293,10 @@ bool OnePasswordVault::signIn(const QString &account, const Secret &password, Se
     // that follow simply carry no session variable.
     QByteArray input = password.bytes();
     input.append('\n');
-    ProcResult result = runOp(account, {QStringLiteral("signin")}, Secret(), QString(), input);
+    // --force so op prints the session line instead of telling us to run it
+    // in a shell, the same reason the interactive path passes it.
+    ProcResult result = runOp(account, {QStringLiteral("signin"), QStringLiteral("--force")},
+                              Secret(), QString(), input);
     input.fill('\0');
 
     if (!result.success) {

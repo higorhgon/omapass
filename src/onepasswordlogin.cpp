@@ -1,21 +1,14 @@
 #include "onepasswordlogin.h"
 
 #include "i18n.h"
+#include "onepasswordvault.h"
 
+#include <QDebug>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 
 namespace {
-
-// `op` only prompts when it is talking to a terminal, so signing in borrows
-// one from `script`. Nothing secret goes on the command line: the password
-// and the code are written to the pseudo terminal, like typing them.
-QString shellQuoted(const QString &text) {
-    QString quoted = text;
-    quoted.replace(QLatin1Char('\''), QLatin1String("'\\''"));
-    return QLatin1Char('\'') + quoted + QLatin1Char('\'');
-}
 
 bool ptyAvailable() {
     return !QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty();
@@ -136,13 +129,8 @@ void OnePasswordLogin::runOp(const QStringList &args, const QProcessEnvironment 
     }
 
     m_awaitingPasswordPrompt = true;
-    QStringList quoted;
-    for (const QString &argument : args)
-        quoted << shellQuoted(argument);
-    const QString command = QStringLiteral("op ") + quoted.join(QLatin1Char(' '));
-
     begin(QStringLiteral("script"),
-          {QStringLiteral("-qec"), command, QStringLiteral("/dev/null")}, env);
+          {QStringLiteral("-qec"), opShellCommand(args), QStringLiteral("/dev/null")}, env);
 }
 
 void OnePasswordLogin::begin(const QString &program, const QStringList &args,
@@ -271,7 +259,14 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     m_process = nullptr;
     m_secretKey.clear();
 
-    if (status == QProcess::NormalExit && exitCode == 0 && m_addingAccount) {
+    const bool ok = status == QProcess::NormalExit && exitCode == 0;
+
+    // What settles whether the account was added is op listing it, not the
+    // exit code: `op account add` can end with something to say — about
+    // running `op signin` in a shell, say — over an account it did add, and
+    // treating that as a failure would leave the account there with omapass
+    // claiming it never arrived.
+    if (m_addingAccount && (ok || OnePasswordVault::hasAccount(m_shorthand))) {
         // The account is on the device now; the session is a second run,
         // which the same password answers again — so it is only dropped
         // after that one.
@@ -283,7 +278,7 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
 
     m_password.clear();
 
-    if (status == QProcess::NormalExit && exitCode == 0) {
+    if (ok) {
         // op prints `export OP_SESSION_<name>="<token>"`, after whatever
         // prompts the terminal echoed; the name is op's own and is carried
         // along rather than guessed.
@@ -306,5 +301,6 @@ void OnePasswordLogin::onFinished(int exitCode, QProcess::ExitStatus status) {
     const QString message = lastLine(output);
     const OpError kind = classifyOpError(output);
     wipeBuffers();
+    qWarning().noquote() << "omapass: op run failed:" << message;
     emit failed(message, kind);
 }

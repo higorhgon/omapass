@@ -450,6 +450,17 @@ private slots:
         QCOMPARE(accounts.at(1).key(), accounts.at(1).userUuid);
     }
 
+    void onePasswordShellCommandQuotesItsArguments() {
+        QCOMPARE(opShellCommand({QStringLiteral("signin"), QStringLiteral("--account"),
+                                 QStringLiteral("minha")}),
+                 QStringLiteral("op 'signin' '--account' 'minha'"));
+        // A shorthand with a quote in it would otherwise end the string and
+        // let the rest be read as more shell.
+        QCOMPARE(opShellCommand({QStringLiteral("account"), QStringLiteral("forget"),
+                                 QStringLiteral("a'b")}),
+                 QStringLiteral("op 'account' 'forget' 'a'\\''b'"));
+    }
+
     void onePasswordSignInNamesItsOwnSessionVariable() {
         // What `op signin` prints without --raw, comments and all.
         const OpSession named = parseOpSignIn(QStringLiteral(

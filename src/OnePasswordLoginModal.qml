@@ -31,8 +31,15 @@ Modal {
 
     capturesKeys: false
 
+    // Through Qt.callLater because the step, the busy flag and the modal's
+    // own opening land in whatever order they land: focusing at the end of
+    // the cycle is the only moment all three are settled.
+    function focusLater() {
+        Qt.callLater(focusFirstField);
+    }
+
     function focusFirstField() {
-        if (root.askingCode) {
+        if (root.step === "opCode") {
             codeField.text = "";
             codeField.field.forceActiveFocus();
         } else if (addressField.text.length === 0) {
@@ -51,11 +58,11 @@ Modal {
         secretKeyField.text = "";
         passwordField.text = "";
         codeField.text = "";
-        focusFirstField();
+        focusLater();
     }
 
-    onStepChanged: if (visible) focusFirstField()
-    onBusyChanged: if (visible && !busy) focusFirstField()
+    onStepChanged: if (visible) focusLater()
+    onBusyChanged: if (visible && !busy) focusLater()
 
     // A failed attempt clears the secrets and puts the cursor back on the
     // first field that is still empty.
@@ -63,7 +70,7 @@ Modal {
         if (errorText.length > 0) {
             secretKeyField.text = "";
             passwordField.text = "";
-            focusFirstField();
+            focusLater();
         }
     }
 
