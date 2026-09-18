@@ -19,7 +19,8 @@
 //
 // Security notes:
 // - The session token lives in a `Secret` and only reaches `op` through the
-//   OP_SESSION_<account> variable of each child process, never argv.
+//   environment variable `op` itself named when it handed the token over,
+//   never argv.
 // - The master password is written to `op signin` on stdin, and item JSON
 //   (which carries the password) to `op item create`/`op item edit` the same
 //   way, so neither shows up in `ps`.
@@ -48,8 +49,10 @@ public:
     static OnePasswordVault *unlock(const QString &account, const Secret &password, QString *error);
     // Loads the account behind a session token `op signin` already handed
     // back, which is how the login flow gets in.
+    // `sessionVariable` is the name `op` printed with the token; empty falls
+    // back to OP_SESSION_<account>.
     static OnePasswordVault *openWithSession(const QString &account, const Secret &session,
-                                             QString *error);
+                                             const QString &sessionVariable, QString *error);
 
     void list(QStringList *entries, QStringList *groups) const override;
     QString titleFor(const QString &entryPath, const QString &fallback) const override;
@@ -65,11 +68,12 @@ public:
     void close() override;
 
 private:
-    OnePasswordVault(const QString &account, const Secret &session)
-        : Vault(VaultKind::OnePassword, refPath(account)), m_account(account), m_session(session) {}
+    OnePasswordVault(const QString &account, const Secret &session, const QString &sessionVariable)
+        : Vault(VaultKind::OnePassword, refPath(account)), m_account(account), m_session(session),
+          m_sessionVariable(sessionVariable) {}
 
     static bool signIn(const QString &account, const Secret &password, Secret *session,
-                       QString *error);
+                       QString *sessionVariable, QString *error);
 
     bool reload(QString *error) const;
     // The item as `op` has it, fetched once and then kept: a listing only
@@ -89,6 +93,7 @@ private:
 
     QString m_account;
     Secret m_session;
+    QString m_sessionVariable;
 
     // Mutable because the Vault interface is const: the cache is refreshed
     // by the very operations that change what it mirrors, and the mutex lets

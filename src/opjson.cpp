@@ -91,6 +91,7 @@ QVector<OpAccount> parseOpAccounts(const QByteArray &json) {
         account.email = object.value(QStringLiteral("email")).toString();
         account.url = object.value(QStringLiteral("url")).toString();
         account.userUuid = object.value(QStringLiteral("user_uuid")).toString();
+        account.accountUuid = object.value(QStringLiteral("account_uuid")).toString();
         if (!account.key().isEmpty())
             accounts.append(account);
     }
@@ -126,6 +127,31 @@ QString opDisplayName(const QString &name) {
     QString display = name;
     display.replace(QLatin1Char('/'), QChar(0x2215));
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
+}
+
+OpSession parseOpSignIn(const QString &output) {
+    // `export OP_SESSION_name="token"`, among the comment lines op adds.
+    static const QRegularExpression exported(
+        QStringLiteral("(OP_SESSION_[A-Za-z0-9_]+)\\s*=\\s*\"([^\"]+)\""));
+
+    OpSession session;
+    const QRegularExpressionMatch match = exported.match(output);
+    if (match.hasMatch()) {
+        session.variable = match.captured(1);
+        session.token = match.captured(2);
+        return session;
+    }
+
+    // --raw, or a shape this does not know: the token is the last thing
+    // printed, and the caller falls back to naming the variable itself.
+    const QStringList lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (auto it = lines.crbegin(); it != lines.crend() && session.token.isEmpty(); ++it) {
+        const QString line = it->trimmed();
+        // Comments and the prompts a terminal echoes back are not tokens.
+        if (!line.isEmpty() && !line.startsWith(QLatin1Char('#')) && !line.contains(QLatin1Char(' ')))
+            session.token = line;
+    }
+    return session;
 }
 
 QString opShorthandFor(const QString &email, const QString &address) {

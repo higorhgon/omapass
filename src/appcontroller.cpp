@@ -151,7 +151,7 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             setLoginStep(QStringLiteral("opCode"));
     });
     connect(&m_onePasswordLogin, &OnePasswordLogin::succeeded, this,
-            [this](const QString &account, const Secret &session) {
+            [this](const QString &account, const QString &sessionVariable, const Secret &session) {
         const bool adding = m_onePasswordAdding;
         if (adding) {
             refreshDatabases();
@@ -163,9 +163,10 @@ AppController::AppController(const AppConfig &config, QObject *parent)
         // something that was just given.
         const DbRef ref{OnePasswordVault::refPath(account), VaultKind::OnePassword};
         runInBackground(
-            [account, session]() {
+            [account, sessionVariable, session]() {
                 OpenResult result;
-                result.vault = OnePasswordVault::openWithSession(account, session, &result.error);
+                result.vault = OnePasswordVault::openWithSession(account, session, sessionVariable,
+                                                                 &result.error);
                 return result;
             },
             [this, ref, adding](const OpenResult &result) {
