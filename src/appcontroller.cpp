@@ -234,6 +234,7 @@ void AppController::applyLockSettings() {
 
 AppController::~AppController() {
     m_bitwardenLogin.cancel();
+    m_onePasswordLogin.cancel();
     m_task.waitForFinished();
     m_syncTask.waitForFinished();
     closeVault();
