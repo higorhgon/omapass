@@ -15,6 +15,13 @@ struct ProcResult {
     QString err;
 };
 
+// How long a command may take before it is given up on. The CLIs omapass
+// drives answer in seconds at worst (`bw` is the slow one), and a run that
+// never ends would otherwise keep a background task — and with it the whole
+// interface — waiting for good.
+constexpr int processTimeoutMs = 120000;
+
 ProcResult runProcess(const QString &program, const QStringList &args,
                       const QByteArray &stdinData = QByteArray(),
-                      const QProcessEnvironment &env = QProcessEnvironment());
+                      const QProcessEnvironment &env = QProcessEnvironment(),
+                      int timeoutMs = processTimeoutMs);
