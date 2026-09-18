@@ -338,6 +338,7 @@ lugares nem palavras ofensivas, e nenhuma palavra sendo prefixo de outra.
 - Senhas e passphrases circulam em um tipo `Secret`, que mantém uma cópia própria e sobrescreve a memória ao ser destruído. A exceção inevitável é o campo de senha do formulário de edição: um campo editável precisa do texto em claro enquanto está na tela.
 - Ao copiar uma senha, o conteúdo é marcado como sensível para o `wl-clipboard` (mime `x-kde-passwordManagerHint`, que gerenciadores como o cliphist respeitam para não gravar no histórico) e o clipboard é limpo automaticamente após 10 segundos, com contagem regressiva visível na interface.
 - **`~/.config/omapass/history`** guarda só HMACs (com chave aleatória local em `.history_key`, 0600) e timestamps de uso, nunca o conteúdo das entradas — mas ainda revela para outro usuário local com acesso ao arquivo quantas entradas existem e o padrão de uso.
+- **Bloqueio manual**: `ESC` ou `q` com um banco aberto o travam na hora, pelo mesmo caminho do auto-lock abaixo — o `Vault` é descartado da memória e a interface volta para a lista de bancos. Na lista, as mesmas teclas fecham o omapass.
 - **Auto-lock por inatividade**: por padrão, 10 minutos sem uso travam o banco desbloqueado — o `Vault` (senha/passphrase incluída) é descartado da memória e a interface volta pra tela de bancos, pedindo pra desbloquear de novo. Ajustável (ou desativável) via `lock_minutes` no `config.toml` (veja [Configuração](#configuração)).
 - **Fecha ao travar a tela do sistema**: quando a sessão do desktop é bloqueada, o omapass fecha por completo (não só trava) — não fica um banco desbloqueado exposto atrás da tela de bloqueio. Reage tanto ao sinal `Lock` do logind (GNOME, KDE, qualquer setup com `loginctl lock-session`) quanto, especificamente no Hyprland/Omarchy — que não passa pelo logind pra travar a tela — sondando `omarchy-hyprland-session-locked` a cada 2s. Sem nenhum dos dois disponíveis, esse fechamento automático simplesmente não acontece (o auto-lock por inatividade acima continua funcionando normalmente).
 
@@ -447,6 +448,6 @@ Lista completa disponível a qualquer momento com `Ctrl+?`. Os mais essenciais:
 | `Ctrl+G` | Gerar senha (na lista, ou sobre o campo Senha do formulário) |
 | `Ctrl+I` | Ativar/desativar o desbloqueio por PIN (do banco aberto) |
 | `Ctrl+O` | Abrir as configurações |
-| `ESC` / `q` | Cancelar / Sair |
+| `ESC` / `q` | Cancelar; com um banco aberto, bloqueia e volta para a lista; na lista, sai do omapass |
 | `Ctrl+Q` | Sair do programa |
 | `Ctrl+C` | Sair do programa (fora de campos de texto, onde copia) |

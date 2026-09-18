@@ -116,7 +116,10 @@ FocusScope {
         onGenerateRequested: page.mode = "generate"
         onPinToggleRequested: page.togglePin()
         onHelpRequested: page.mode = "help"
-        onQuitRequested: Qt.quit()
+        // With a database open, ESC and q lock it and go back to the list
+        // instead of quitting: leaving the app is Ctrl+Q, and stepping out
+        // of the vault should not need the whole window to close.
+        onQuitRequested: controller.lock()
         onMenuRequested: function(menuX, menuY) {
             actionsMenu.anchorX = menuX;
             actionsMenu.anchorY = menuY;
@@ -262,6 +265,7 @@ FocusScope {
                 "title": i18n.t("help.general_section"),
                 "items": [["CTRL+?", i18n.t("help.this_help")],
                           ["CTRL-O", i18n.t("settings.help")],
+                          ["ESC, q", i18n.t("ui.help_lock")],
                           ["CTRL-C, CTRL-Q", i18n.t("help.quit_app")]]
             }
         ]

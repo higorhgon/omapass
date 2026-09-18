@@ -106,6 +106,9 @@ public:
     Q_INVOKABLE void unlock(const QString &password);
     Q_INVOKABLE void unlockWithPin(const QString &pin);
     Q_INVOKABLE void cancelUnlock();
+    // Locks the open vault and goes back to the database list — the same
+    // thing the inactivity timer does, on demand.
+    Q_INVOKABLE void lock();
 
     // Database creation
     Q_INVOKABLE void createKeepassDatabase(const QString &name, const QString &password);
@@ -214,7 +217,6 @@ private:
     void refreshPinState();
     void closeVault();
     void showClipboardMessage(const QString &text);
-    void lock();
 
     AppConfig m_config;
     History m_history;

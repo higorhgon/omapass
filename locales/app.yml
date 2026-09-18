@@ -629,8 +629,8 @@ ui.footer_search:
   pt-BR: "ENTER: Copiar | TAB: Info | CTRL+?: Ajuda"
   en: "ENTER: Copy | TAB: Info | CTRL+?: Help"
 ui.footer_normal:
-  pt-BR: "ENTER: Copiar | ESPAÇO: Ações | CTRL+?: Ajuda | ESC/q: Sair"
-  en: "ENTER: Copy | SPACE: Actions | CTRL+?: Help | ESC/q: Quit"
+  pt-BR: "ENTER: Copiar | ESPAÇO: Ações | CTRL+?: Ajuda | ESC/q: Bloquear"
+  en: "ENTER: Copy | SPACE: Actions | CTRL+?: Help | ESC/q: Lock"
 ui.footer_form:
   pt-BR: "TAB: Navegar | ENTER: Confirmar | ESC: Cancelar"
   en: "TAB: Navigate | ENTER: Confirm | ESC: Cancel"
@@ -706,6 +706,9 @@ ui.help_edit_entry:
 ui.help_delete_entry:
   pt-BR: "Excluir entrada"
   en: "Delete entry"
+ui.help_lock:
+  pt-BR: "Bloquear o banco e voltar para a lista"
+  en: "Lock the database and go back to the list"
 ui.help_exit_search:
   pt-BR: "Sair da busca / Fechar modal"
   en: "Exit search / Close modal"
