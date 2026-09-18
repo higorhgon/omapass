@@ -93,6 +93,26 @@ QString storedBlob(const QString &vaultPath) {
     return blob.isEmpty() ? migrateLegacy(vaultPath) : blob;
 }
 
+// How big an alphabet someone guessing this PIN would have to work through:
+// the classes it actually uses. It says nothing about how the PIN was
+// chosen — "123456" and "849271" count the same here.
+int alphabetSize(const QString &pin) {
+    bool digits = false, lower = false, upper = false, other = false;
+    for (const QChar &character : pin) {
+        if (character.isDigit())
+            digits = true;
+        else if (character.isLower())
+            lower = true;
+        else if (character.isUpper())
+            upper = true;
+        else
+            other = true;
+    }
+    // 33 is roughly the printable ASCII punctuation, which is what a guesser
+    // would try once any non-letter, non-digit shows up.
+    return (digits ? 10 : 0) + (lower ? 26 : 0) + (upper ? 26 : 0) + (other ? 33 : 0);
+}
+
 std::optional<BwKey> pinKey(const QString &pin, const QString &salt, int iterations) {
     BwKdf kdf;
     kdf.type = 0; // PBKDF2-SHA256
@@ -139,13 +159,13 @@ std::optional<Blob> parseBlob(const QString &text) {
     return blob;
 }
 
-QString validate(const QString &pin, const QString &confirm) {
+QString validate(const QString &pin, const QString &confirm, bool allowText) {
     static const QRegularExpression digits(QStringLiteral("^[0-9]+$"));
     if (pin.length() < minLength) {
         return I18n::t(QStringLiteral("pin.too_short"), QStringLiteral("min"),
                        QString::number(minLength));
     }
-    if (!digits.match(pin).hasMatch())
+    if (!allowText && !digits.match(pin).hasMatch())
         return I18n::t(QStringLiteral("pin.only_digits"));
     if (!confirm.isNull() && confirm != pin)
         return I18n::t(QStringLiteral("pin.mismatch"));
@@ -153,17 +173,21 @@ QString validate(const QString &pin, const QString &confirm) {
 }
 
 QString weakWarning(const QString &pin) {
-    if (pin.length() < minLength || pin.length() >= recommendedLength)
+    if (pin.length() < minLength)
         return QString();
 
+    // Counted up rather than raised to a power, so a long PIN stops the loop
+    // instead of overflowing it.
+    const int alphabet = alphabetSize(pin);
     qint64 combinations = 1;
-    for (int i = 0; i < pin.length(); ++i)
-        combinations *= 10;
+    for (int i = 0; i < pin.length(); ++i) {
+        combinations *= alphabet;
+        if (combinations >= weakBelowCombinations)
+            return QString();
+    }
 
     return I18n::t(QStringLiteral("pin.weak"),
-                   {{QStringLiteral("digits"), pin.length()},
-                    {QStringLiteral("combinations"), QLocale::system().toString(combinations)},
-                    {QStringLiteral("recommended"), recommendedLength}});
+                   {{QStringLiteral("combinations"), QLocale::system().toString(combinations)}});
 }
 
 bool isAvailable() {

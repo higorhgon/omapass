@@ -811,14 +811,25 @@ private slots:
     void pinValidationAndWeakWarning() {
         QVERIFY(Pin::validate(QStringLiteral("123456")).isEmpty());
         QVERIFY(!Pin::validate(QStringLiteral("123")).isEmpty());
-        QVERIFY(!Pin::validate(QStringLiteral("12ab")).isEmpty());
         QVERIFY(Pin::validate(QStringLiteral("1234"), QStringLiteral("1234")).isEmpty());
         QVERIFY(!Pin::validate(QStringLiteral("1234"), QStringLiteral("4321")).isEmpty());
 
-        // Four and five digits are accepted, but said out loud.
-        QVERIFY(Pin::weakWarning(QStringLiteral("1234")).contains(QStringLiteral("4")));
+        // Letters and symbols are refused unless they were asked for; the
+        // length rule holds either way.
+        QVERIFY(!Pin::validate(QStringLiteral("12ab")).isEmpty());
+        QVERIFY(Pin::validate(QStringLiteral("12ab"), QString(), true).isEmpty());
+        QVERIFY(Pin::validate(QStringLiteral("k7$w"), QString(), true).isEmpty());
+        QVERIFY(!Pin::validate(QStringLiteral("ab"), QString(), true).isEmpty());
+
+        // The warning goes by how many combinations the PIN gives, not by
+        // how long it is: six digits are a million and pass, five are not.
+        QVERIFY(!Pin::weakWarning(QStringLiteral("1234")).isEmpty());
         QVERIFY(!Pin::weakWarning(QStringLiteral("12345")).isEmpty());
         QVERIFY(Pin::weakWarning(QStringLiteral("123456")).isEmpty());
+        // Four lowercase letters are 456976 — still short of it.
+        QVERIFY(!Pin::weakWarning(QStringLiteral("abcd")).isEmpty());
+        // The same four with a digit and a symbol are 69^4, over 22 million.
+        QVERIFY(Pin::weakWarning(QStringLiteral("k7$w")).isEmpty());
         // Nothing flashes up while a PIN is still being typed.
         QVERIFY(Pin::weakWarning(QStringLiteral("12")).isEmpty());
     }

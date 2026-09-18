@@ -71,7 +71,6 @@ Modal {
         visible: root.usingPin
         label: i18n.t("pin.label")
         echoMode: TextInput.Password
-        field.inputMethodHints: Qt.ImhDigitsOnly
         enabled: !root.busy
 
         onSubmitted: root.pinSubmitted(text)

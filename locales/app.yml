@@ -356,14 +356,17 @@ pin.too_short:
   pt-BR: "O PIN precisa ter pelo menos %{min} dígitos."
   en: "The PIN must have at least %{min} digits."
 pin.only_digits:
-  pt-BR: "O PIN só pode conter dígitos."
-  en: "The PIN may only contain digits."
+  pt-BR: "O PIN só pode conter dígitos — marque \"Permitir letras e símbolos\" para usar outros."
+  en: "The PIN may only contain digits — tick \"Allow letters and symbols\" to use others."
+pin.allow_text:
+  pt-BR: "Permitir letras e símbolos"
+  en: "Allow letters and symbols"
 pin.mismatch:
   pt-BR: "Os PINs não coincidem."
   en: "The PINs do not match."
 pin.weak:
-  pt-BR: "Um PIN de %{digits} dígitos são só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline. Use %{recommended} ou mais."
-  en: "A %{digits}-digit PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing. Use %{recommended} or more."
+  pt-BR: "Este PIN dá só %{combinations} combinações. Se o dado guardado vazar, isso é questão de minutos para quem tentar offline — use mais caracteres, ou marque letras e símbolos."
+  en: "This PIN is only %{combinations} combinations. If the stored blob ever leaks, that is minutes of offline guessing — use more characters, or tick letters and symbols."
 pin.show:
   pt-BR: "Mostrar PIN"
   en: "Show PIN"

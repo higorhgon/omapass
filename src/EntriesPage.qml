@@ -158,8 +158,8 @@ FocusScope {
         visible: page.mode === "pin"
         busy: controller.busy
 
-        onSubmitted: function(masterPassword, pin) {
-            controller.enablePin(masterPassword, pin);
+        onSubmitted: function(masterPassword, pin, allowText) {
+            controller.enablePin(masterPassword, pin, allowText);
             page.mode = "list";
         }
         onDismissed: page.mode = "list"
