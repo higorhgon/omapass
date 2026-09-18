@@ -74,14 +74,17 @@ O omapass compila no Ubuntu 24.04 LTS (testado com Qt 6.4 e Botan 2.19) com:
 
 ```bash
 sudo apt install build-essential cmake pkg-config qmake6 qt6-base-dev \
-  qt6-declarative-dev qt6-tools-dev qml6-module-qttest \
+  qt6-declarative-dev qt6-tools-dev qml6-module-qtquick \
   qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qttest \
   libgl-dev libbotan-2-dev zlib1g-dev libminizip-dev libpcsclite-dev \
   libusb-1.0-0-dev libreadline-dev libxkbcommon-dev
 ```
 
-Daí em diante é igual ao Arch: `./bin/build` e `sudo make install`. O CI compila
-nas duas distribuições a cada mudança, então isso não volta a quebrar sem aviso.
+Daí em diante é igual ao Arch: `./bin/build` (que compila o `keepassxc-cli` junto) e
+`sudo make install`. Verificado num container `ubuntu:24.04` — Qt 6.4.2, Botan 2.19.3 —
+com os testes passando e os dois binários gerados. O CI compila nas duas distribuições a
+cada mudança, então isso não volta a quebrar sem aviso.
 
 ## Instalação
 
