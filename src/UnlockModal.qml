@@ -21,7 +21,7 @@ Modal {
     heading: i18n.t("db_app.unlock_title", { "db": databaseName })
     hint: busy ? i18n.t("db_app.unlocking")
                : errorText.length > 0 ? errorText
-               : usingPin ? i18n.t("bitwarden.pin_footer")
+               : usingPin ? i18n.t("pin.footer")
                : i18n.t("common.footer_confirm_cancel")
     hintColor: errorText.length > 0 ? theme.alertError : theme.guidance
 
@@ -69,7 +69,7 @@ Modal {
         id: pinField
         width: parent.width
         visible: root.usingPin
-        label: i18n.t("bitwarden.pin_label")
+        label: i18n.t("pin.label")
         echoMode: TextInput.Password
         field.inputMethodHints: Qt.ImhDigitsOnly
         enabled: !root.busy

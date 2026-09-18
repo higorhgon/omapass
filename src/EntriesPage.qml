@@ -64,15 +64,11 @@ FocusScope {
         }
     }
 
-    // PIN unlock belongs to Bitwarden accounts; the shortcut says so rather
-    // than doing nothing on the other backends.
+    // Every backend can have a PIN of its own, so the shortcut works
+    // wherever a database is open.
     function togglePin() {
-        if (!controller.bitwardenBackend) {
-            controller.showMessage(i18n.t("bitwarden.pin_only_bitwarden"), true);
-            return;
-        }
         if (controller.pinConfigured)
-            controller.disableBitwardenPin();
+            controller.disablePin();
         else
             page.mode = "pin";
     }
@@ -132,8 +128,8 @@ FocusScope {
     ActionsMenu {
         id: actionsMenu
         parent: page
-        // The PIN entry only exists for Bitwarden, so the menu is built
-        // rather than fixed, and the handler goes by the action it picked.
+        // Built rather than fixed so the handler goes by the action it
+        // picked, not by an index that shifts.
         readonly property var actions: ["add", "edit", "delete", "generate"]
         readonly property var labels: ({
             "add": i18n.t("ui.context_add_new"),
@@ -163,7 +159,7 @@ FocusScope {
         busy: controller.busy
 
         onSubmitted: function(masterPassword, pin) {
-            controller.enableBitwardenPin(masterPassword, pin);
+            controller.enablePin(masterPassword, pin);
             page.mode = "list";
         }
         onDismissed: page.mode = "list"
@@ -248,9 +244,8 @@ FocusScope {
                           ["CTRL-A", i18n.t("ui.help_add_entry")],
                           ["CTRL-E", i18n.t("ui.help_edit_entry")],
                           ["CTRL-X", i18n.t("ui.help_delete_entry")],
-                          ["CTRL-G", i18n.t("generator.help")]]
-                    .concat(controller.bitwardenBackend
-                            ? [["CTRL-I", i18n.t("bitwarden.pin_help")]] : [])
+                          ["CTRL-G", i18n.t("generator.help")],
+                          ["CTRL-I", i18n.t("pin.help")]]
             },
             {
                 "title": i18n.t("help.search_section"),

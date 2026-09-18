@@ -13,8 +13,8 @@ Modal {
 
     readonly property string warning: controller.pinWeakWarning(pinField.text)
 
-    heading: i18n.t("bitwarden.pin_setup_title")
-    hint: i18n.t("bitwarden.pin_setup_footer")
+    heading: i18n.t("pin.setup_title")
+    hint: i18n.t("pin.setup_footer")
     cardWidth: Math.round(480 * s)
 
     capturesKeys: false
@@ -45,7 +45,7 @@ Modal {
     Field {
         id: passwordField
         width: parent.width
-        label: i18n.t("bitwarden.master_password_label")
+        label: i18n.t("common.password_label")
         echoMode: revealPassword.checked ? TextInput.Normal : TextInput.Password
         enabled: !root.busy
 
@@ -63,7 +63,7 @@ Modal {
     Field {
         id: pinField
         width: parent.width
-        label: i18n.t("bitwarden.pin_label")
+        label: i18n.t("pin.label")
         echoMode: revealPin.checked ? TextInput.Normal : TextInput.Password
         field.inputMethodHints: Qt.ImhDigitsOnly
         enabled: !root.busy
@@ -77,7 +77,7 @@ Modal {
     Field {
         id: confirmField
         width: parent.width
-        label: i18n.t("bitwarden.pin_confirm_label")
+        label: i18n.t("pin.confirm_label")
         echoMode: revealPin.checked ? TextInput.Normal : TextInput.Password
         field.inputMethodHints: Qt.ImhDigitsOnly
         enabled: !root.busy
@@ -90,7 +90,7 @@ Modal {
 
     CheckOption {
         id: revealPin
-        text: i18n.t("bitwarden.pin_show")
+        text: i18n.t("pin.show")
     }
 
     Text {
