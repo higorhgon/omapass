@@ -121,6 +121,12 @@ sudo make uninstall
 
 `PREFIX` e `DESTDIR` são configuráveis, por exemplo `make install PREFIX=/usr DESTDIR="$pkgdir"` para empacotamento.
 
+### Empacotando para o Arch
+
+`packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório, submodule
+incluído (`makepkg -si` dentro dele). Quando houver versões marcadas, ele vira um
+`omapass` comum com tarball e `pkgver` fixo.
+
 ## Uso
 
 ```bash
