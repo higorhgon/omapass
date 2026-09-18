@@ -90,6 +90,7 @@ Modal {
 
     Field {
         id: addressField
+        objectName: "addressField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("onepassword.address_label")
@@ -103,6 +104,7 @@ Modal {
 
     Field {
         id: emailField
+        objectName: "emailField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("onepassword.email_label")
@@ -116,6 +118,7 @@ Modal {
 
     Field {
         id: secretKeyField
+        objectName: "secretKeyField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("onepassword.secret_key_label")
@@ -130,6 +133,7 @@ Modal {
 
     Field {
         id: passwordField
+        objectName: "passwordField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("onepassword.master_password_label")
@@ -144,6 +148,7 @@ Modal {
 
     Field {
         id: shorthandField
+        objectName: "shorthandField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("onepassword.shorthand_label")
@@ -158,6 +163,7 @@ Modal {
 
     Field {
         id: codeField
+        objectName: "codeField"
         width: parent.width
         visible: root.askingCode
         label: i18n.t("onepassword.code_label")
