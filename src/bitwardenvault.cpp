@@ -194,8 +194,16 @@ BwStatus BitwardenVault::status() {
     return result.success ? parseBwStatus(result.out) : BwStatus();
 }
 
-void BitwardenVault::logout() {
-    runBw({QStringLiteral("logout")}, Secret());
+bool BitwardenVault::logout(QString *error) {
+    const ProcResult result = runBw({QStringLiteral("logout")}, Secret());
+
+    // bw's own view settles it, not the exit code.
+    if (!status().loggedIn())
+        return true;
+
+    *error = result.err.trimmed().isEmpty() ? I18n::t(QStringLiteral("bitwarden.logout_failed"))
+                                            : result.err.trimmed();
+    return false;
 }
 
 BitwardenVault *BitwardenVault::unlock(const QString &email, const Secret &password, QString *error) {

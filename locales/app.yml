@@ -286,6 +286,9 @@ bitwarden.invalid_code:
 bitwarden.login_failed:
   pt-BR: "Falha no login do Bitwarden."
   en: "Bitwarden login failed."
+bitwarden.logout_failed:
+  pt-BR: "Não foi possível sair da conta Bitwarden; ela continua conectada no bw."
+  en: "Could not log out of the Bitwarden account; it is still logged in to bw."
 bitwarden.logged_out:
   pt-BR: "Conta Bitwarden desconectada."
   en: "Bitwarden account logged out."

@@ -42,7 +42,10 @@ public:
     // Read from bw's data.json when possible (instant), falling back to
     // `bw status` (seconds) when the file is in a shape it does not know.
     static BwStatus status();
-    static void logout();
+    // Logs out and checks that bw really is logged out afterwards: an
+    // account dropped from the list while it is still logged in is an
+    // account nobody can see to lock.
+    static bool logout(QString *error);
 
     // Unlocks the logged-in account with the master password and loads it.
     static BitwardenVault *unlock(const QString &email, const Secret &password, QString *error);
