@@ -11,6 +11,7 @@
         <file alias="Field.qml">Field.qml</file>
         <file alias="SuggestionList.qml">SuggestionList.qml</file>
         <file alias="ActionsMenu.qml">ActionsMenu.qml</file>
+        <file alias="AccountCheckModal.qml">AccountCheckModal.qml</file>
         <file alias="ChoiceModal.qml">ChoiceModal.qml</file>
         <file alias="ConfirmModal.qml">ConfirmModal.qml</file>
         <file alias="CreateDatabaseModal.qml">CreateDatabaseModal.qml</file>

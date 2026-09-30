@@ -6,7 +6,29 @@ import QtQuick
 FocusScope {
     id: page
 
-    property string mode: controller.anyDatabaseFound ? "list" : "confirmCreate"
+    // While the scan is still running an empty list means "not found yet",
+    // not "there is nothing": offering to create a database there would be
+    // answering a question nobody has asked yet.
+    function defaultMode() {
+        return (controller.anyDatabaseFound || controller.scanning) ? "list" : "confirmCreate";
+    }
+
+    property string mode: page.defaultMode()
+
+    // The binding above is broken the first time a sheet sets `mode`, so the
+    // two things it watched are followed by hand from then on. Both signals,
+    // not just the scan's: whichever arrives last has to be able to correct
+    // what the other one concluded on its own.
+    function syncDefaultMode() {
+        if (page.mode === "list" || page.mode === "confirmCreate")
+            page.mode = page.defaultMode();
+    }
+
+    Connections {
+        target: controller
+        function onScanningChanged() { page.syncDefaultMode(); }
+        function onDatabasesChanged() { page.syncDefaultMode(); }
+    }
 
     readonly property bool unlocking: Object.keys(controller.pendingDatabase).length > 0
     readonly property bool loggingIn: controller.loginStep.length > 0
@@ -22,8 +44,10 @@ FocusScope {
     ListPane {
         id: pane
         anchors.fill: parent
-        focus: !page.unlocking && !page.loggingIn && page.mode === "list"
-        acceptsKeys: !page.unlocking && !page.loggingIn && page.mode === "list"
+        focus: !page.unlocking && !page.loggingIn && !controller.checkingAccount
+               && page.mode === "list"
+        acceptsKeys: !page.unlocking && !page.loggingIn && !controller.checkingAccount
+                     && page.mode === "list"
 
         searchPlaceholder: i18n.t("db_app.filter_title")
         model: controller.databases
@@ -31,6 +55,7 @@ FocusScope {
         onQueryChanged: controller.databaseQuery = query
 
         footerText: controller.hasMessage ? controller.message
+                  : controller.scanning ? i18n.t("db_app.scanning")
                   : page.mode === "list" ? (searchMode ? i18n.t("db_app.footer_search")
                                                        : i18n.t("db_app.footer_normal"))
                   : ""
@@ -92,7 +117,7 @@ FocusScope {
                 page.mode = action;
             }
         }
-        onDismissed: page.mode = controller.anyDatabaseFound ? "list" : "confirmCreate"
+        onDismissed: page.mode = page.defaultMode()
     }
 
     CreateDatabaseModal {
@@ -179,6 +204,13 @@ FocusScope {
             controller.logoutOnePassword(pane.currentIndex);
         }
         onDismissed: page.mode = "list"
+    }
+
+    AccountCheckModal {
+        visible: controller.checkingAccount
+        accountName: controller.checkingAccountName
+
+        onCancelled: controller.cancelAccountCheck()
     }
 
     UnlockModal {
