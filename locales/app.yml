@@ -49,8 +49,8 @@ cli.doctor_script:
   pt-BR: "código de duas etapas do 1Password"
   en: "1Password two-step code"
 cli.doctor_wl_copy:
-  pt-BR: "copiar senhas"
-  en: "copying passwords"
+  pt-BR: "limpar a senha do clipboard no Wayland (opcional)"
+  en: "clearing the password from the clipboard on Wayland (optional)"
 cli.doctor_fd:
   pt-BR: "busca rápida de bancos (opcional)"
   en: "faster database search (optional)"
