@@ -73,7 +73,7 @@ QString sessionVariableFor(const QString &account, const QString &stated) {
 // other side — signing out is one — so they get a terminal borrowed from
 // `script`, exactly as the sign-in does.
 ProcResult runOpUnderTerminal(const QStringList &args) {
-    if (QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty())
+    if (!utilLinuxScriptAvailable())
         return runProcess(QStringLiteral("op"), args);
 
     ProcResult result = runProcess(QStringLiteral("script"),
@@ -769,7 +769,7 @@ void OnePasswordVault::close() {
     // Under the borrowed terminal, like every other op call that has turned
     // out to answer differently without one.
     const QStringList args{QStringLiteral("signout"), QStringLiteral("--account"), m_account};
-    const bool underTerminal = !QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty();
+    const bool underTerminal = utilLinuxScriptAvailable();
 
     QProcess process;
     process.setProcessEnvironment(opEnvironment(m_account, m_session, m_sessionVariable));
