@@ -33,6 +33,16 @@ class AppController : public QObject {
 
     Q_PROPERTY(QVariantList databases READ databases NOTIFY databasesChanged)
     Q_PROPERTY(bool anyDatabaseFound READ anyDatabaseFound NOTIFY databasesChanged)
+    // The search for databases is still running. The window is up and usable
+    // meanwhile, so "nothing here" and "nothing found yet" have to be told
+    // apart: only the first one offers to create a database.
+    Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
+    // An account picked from the list whose backend is being asked whether
+    // it is still logged in. Takes long enough to be worth saying so, and
+    // the password prompt would be the wrong thing to show in the meantime.
+    Q_PROPERTY(bool checkingAccount READ checkingAccount NOTIFY checkingAccountChanged)
+    // Name of the account being checked, for the sheet that says so.
+    Q_PROPERTY(QString checkingAccountName READ checkingAccountName NOTIFY checkingAccountChanged)
     Q_PROPERTY(QString databaseQuery READ databaseQuery WRITE setDatabaseQuery NOTIFY databasesChanged)
     Q_PROPERTY(QVariantMap pendingDatabase READ pendingDatabase NOTIFY pendingDatabaseChanged)
     Q_PROPERTY(QString unlockError READ unlockError NOTIFY unlockErrorChanged)
@@ -75,6 +85,9 @@ public:
 
     QVariantList databases() const;
     bool anyDatabaseFound() const { return !m_databases.isEmpty(); }
+    bool scanning() const { return m_scanning; }
+    bool checkingAccount() const { return m_checkingAccount; }
+    QString checkingAccountName() const { return m_checkingAccountName; }
     QString databaseQuery() const { return m_databaseQuery; }
     void setDatabaseQuery(const QString &query);
     QVariantMap pendingDatabase() const;
@@ -147,6 +160,9 @@ public:
     // Entries
     Q_INVOKABLE bool isEmptyGroup(const QString &entry) const;
     Q_INVOKABLE QString groupNameOf(const QString &entry) const;
+    // Drops the wait for an account check; the list takes the keyboard back.
+    Q_INVOKABLE void cancelAccountCheck();
+
     Q_INVOKABLE void copyPassword(const QString &entry);
     Q_INVOKABLE void copyText(const QString &text);
     Q_INVOKABLE QVariantMap entryDetails(const QString &entry);
@@ -181,6 +197,8 @@ signals:
     void busyChanged();
     void syncingChanged();
     void databasesChanged();
+    void scanningChanged();
+    void checkingAccountChanged();
     void pendingDatabaseChanged();
     void unlockErrorChanged();
     void entriesChanged();
@@ -209,6 +227,17 @@ private:
     void setSyncing(bool syncing);
     void setUnlockError(const QString &error);
     void refreshDatabases();
+    // Applies what a scan found: ordering by history and the current filter
+    // both belong here, on this thread, where the history lives.
+    void adoptDatabases(const QVector<DbRef> &found);
+    void setScanning(bool scanning);
+    void setCheckingAccount(bool checking);
+    // Puts the database up for unlocking, which is where selecting one ends
+    // when there is nothing left to check.
+    void askForPassword(const DbRef &ref);
+    // Asks the backend whether the account is still usable before the
+    // password is asked for, off this thread.
+    void checkAccountThenAsk(const DbRef &ref);
     void refreshEntries();
     void applyEntryFilter();
     void openVault(const DbRef &ref, const Secret &secret);
@@ -240,6 +269,28 @@ private:
     // Waited on at shutdown, so no worker thread outlives the vault it uses.
     QFuture<void> m_task;
     QFuture<void> m_syncTask;
+    QFuture<void> m_scanTask;
+    QFuture<void> m_accountCheckTask;
+
+    bool m_scanning = false;
+    // Scans are counted so a result that arrives after a newer one was asked
+    // for is dropped instead of putting a stale list back on screen.
+    quint64 m_scanGeneration = 0;
+    // Only the first scan may open a lone database on its own: doing it
+    // after a later scan would yank the interface out from under whoever is
+    // using it.
+    bool m_firstScan = true;
+
+    bool m_checkingAccount = false;
+    // Counts up and never resets, so a cancelled check cannot be mistaken
+    // for a later one that happens to land on the same number.
+    quint64 m_accountCheckGeneration = 0;
+    // Whether the answer of the check in flight is still wanted.
+    bool m_accountCheckPending = false;
+    QString m_checkingAccountName;
+    // The wait sheet is held back this long, so a check that answers at once
+    // — the usual case — never flashes one up.
+    QTimer m_accountCheckDelay;
 
     QVector<DbRef> m_databases;
     QVector<DbRef> m_filteredDatabases;

@@ -27,6 +27,12 @@ namespace {
 // segundo — 5s mantém o custo irrelevante sem atrasar visivelmente o lock.
 constexpr int lockCheckIntervalMs = 5000;
 
+// How long an account check may take before the interface says it is
+// waiting. Reading bw's own data file answers in a millisecond, and a sheet
+// shown and taken away in that time reads as a glitch; a check that has to
+// run `bw` takes seconds, and then silence reads as a dead keypress.
+constexpr int accountCheckNoticeMs = 200;
+
 const auto windowGeometrySetting = QStringLiteral("window/geometry");
 
 // Outcome of a backend call run in the background.
@@ -203,12 +209,18 @@ AppController::AppController(const AppConfig &config, QObject *parent)
         setLoginStep(m_onePasswordAdding ? QStringLiteral("opCredentials") : QString());
     });
 
-    refreshDatabases();
+    // The wait sheet for an account check appears only if the check is still
+    // running when this fires, which keeps the usual instant answer silent.
+    m_accountCheckDelay.setSingleShot(true);
+    m_accountCheckDelay.setInterval(accountCheckNoticeMs);
+    connect(&m_accountCheckDelay, &QTimer::timeout, this, [this]() {
+        if (m_accountCheckPending)
+            setCheckingAccount(true);
+    });
 
-    // With exactly one database there is nothing to choose: go straight to
-    // its unlock prompt.
-    if (m_databases.size() == 1)
-        selectDatabase(0);
+    // Starts the first scan; the list fills in when it answers, and the
+    // window is on screen long before that.
+    refreshDatabases();
 
     m_lastActivity.start();
     qApp->installEventFilter(this);
@@ -237,6 +249,8 @@ AppController::~AppController() {
     m_onePasswordLogin.cancel();
     m_task.waitForFinished();
     m_syncTask.waitForFinished();
+    m_scanTask.waitForFinished();
+    m_accountCheckTask.waitForFinished();
     closeVault();
 }
 
@@ -426,8 +440,57 @@ bool AppController::passBackend() const {
     return !m_vault.isNull() && m_vault->kind() == VaultKind::Pass;
 }
 
+// Off this thread, always. Finding databases walks the search path, and on
+// a large home that is seconds of disk the interface used to spend before
+// its first frame — the window simply did not appear until it was done.
 void AppController::refreshDatabases() {
-    m_databases = Vault::findDatabases(m_config.searchPath);
+    const QString path = m_config.searchPath;
+    const quint64 generation = ++m_scanGeneration;
+    setScanning(true);
+
+    auto *watcher = new QFutureWatcher<QVector<DbRef>>(this);
+    connect(watcher, &QFutureWatcher<QVector<DbRef>>::finished, this,
+            [this, watcher, generation]() {
+        const QVector<DbRef> found = watcher->result();
+        watcher->deleteLater();
+
+        // A newer scan is already on its way; this answer is out of date.
+        if (generation != m_scanGeneration)
+            return;
+
+        // The list first, the flag second: anyone watching `scanning` go
+        // false reads the list in the same breath, and between these two
+        // lines it would still look empty — which is how the interface came
+        // to offer to create a database with databases sitting behind it.
+        adoptDatabases(found);
+        setScanning(false);
+
+        const bool first = m_firstScan;
+        m_firstScan = false;
+        // With exactly one database there is nothing to choose: go straight
+        // to its unlock prompt, as the startup used to do synchronously.
+        if (first && m_databases.size() == 1 && !m_hasPendingDatabase
+            && m_stage == QStringLiteral("databases"))
+            selectDatabase(0);
+    });
+
+    // Deliberately not runInBackground(): a scan must not mark the app busy,
+    // since everything else on the list stays usable while it runs.
+    const QFuture<QVector<DbRef>> future =
+        QtConcurrent::run([path]() { return Vault::findDatabases(path); });
+    m_scanTask = QFuture<void>(future);
+    watcher->setFuture(future);
+}
+
+void AppController::setScanning(bool scanning) {
+    if (m_scanning == scanning)
+        return;
+    m_scanning = scanning;
+    emit scanningChanged();
+}
+
+void AppController::adoptDatabases(const QVector<DbRef> &found) {
+    m_databases = found;
 
     // Most-used first, so the database you actually open is the one under the
     // cursor when the window appears.
@@ -453,55 +516,121 @@ void AppController::refreshDatabases() {
     emit databasesChanged();
 }
 
+void AppController::askForPassword(const DbRef &ref) {
+    m_pendingDatabase = ref;
+    m_hasPendingDatabase = true;
+    refreshPinState();
+    emit pendingDatabaseChanged();
+}
+
+void AppController::setCheckingAccount(bool checking) {
+    if (m_checkingAccount == checking)
+        return;
+    m_checkingAccount = checking;
+    emit checkingAccountChanged();
+}
+
+// What an account backend answered about itself, and what to do with it.
+namespace {
+
+struct AccountCheck {
+    bool usable = false;   // still logged in / still configured
+    bool gone = false;     // dropped from the backend behind omapass' back
+    QString email;         // Bitwarden only: who to put on the login sheet
+};
+
+}
+
+// The two checks below read a file in the good case, but fall back to
+// running `bw` — seconds, since it is a Node binary — when that file cannot
+// answer. Blocking the interface on that turns a keypress into a freeze, so
+// it happens here, off the thread, with a sheet saying so if it drags.
+void AppController::checkAccountThenAsk(const DbRef &ref) {
+    const quint64 generation = ++m_accountCheckGeneration;
+    m_accountCheckPending = true;
+    m_checkingAccountName = Vault::displayName(ref);
+    m_accountCheckDelay.start();
+
+    auto *watcher = new QFutureWatcher<AccountCheck>(this);
+    connect(watcher, &QFutureWatcher<AccountCheck>::finished, this,
+            [this, watcher, ref, generation]() {
+        const AccountCheck check = watcher->result();
+        watcher->deleteLater();
+
+        // Another database was picked while this was in flight, or the wait
+        // was given up on.
+        if (generation != m_accountCheckGeneration || !m_accountCheckPending)
+            return;
+
+        m_accountCheckPending = false;
+        m_accountCheckDelay.stop();
+        setCheckingAccount(false);
+
+        if (check.usable) {
+            askForPassword(ref);
+            return;
+        }
+
+        if (check.gone) {
+            // Dropped from a terminal while omapass had it listed.
+            showMessage(I18n::t(QStringLiteral("onepassword.account_gone")), true);
+            refreshDatabases();
+            return;
+        }
+
+        // Logged out behind omapass' back: the master password alone cannot
+        // unlock it, so the login sheet takes over.
+        m_loginEmail = check.email;
+        setLoginStep(QStringLiteral("credentials"));
+    });
+
+    const QFuture<AccountCheck> future = QtConcurrent::run([ref]() {
+        AccountCheck check;
+        if (ref.kind == VaultKind::OnePassword) {
+            // A 1Password account can have been dropped behind omapass' back
+            // (`op account forget` in a terminal), and then the master
+            // password alone cannot open it.
+            check.usable = OnePasswordVault::hasAccount(OnePasswordVault::accountOf(ref.path));
+            check.gone = !check.usable;
+            return check;
+        }
+
+        check.usable = BitwardenVault::status().loggedIn();
+        check.email = BitwardenVault::emailOf(ref.path);
+        return check;
+    });
+    m_accountCheckTask = QFuture<void>(future);
+    watcher->setFuture(future);
+}
+
 void AppController::selectDatabase(int index) {
     if (index < 0 || index >= m_filteredDatabases.size())
         return;
 
     const DbRef ref = m_filteredDatabases.at(index);
-    const auto waitForPassword = [this, ref]() {
-        m_pendingDatabase = ref;
-        m_hasPendingDatabase = true;
-        refreshPinState();
-        emit pendingDatabaseChanged();
-    };
 
     if (ref.kind != VaultKind::Bitwarden && ref.kind != VaultKind::OnePassword) {
         setUnlockError(QString());
-        waitForPassword();
+        askForPassword(ref);
         return;
     }
 
-    if (m_busy)
+    if (m_busy || m_checkingAccount)
         return;
 
-    // A 1Password account can have been dropped behind omapass' back (`op
-    // account forget` in a terminal), and then the master password alone
-    // cannot open it: back to the login sheet. Reading op's own
-    // configuration takes milliseconds.
-    if (ref.kind == VaultKind::OnePassword) {
-        setUnlockError(QString());
-        if (OnePasswordVault::hasAccount(OnePasswordVault::accountOf(ref.path))) {
-            waitForPassword();
-            return;
-        }
-
-        // Dropped from a terminal while omapass had it listed.
-        showMessage(I18n::t(QStringLiteral("onepassword.account_gone")), true);
-        refreshDatabases();
-        return;
-    }
-
-    // A Bitwarden account can have been logged out behind omapass' back (bw
-    // logout in a terminal, an expired login), in which case the master
-    // password alone cannot unlock it: back to the login sheet.
     setUnlockError(QString());
-    if (BitwardenVault::status().loggedIn()) {
-        waitForPassword();
-        return;
-    }
+    checkAccountThenAsk(ref);
+}
 
-    m_loginEmail = BitwardenVault::emailOf(ref.path);
-    setLoginStep(QStringLiteral("credentials"));
+// Giving up on the wait: the check itself cannot be called off (it is a
+// process already running), but its answer stops being acted on, so the
+// list comes straight back.
+void AppController::cancelAccountCheck() {
+    if (!m_accountCheckPending)
+        return;
+    m_accountCheckPending = false;
+    m_accountCheckDelay.stop();
+    setCheckingAccount(false);
 }
 
 void AppController::cancelUnlock() {
