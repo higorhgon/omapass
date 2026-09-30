@@ -2,17 +2,13 @@
 
 #include "i18n.h"
 #include "onepasswordvault.h"
+#include "process.h"
 
 #include <QDebug>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
-#include <QStandardPaths>
 
 namespace {
-
-bool ptyAvailable() {
-    return !QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty();
-}
 
 void wipe(QString *text) {
     text->fill(QChar(0));
@@ -119,7 +115,7 @@ void OnePasswordLogin::beginSignIn() {
 // prompts as they come; without one, the password is written on stdin and
 // an account that asks for a two-step code cannot be reached.
 void OnePasswordLogin::runOp(const QStringList &args, const QProcessEnvironment &env) {
-    if (!ptyAvailable()) {
+    if (!utilLinuxScriptAvailable()) {
         m_awaitingPasswordPrompt = false;
         begin(QStringLiteral("op"), args, env);
         answer(m_password);

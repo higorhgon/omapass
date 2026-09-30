@@ -25,3 +25,13 @@ ProcResult runProcess(const QString &program, const QStringList &args,
                       const QByteArray &stdinData = QByteArray(),
                       const QProcessEnvironment &env = QProcessEnvironment(),
                       int timeoutMs = processTimeoutMs);
+
+// Whether the `script` in PATH is the util-linux one, which is the only
+// version that takes `-c`. The name alone does not answer it: macOS and the
+// BSDs ship a `script` of their own, same name, different command line — so
+// a PATH lookup says yes and the call then dies with a usage error. Where
+// this is asked, that reads to the user as "1Password refused the login".
+//
+// Answered by running the very form the callers use, since that is the
+// capability in question; the result is worked out once and kept.
+bool utilLinuxScriptAvailable();
