@@ -15,6 +15,8 @@ SOURCES += \
     ../../src/systemtheme.cpp
 
 HEADERS += \
+    fakecontroller.h \
+    fakewindow.h \
     ../../src/config.h \
     ../../src/i18n.h \
     ../../src/palette.h \

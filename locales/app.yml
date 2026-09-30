@@ -653,6 +653,18 @@ db_app.unlock_title:
 db_app.unlocking:
   pt-BR: "Desbloqueando…"
   en: "Unlocking…"
+db_app.scanning:
+  pt-BR: "Procurando bancos…"
+  en: "Looking for databases…"
+db_app.account_check_title:
+  pt-BR: " Preparando a conta "
+  en: " Getting the account ready "
+db_app.account_check_body:
+  pt-BR: "Verificando se a conta %{account} continua conectada.\nIsto pode levar alguns segundos na primeira vez."
+  en: "Checking whether the account %{account} is still signed in.\nThis can take a few seconds the first time."
+db_app.account_check_hint:
+  pt-BR: "ESC: Cancelar"
+  en: "ESC: Cancel"
 db_app.no_db_found_confirm:
   pt-BR: "\nNenhum banco de dados encontrado.\nDeseja criar um banco de dados? [y/N]"
   en: "\nNo database found.\nDo you want to create a database? [y/N]"
