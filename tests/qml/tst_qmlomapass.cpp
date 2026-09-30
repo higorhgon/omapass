@@ -7,6 +7,8 @@
 #include <QQmlEngine>
 #include <QtQuickTest>
 
+#include "fakecontroller.h"
+#include "fakewindow.h"
 #include "i18n.h"
 #include "palette.h"
 #include "systemtheme.h"
@@ -24,12 +26,19 @@ public slots:
         engine->rootContext()->setContextProperty(QStringLiteral("theme"), &m_palette);
         engine->rootContext()->setContextProperty(QStringLiteral("systemTheme"), &m_systemTheme);
         engine->rootContext()->setContextProperty(QStringLiteral("i18n"), &m_strings);
+        // DatabasePage reads both of these the way it does in the running
+        // application: `controller` for what to show, `window` for the text
+        // scale and the Ctrl+C binding.
+        engine->rootContext()->setContextProperty(QStringLiteral("controller"), &m_controller);
+        engine->rootContext()->setContextProperty(QStringLiteral("window"), &m_window);
     }
 
 private:
     Palette m_palette{{}};
     SystemTheme m_systemTheme;
     Strings m_strings;
+    FakeController m_controller;
+    FakeWindow m_window;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qmlomapass, Setup)
