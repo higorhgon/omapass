@@ -145,6 +145,12 @@ sistema, porque são eles que guardam as suas contas e chaves. O `keepassxc-cli`
 omapass o compila junto. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
 em que ele estiver rodando.
 
+Para publicar, o workflow **AppImage** (em Actions → AppImage → Run workflow) faz o mesmo
+`make appimage` no GitHub e anexa o arquivo, com um `SHA256SUMS`, a uma release. É disparado
+à mão de propósito: o AppImage é entrega, não saída de cada push. Sem informar nada, ele usa
+a tag `v<versão do main.cpp>`; se a release já existir, os arquivos são substituídos, que é o
+caso de quem só está regerando o pacote de uma versão.
+
 ### Empacotando para o Arch
 
 `packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório, submodule
