@@ -1,0 +1,86 @@
+name: AppImage
+
+# Disparado à mão: o AppImage é um artefato de entrega, não algo para sair a
+# cada push. Compila, anexa o arquivo a uma release e some.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag da release (em branco usa v<versão do main.cpp>)"
+        required: false
+        type: string
+      prerelease:
+        description: "Marcar como pré-lançamento"
+        required: false
+        default: false
+        type: boolean
+
+# Necessário para criar a release e subir o arquivo nela.
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    # Fixo, não `latest`: o AppImage herda a glibc de onde foi gerado, e uma
+    # troca silenciosa de runner reduziria em que máquinas ele roda.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O keepassxc-cli vai dentro do AppImage e vem do submodule.
+          submodules: recursive
+
+      # `make appimage` compila dentro do container Ubuntu LTS descrito em
+      # packaging/appimage.Dockerfile — o mesmo caminho de quem gera na
+      # própria máquina, então o arquivo publicado aqui é o que se obtém lá.
+      - name: Gera o AppImage
+        run: make appimage
+
+      - name: Descobre a versão e o arquivo
+        id: pacote
+        # A tag entra pelo ambiente, não interpolada no meio do script: um
+        # `${{ }}` de texto livre vira parte do shell antes de ele rodar.
+        env:
+          TAG_PEDIDA: ${{ inputs.tag }}
+        run: |
+          versao="$(sed -n 's/.*applicationVersion = QStringLiteral("\([^"]*\)").*/\1/p' src/main.cpp)"
+          arquivo="dist/omapass-$versao-x86_64.AppImage"
+          if [ ! -f "$arquivo" ]; then
+            echo "O AppImage esperado nao apareceu em $arquivo. O que ha em dist/:" >&2
+            ls -la dist/ >&2
+            exit 1
+          fi
+          tag="$TAG_PEDIDA"
+          [ -n "$tag" ] || tag="v$versao"
+          {
+            echo "versao=$versao"
+            echo "arquivo=$arquivo"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+      # Acompanha o AppImage: é a forma de quem baixa conferir que o arquivo
+      # chegou inteiro.
+      - name: Calcula o SHA256
+        env:
+          ARQUIVO: ${{ steps.pacote.outputs.arquivo }}
+        run: cd dist && sha256sum "$(basename "$ARQUIVO")" > SHA256SUMS
+
+      # `gh` já vem no runner, então nada de terceiros para publicar. Uma
+      # release que já exista é reaproveitada, com os arquivos substituídos:
+      # regerar o AppImage de uma versão é justamente o caso comum.
+      - name: Publica na release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pacote.outputs.tag }}
+          ARQUIVO: ${{ steps.pacote.outputs.arquivo }}
+          VERSAO: ${{ steps.pacote.outputs.versao }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARQUIVO" dist/SHA256SUMS --clobber
+          else
+            gh release create "$TAG" "$ARQUIVO" dist/SHA256SUMS \
+              --title "omapass $VERSAO" \
+              --generate-notes \
+              ${{ inputs.prerelease && '--prerelease' || '' }}
+          fi
