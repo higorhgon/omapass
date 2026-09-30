@@ -2,6 +2,16 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QStandardPaths>
+
+namespace {
+
+// The probe is a `true` under a pseudo terminal: it answers at once, and a
+// `script` that does not understand the arguments fails on them before
+// running anything at all.
+constexpr int scriptProbeTimeoutMs = 5000;
+
+}
 
 ProcResult runProcess(const QString &program, const QStringList &args,
                       const QByteArray &stdinData, const QProcessEnvironment &env, int timeoutMs) {
@@ -36,4 +46,24 @@ ProcResult runProcess(const QString &program, const QStringList &args,
     result.out = QString::fromUtf8(process.readAllStandardOutput());
     result.err = QString::fromUtf8(process.readAllStandardError());
     return result;
+}
+
+bool utilLinuxScriptAvailable() {
+    static const bool available = []() {
+        if (QStandardPaths::findExecutable(QStringLiteral("script")).isEmpty())
+            return false;
+
+        // Deliberately the same shape the real calls use. Asking for
+        // `--version` instead would be worse than useless: the BSD script
+        // reads it as a bundle of single letters, none of which is a
+        // request for the version, and goes on to open an interactive
+        // shell that sits there until the timeout.
+        const ProcResult probe = runProcess(QStringLiteral("script"),
+                                            {QStringLiteral("-qec"), QStringLiteral("true"),
+                                             QStringLiteral("/dev/null")},
+                                            QByteArray(), QProcessEnvironment(),
+                                            scriptProbeTimeoutMs);
+        return probe.started && probe.success;
+    }();
+    return available;
 }
