@@ -11,7 +11,7 @@ pkgdesc="Gerenciador de senhas em Qt Quick para KeePassXC, pass, Bitwarden e 1Pa
 arch=('x86_64')
 url="https://github.com/higorhgon/omapass"
 license=('MIT')
-depends=('qt6-base' 'qt6-declarative' 'botan' 'wl-clipboard' 'hicolor-icon-theme'
+depends=('qt6-base' 'qt6-declarative' 'botan' 'hicolor-icon-theme'
          'zlib' 'minizip' 'pcsclite' 'libusb' 'readline')
 makedepends=('git' 'cmake' 'qt6-tools' 'pkgconf')
 # Os CLIs dos backends sao opcionais de proposito: cada um habilita um tipo
@@ -24,6 +24,7 @@ optdepends=('bitwarden-cli: contas Bitwarden'
             'libsecret: desbloqueio por PIN'
             'qt6-wayland: janela nativa em sessão Wayland (sem ele, via XWayland)'
             'fd: varredura de bancos ~5x mais rápida numa home grande'
+            'wl-clipboard: limpeza automática do clipboard mais confiável em sessão Wayland'
             'xdg-desktop-portal: modo claro/escuro e tamanho de texto do desktop')
 provides=('omapass')
 conflicts=('omapass')
