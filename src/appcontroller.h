@@ -229,7 +229,9 @@ private:
     void refreshDatabases();
     // Applies what a scan found: ordering by history and the current filter
     // both belong here, on this thread, where the history lives.
-    void adoptDatabases(const QVector<DbRef> &found);
+    void adoptDatabases();
+    void applyDatabaseFilter();
+    void finishScanPart(quint64 generation, QVector<DbRef> *slot, const QVector<DbRef> &found);
     void setScanning(bool scanning);
     void setCheckingAccount(bool checking);
     // Puts the database up for unlocking, which is where selecting one ends
@@ -269,10 +271,16 @@ private:
     // Waited on at shutdown, so no worker thread outlives the vault it uses.
     QFuture<void> m_task;
     QFuture<void> m_syncTask;
-    QFuture<void> m_scanTask;
+    QFuture<void> m_localScanTask;
+    QFuture<void> m_accountScanTask;
     QFuture<void> m_accountCheckTask;
 
     bool m_scanning = false;
+    // The two halves of a scan answer independently; the list is always
+    // their union, and the scan is over when none is left outstanding.
+    QVector<DbRef> m_localDatabases;
+    QVector<DbRef> m_accountDatabases;
+    int m_scansOutstanding = 0;
     // Scans are counted so a result that arrives after a newer one was asked
     // for is dropped instead of putting a stale list back on screen.
     quint64 m_scanGeneration = 0;

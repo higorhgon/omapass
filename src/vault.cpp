@@ -156,7 +156,7 @@ QString Vault::displayName(const DbRef &ref) {
     return QFileInfo(ref.path).fileName();
 }
 
-QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
+QVector<DbRef> Vault::findLocalDatabases(const QString &searchPath) {
     QVector<DbRef> databases;
 
     QStringList kdbx = findFiles(QStringLiteral(".kdbx$"), searchPath, false);
@@ -177,6 +177,12 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
     for (const QString &root : stores)
         databases.append({root, VaultKind::Pass});
 
+    return databases;
+}
+
+QVector<DbRef> Vault::findAccountDatabases() {
+    QVector<DbRef> databases;
+
     const QString account = BitwardenVault::rememberedAccount();
     if (!account.isEmpty() && BitwardenVault::isAvailable())
         databases.append({BitwardenVault::refPath(account), VaultKind::Bitwarden});
@@ -191,6 +197,10 @@ QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
     }
 
     return databases;
+}
+
+QVector<DbRef> Vault::findDatabases(const QString &searchPath) {
+    return findLocalDatabases(searchPath) + findAccountDatabases();
 }
 
 bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
