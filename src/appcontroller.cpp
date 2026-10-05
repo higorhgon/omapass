@@ -249,7 +249,8 @@ AppController::~AppController() {
     m_onePasswordLogin.cancel();
     m_task.waitForFinished();
     m_syncTask.waitForFinished();
-    m_scanTask.waitForFinished();
+    m_localScanTask.waitForFinished();
+    m_accountScanTask.waitForFinished();
     m_accountCheckTask.waitForFinished();
     closeVault();
 }
@@ -371,11 +372,16 @@ void AppController::setDatabaseQuery(const QString &query) {
         return;
 
     m_databaseQuery = query;
+    applyDatabaseFilter();
+}
 
+// Also what a partial scan result goes through: what the user has typed so
+// far keeps applying while the rest of the databases are still arriving.
+void AppController::applyDatabaseFilter() {
     QStringList paths;
     for (const DbRef &ref : std::as_const(m_databases))
         paths.append(ref.path);
-    const QStringList kept = filterItems(paths, query);
+    const QStringList kept = filterItems(paths, m_databaseQuery);
 
     m_filteredDatabases.clear();
     for (const DbRef &ref : std::as_const(m_databases)) {
@@ -440,46 +446,65 @@ bool AppController::passBackend() const {
     return !m_vault.isNull() && m_vault->kind() == VaultKind::Pass;
 }
 
-// Off this thread, always. Finding databases walks the search path, and on
-// a large home that is seconds of disk the interface used to spend before
-// its first frame — the window simply did not appear until it was done.
+// Off this thread, always. Finding databases walks the search path and asks
+// the account backends, and on a large home or a slow `op` that is seconds
+// the interface used to spend before its first frame. The two halves run side
+// by side and each puts its results on the list as soon as it has them, so
+// the local files never wait for an account that needs the network.
 void AppController::refreshDatabases() {
     const QString path = m_config.searchPath;
     const quint64 generation = ++m_scanGeneration;
+    m_scansOutstanding = 2;
+    m_databaseQuery.clear();
     setScanning(true);
-
-    auto *watcher = new QFutureWatcher<QVector<DbRef>>(this);
-    connect(watcher, &QFutureWatcher<QVector<DbRef>>::finished, this,
-            [this, watcher, generation]() {
-        const QVector<DbRef> found = watcher->result();
-        watcher->deleteLater();
-
-        // A newer scan is already on its way; this answer is out of date.
-        if (generation != m_scanGeneration)
-            return;
-
-        // The list first, the flag second: anyone watching `scanning` go
-        // false reads the list in the same breath, and between these two
-        // lines it would still look empty — which is how the interface came
-        // to offer to create a database with databases sitting behind it.
-        adoptDatabases(found);
-        setScanning(false);
-
-        const bool first = m_firstScan;
-        m_firstScan = false;
-        // With exactly one database there is nothing to choose: go straight
-        // to its unlock prompt, as the startup used to do synchronously.
-        if (first && m_databases.size() == 1 && !m_hasPendingDatabase
-            && m_stage == QStringLiteral("databases"))
-            selectDatabase(0);
-    });
 
     // Deliberately not runInBackground(): a scan must not mark the app busy,
     // since everything else on the list stays usable while it runs.
-    const QFuture<QVector<DbRef>> future =
-        QtConcurrent::run([path]() { return Vault::findDatabases(path); });
-    m_scanTask = QFuture<void>(future);
-    watcher->setFuture(future);
+    const auto start = [this, generation](QVector<DbRef> *slot, QFuture<void> *task,
+                                          auto work) {
+        auto *watcher = new QFutureWatcher<QVector<DbRef>>(this);
+        connect(watcher, &QFutureWatcher<QVector<DbRef>>::finished, this,
+                [this, watcher, generation, slot]() {
+            const QVector<DbRef> found = watcher->result();
+            watcher->deleteLater();
+            finishScanPart(generation, slot, found);
+        });
+        const QFuture<QVector<DbRef>> future = QtConcurrent::run(work);
+        *task = QFuture<void>(future);
+        watcher->setFuture(future);
+    };
+
+    start(&m_localDatabases, &m_localScanTask,
+          [path]() { return Vault::findLocalDatabases(path); });
+    start(&m_accountDatabases, &m_accountScanTask,
+          []() { return Vault::findAccountDatabases(); });
+}
+
+void AppController::finishScanPart(quint64 generation, QVector<DbRef> *slot,
+                                   const QVector<DbRef> &found) {
+    // A newer scan is already on its way; this answer is out of date.
+    if (generation != m_scanGeneration)
+        return;
+
+    *slot = found;
+    --m_scansOutstanding;
+
+    // The list first, the flag second: anyone watching `scanning` go
+    // false reads the list in the same breath, and between these two
+    // lines it would still look empty — which is how the interface came
+    // to offer to create a database with databases sitting behind it.
+    adoptDatabases();
+    if (m_scansOutstanding > 0)
+        return;
+    setScanning(false);
+
+    const bool first = m_firstScan;
+    m_firstScan = false;
+    // With exactly one database there is nothing to choose: go straight
+    // to its unlock prompt, as the startup used to do synchronously.
+    if (first && m_databases.size() == 1 && !m_hasPendingDatabase
+        && m_stage == QStringLiteral("databases"))
+        selectDatabase(0);
 }
 
 void AppController::setScanning(bool scanning) {
@@ -489,8 +514,8 @@ void AppController::setScanning(bool scanning) {
     emit scanningChanged();
 }
 
-void AppController::adoptDatabases(const QVector<DbRef> &found) {
-    m_databases = found;
+void AppController::adoptDatabases() {
+    m_databases = m_localDatabases + m_accountDatabases;
 
     // Most-used first, so the database you actually open is the one under the
     // cursor when the window appears.
@@ -511,9 +536,7 @@ void AppController::adoptDatabases(const QVector<DbRef> &found) {
     }
     m_databases = sorted;
 
-    m_filteredDatabases = m_databases;
-    m_databaseQuery.clear();
-    emit databasesChanged();
+    applyDatabaseFilter();
 }
 
 void AppController::askForPassword(const DbRef &ref) {
