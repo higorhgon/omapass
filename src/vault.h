@@ -75,6 +75,13 @@ public:
     // any.
     static QVector<DbRef> findDatabases(const QString &searchPath);
 
+    // The same search in its two halves, so a caller can show the first as
+    // soon as it is known: files on disk (kdbx, pass) never wait for the
+    // account backends, which run external programs (`op`) and can take
+    // seconds or hang.
+    static QVector<DbRef> findLocalDatabases(const QString &searchPath);
+    static QVector<DbRef> findAccountDatabases();
+
     static bool createKeepassDatabase(const QString &name, const Secret &password,
                                       QString *createdPath, QString *error);
 
