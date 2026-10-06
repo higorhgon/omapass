@@ -15,6 +15,19 @@ fi
 
 JOBS="$(nproc 2>/dev/null || echo 1)"
 
+# qmake's Makefiles do not list Qt's own headers as dependencies, so after a
+# Qt (or compiler) upgrade `make` keeps object files built against the old
+# headers and links them with fresh ones. Inline template code from the two
+# versions then meets in one binary, and it crashed in filterItems. Start
+# over whenever the toolchain changes.
+toolchain="$("$QMAKE" -query QT_VERSION) $("$QMAKE" -query QT_INSTALL_HEADERS) $("${CXX:-g++}" --version 2>/dev/null | head -n 1)"
+if [ -d "$BUILD_DIR" ] && [ "$(cat "$BUILD_DIR/.toolchain" 2>/dev/null)" != "$toolchain" ]; then
+  echo "Qt or compiler changed since the last build; rebuilding $BUILD_DIR from scratch." >&2
+  rm -rf "$BUILD_DIR"
+fi
+mkdir -p "$BUILD_DIR"
+printf '%s\n' "$toolchain" > "$BUILD_DIR/.toolchain"
+
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 "$QMAKE" "$ROOT/tests/tests.pro"
