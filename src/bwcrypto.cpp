@@ -107,19 +107,21 @@ std::optional<BwKey> deriveMasterKey(const Secret &password, const QString &salt
     const std::optional<BwBytes> material = deriveKdfMaterial(password, salt, kdf);
     if (!material)
         return std::nullopt;
+    return stretchMasterKey(*material);
+}
 
+std::optional<BwKey> stretchMasterKey(const BwBytes &material) {
     try {
-        // HKDF-Expand only (no extract step), as the SDK's stretch does.
         const auto hkdf = Botan::KDF::create_or_throw("HKDF-Expand(SHA-256)");
         // No salt: this is HKDF-Expand only, as the SDK's stretch does.
         // Botan 3 deprecated the pointer form that Botan 2 only has.
         const auto expand = [&hkdf, &material](const char *label) {
 #if BOTAN_VERSION_MAJOR >= 3
-            return hkdf->derive_key(32, *material, std::span<const uint8_t>(),
+            return hkdf->derive_key(32, material, std::span<const uint8_t>(),
                                     std::span(reinterpret_cast<const uint8_t *>(label),
                                               std::strlen(label)));
 #else
-            return hkdf->derive_key(32, material->data(), material->size(),
+            return hkdf->derive_key(32, material.data(), material.size(),
                                     static_cast<const uint8_t *>(nullptr), size_t(0),
                                     reinterpret_cast<const uint8_t *>(label), std::strlen(label));
 #endif
@@ -132,6 +134,28 @@ std::optional<BwKey> deriveMasterKey(const Secret &password, const QString &salt
     } catch (const std::exception &) {
         return std::nullopt;
     }
+}
+
+Secret masterPasswordHash(const BwBytes &material, const Secret &password) {
+    // One more PBKDF2 round, the master key as the password and the master
+    // password as the salt: what the server stores, never the key itself.
+    BwBytes out(32);
+    try {
+        const auto family = Botan::PasswordHashFamily::create_or_throw("PBKDF2(SHA-256)");
+        const auto hash = family->from_params(1);
+        hash->derive_key(out.data(), out.size(), reinterpret_cast<const char *>(material.data()),
+                         material.size(),
+                         reinterpret_cast<const uint8_t *>(password.bytes().constData()),
+                         size_t(password.bytes().size()));
+    } catch (const std::exception &) {
+        return Secret();
+    }
+    QByteArray raw(reinterpret_cast<const char *>(out.data()), int(out.size()));
+    QByteArray encoded = raw.toBase64();
+    raw.fill('\0');
+    Secret hash(encoded);
+    encoded.fill('\0');
+    return hash;
 }
 
 std::optional<BwKey> keyFromBytes(const BwBytes &bytes) {

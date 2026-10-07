@@ -1,4 +1,4 @@
-QT += core gui qml quick quickcontrols2 dbus concurrent
+QT += core gui qml quick quickcontrols2 dbus concurrent network
 
 CONFIG += c++20 release link_pkgconfig
 # Botan 3 where the distribution has it (Arch), Botan 2 where it does not
@@ -17,7 +17,8 @@ HEADERS += \
     src/bitwardenjson.h \
     src/bitwardenlogin.h \
     src/bitwardenvault.h \
-    src/bwcache.h \
+    src/bwaccount.h \
+    src/bwapi.h \
     src/bwcrypto.h \
     src/clipboard.h \
     src/config.h \
@@ -46,7 +47,8 @@ SOURCES += \
     src/bitwardenjson.cpp \
     src/bitwardenlogin.cpp \
     src/bitwardenvault.cpp \
-    src/bwcache.cpp \
+    src/bwaccount.cpp \
+    src/bwapi.cpp \
     src/bwcrypto.cpp \
     src/clipboard.cpp \
     src/config.cpp \

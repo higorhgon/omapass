@@ -1,4 +1,4 @@
-QT += core testlib
+QT += core testlib network concurrent
 CONFIG += testcase c++20 link_pkgconfig
 # Botan 3 where the distribution has it (Arch), Botan 2 where it does not
 # (Ubuntu 24.04 LTS ships 2.19). Everything omapass asks of Botan exists in
@@ -21,7 +21,8 @@ SOURCES += \
     ../src/bitwardenjson.cpp \
     ../src/bitwardenvault.cpp \
     ../src/bwcrypto.cpp \
-    ../src/bwcache.cpp \
+    ../src/bwaccount.cpp \
+    ../src/bwapi.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/generator.cpp \
@@ -42,7 +43,8 @@ SOURCES += \
 HEADERS += \
     ../src/bitwardenjson.h \
     ../src/bitwardenvault.h \
-    ../src/bwcache.h \
+    ../src/bwaccount.h \
+    ../src/bwapi.h \
     ../src/bwcrypto.h \
     ../src/config.h \
     ../src/filter.h \

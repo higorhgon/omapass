@@ -9,97 +9,8 @@
 
 namespace {
 
-QJsonValue nullableString(const QString &text) {
-    return text.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(text);
-}
-
-QJsonObject blankLoginItem() {
-    QJsonObject login;
-    login.insert(QStringLiteral("uris"), QJsonArray());
-    login.insert(QStringLiteral("username"), QJsonValue::Null);
-    login.insert(QStringLiteral("password"), QJsonValue::Null);
-    login.insert(QStringLiteral("totp"), QJsonValue::Null);
-
-    QJsonObject item;
-    item.insert(QStringLiteral("organizationId"), QJsonValue::Null);
-    item.insert(QStringLiteral("collectionIds"), QJsonValue::Null);
-    item.insert(QStringLiteral("folderId"), QJsonValue::Null);
-    item.insert(QStringLiteral("type"), 1);
-    item.insert(QStringLiteral("name"), QString());
-    item.insert(QStringLiteral("notes"), QJsonValue::Null);
-    item.insert(QStringLiteral("favorite"), false);
-    item.insert(QStringLiteral("fields"), QJsonArray());
-    item.insert(QStringLiteral("login"), login);
-    item.insert(QStringLiteral("secureNote"), QJsonValue::Null);
-    item.insert(QStringLiteral("card"), QJsonValue::Null);
-    item.insert(QStringLiteral("identity"), QJsonValue::Null);
-    item.insert(QStringLiteral("reprompt"), 0);
-    return item;
-}
-
 const QString euServer = QStringLiteral("https://vault.bitwarden.eu");
 
-// A server as bw recorded it, normalised when it can be; an address that no
-// longer passes (plain http from an older bw) is kept as written.
-QString recordedServer(const QString &url) {
-    return normalizeBwServer(url).value_or(url);
-}
-
-// The server out of one of data.json's environment records. bw names its
-// two clouds by region and keeps an address only for its own servers.
-QString environmentServer(const QJsonObject &environment) {
-    const QString region = environment.value(QStringLiteral("region")).toString();
-    if (region == QLatin1String("EU"))
-        return euServer;
-    if (region == QLatin1String("Self-hosted"))
-        return recordedServer(environment.value(QStringLiteral("urls")).toObject()
-                                  .value(QStringLiteral("base")).toString());
-    return QString();
-}
-
-}
-
-BwStatus parseBwStatus(const QString &json) {
-    BwStatus status;
-    const QJsonObject object = QJsonDocument::fromJson(json.trimmed().toUtf8()).object();
-    status.status = object.value(QStringLiteral("status")).toString();
-    status.userEmail = object.value(QStringLiteral("userEmail")).toString();
-    status.serverUrl = recordedServer(object.value(QStringLiteral("serverUrl")).toString());
-    return status;
-}
-
-BwStatus parseBwDataFile(const QByteArray &json) {
-    BwStatus status;
-    const QJsonDocument document = QJsonDocument::fromJson(json);
-    if (!document.isObject())
-        return status;
-
-    const QJsonObject root = document.object();
-    const QString activeId = root.value(QStringLiteral("global_account_activeAccountId")).toString();
-
-    // `bw config server` writes the global record, and login copies it into
-    // the account's; the account's wins while there is one.
-    const QJsonObject accountEnvironment =
-        root.value(QStringLiteral("user_%1_environment_environment").arg(activeId)).toObject();
-    status.serverUrl = environmentServer(
-        !activeId.isEmpty() && accountEnvironment.contains(QStringLiteral("region"))
-            ? accountEnvironment
-            : root.value(QStringLiteral("global_environment_environment")).toObject());
-
-    if (activeId.isEmpty()) {
-        status.status = QStringLiteral("unauthenticated");
-        return status;
-    }
-
-    const QJsonObject account = root.value(QStringLiteral("global_account_accounts"))
-                                    .toObject().value(activeId).toObject();
-    status.userEmail = account.value(QStringLiteral("email")).toString();
-    // An active id without an account record is not a state bw leaves behind
-    // on its own; better to ask bw than to guess.
-    if (status.userEmail.isEmpty())
-        return BwStatus();
-    status.status = QStringLiteral("locked");
-    return status;
 }
 
 std::optional<QString> normalizeBwServer(const QString &input) {
@@ -141,34 +52,6 @@ QString bwDisplayName(const QString &name) {
     QString display = name;
     display.replace(QLatin1Char('/'), QChar(0x2215));
     return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
-}
-
-QHash<QString, QJsonObject> parseBwItems(const QByteArray &itemsJson) {
-    QHash<QString, QJsonObject> items;
-    const QJsonArray array = QJsonDocument::fromJson(itemsJson).array();
-    for (const QJsonValue &value : array) {
-        const QJsonObject item = value.toObject();
-        const QString id = item.value(QStringLiteral("id")).toString();
-        if (!id.isEmpty())
-            items.insert(id, item);
-    }
-    return items;
-}
-
-QHash<QString, QString> parseBwFolders(const QByteArray &foldersJson) {
-    QHash<QString, QString> folders;
-    const QJsonArray array = QJsonDocument::fromJson(foldersJson).array();
-    for (const QJsonValue &value : array) {
-        const QJsonObject folder = value.toObject();
-        const QString id = folder.value(QStringLiteral("id")).toString();
-        QString name = folder.value(QStringLiteral("name")).toString();
-        while (name.endsWith(QLatin1Char('/')))
-            name.chop(1);
-        // `bw list folders` includes a "No Folder" pseudo-folder with a null id.
-        if (!id.isEmpty() && !name.isEmpty())
-            folders.insert(id, name);
-    }
-    return folders;
 }
 
 BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QString, QString> &folders) {
@@ -229,10 +112,6 @@ BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QStri
     return index;
 }
 
-BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson) {
-    return buildBwIndex(parseBwItems(itemsJson), parseBwFolders(foldersJson));
-}
-
 EntryData bwEntryData(const QJsonObject &item) {
     const QJsonObject login = item.value(QStringLiteral("login")).toObject();
     const QJsonArray uris = login.value(QStringLiteral("uris")).toArray();
@@ -246,81 +125,29 @@ EntryData bwEntryData(const QJsonObject &item) {
     return data;
 }
 
-QByteArray applyBwEntryData(const QByteArray &itemJson, const QString &name,
-                            const QString &folderId, const EntryData &data) {
-    QJsonObject item = itemJson.isEmpty() ? blankLoginItem()
-                                          : QJsonDocument::fromJson(itemJson).object();
-
-    item.insert(QStringLiteral("name"), name);
-    item.insert(QStringLiteral("folderId"), nullableString(folderId));
-    item.insert(QStringLiteral("notes"), nullableString(data.notes));
-
-    QJsonObject login = item.value(QStringLiteral("login")).toObject();
-    login.insert(QStringLiteral("username"), nullableString(data.username));
-    login.insert(QStringLiteral("password"), nullableString(data.password.toString()));
-
-    QJsonArray uris = login.value(QStringLiteral("uris")).toArray();
-    if (data.url.isEmpty()) {
-        if (!uris.isEmpty())
-            uris.removeFirst();
-    } else if (uris.isEmpty()) {
-        uris.append(QJsonObject{{QStringLiteral("match"), QJsonValue::Null},
-                                {QStringLiteral("uri"), data.url}});
-    } else {
-        QJsonObject first = uris.first().toObject();
-        first.insert(QStringLiteral("uri"), data.url);
-        uris.replace(0, first);
-    }
-    login.insert(QStringLiteral("uris"), uris);
-    item.insert(QStringLiteral("login"), login);
-
-    return QJsonDocument(item).toJson(QJsonDocument::Compact);
-}
-
-QByteArray bwFolderJson(const QString &name) {
-    return QJsonDocument(QJsonObject{{QStringLiteral("name"), name}}).toJson(QJsonDocument::Compact);
-}
-
-BwLoginError classifyBwError(const QString &output) {
-    const auto has = [&output](const char *text) {
-        return output.contains(QLatin1String(text), Qt::CaseInsensitive);
+BwLoginError classifyBwLoginMessage(const QString &message, bool sentCode) {
+    const auto has = [&message](const char *text) {
+        return message.contains(QLatin1String(text), Qt::CaseInsensitive);
     };
 
-    if (output.trimmed().isEmpty())
-        return BwLoginError::None;
-    if (has("Username or password is incorrect") || has("Invalid master password")
-        || has("Master password is required"))
-        return BwLoginError::WrongPassword;
-    if (has("Email address is invalid"))
-        return BwLoginError::InvalidEmail;
-    if (has("Two-step token is invalid") || has("Invalid verification code")
-        || has("Invalid two-step login method") || has("Code is required")
-        || has("Invalid email or verification code"))
+    if (message.trimmed().isEmpty())
+        return BwLoginError::Other;
+    // With the password already accepted, a refused code is all it can be.
+    if (sentCode)
         return BwLoginError::InvalidCode;
-    if (has("already logged in"))
-        return BwLoginError::AlreadyLoggedIn;
-    // Node's TLS errors, as bw passes them on from fetch.
-    if (has("certificate") || has("CERT_") || has("UNABLE_TO_VERIFY_LEAF_SIGNATURE"))
-        return BwLoginError::ServerCertificate;
-    if (has("FetchError") || has("ECONNREFUSED") || has("ENOTFOUND") || has("EAI_AGAIN")
-        || has("ETIMEDOUT") || has("EHOSTUNREACH") || has("ECONNRESET"))
-        return BwLoginError::ServerUnreachable;
+    if (has("Username or password is incorrect") || has("invalid_username_or_password")
+        || has("Invalid master password"))
+        return BwLoginError::WrongPassword;
+    if (has("email") && (has("invalid") || has("not valid")))
+        return BwLoginError::InvalidEmail;
     return BwLoginError::Other;
 }
 
-BwPrompt detectBwPrompt(const QString &stderrText) {
-    // Checked from the most specific prompt down: a later prompt in the same
-    // run always comes after the earlier ones in the stream.
-    const int device = stderrText.lastIndexOf(QLatin1String("New device verification required"));
-    const int code = stderrText.lastIndexOf(QLatin1String("Two-step login code:"));
-    const int method = stderrText.lastIndexOf(QLatin1String("Two-step login method:"));
-
-    const int latest = std::max({device, code, method});
-    if (latest < 0)
-        return BwPrompt::None;
-    if (latest == device)
-        return BwPrompt::NewDeviceCode;
-    if (latest == code)
-        return BwPrompt::TwoFactorCode;
-    return BwPrompt::TwoFactorMethod;
+QList<int> bwSupportedTwoFactor(const QList<int> &providers) {
+    QList<int> supported;
+    for (int method : {0, 1, 3}) {
+        if (providers.contains(method))
+            supported.append(method);
+    }
+    return supported;
 }

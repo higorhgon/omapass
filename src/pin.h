@@ -8,7 +8,7 @@
 
 // PIN unlock for any database omapass can open.
 //
-// No backend takes a PIN: `bw` and `op` know nothing but the master
+// No backend takes a PIN: Bitwarden and `op` know nothing but the master
 // password, a .kdbx is encrypted with its own, and a pass store wants the
 // GPG passphrase. So what omapass keeps is that password itself, encrypted
 // with a key derived from the PIN (PBKDF2-SHA256, 600000 rounds, random

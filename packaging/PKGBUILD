@@ -15,10 +15,9 @@ depends=('qt6-base' 'qt6-declarative' 'botan' 'hicolor-icon-theme'
          'zlib' 'minizip' 'pcsclite' 'libusb' 'readline')
 makedepends=('git' 'cmake' 'qt6-tools' 'pkgconf')
 # Os CLIs dos backends sao opcionais de proposito: cada um habilita um tipo
-# de banco, e quem usa so o KeePassXC (que vai no pacote) nao precisa de
-# nenhum. `omapass --doctor` diz o que foi encontrado.
-optdepends=('bitwarden-cli: contas Bitwarden'
-            '1password-cli: contas 1Password'
+# de banco, e quem usa so o KeePassXC (que vai no pacote) ou o Bitwarden
+# (falado direto pela API) nao precisa de nenhum. `omapass --doctor` diz o que foi encontrado.
+optdepends=('1password-cli: contas 1Password'
             'pass: criar password-stores pela interface'
             'gnupg: bancos do pass'
             'libsecret: desbloqueio por PIN'

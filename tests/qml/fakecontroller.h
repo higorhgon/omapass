@@ -28,11 +28,13 @@ class FakeController : public QObject {
     Q_PROPERTY(QString loginStep MEMBER m_loginStep NOTIFY loginChanged)
     Q_PROPERTY(QString loginEmail MEMBER m_loginEmail NOTIFY loginChanged)
     Q_PROPERTY(QString loginServer MEMBER m_loginServer NOTIFY loginChanged)
-    Q_PROPERTY(bool bitwardenAvailable MEMBER m_bitwardenAvailable CONSTANT)
+    Q_PROPERTY(QVariantList loginMethods MEMBER m_loginMethods NOTIFY loginChanged)
     Q_PROPERTY(bool onePasswordAvailable MEMBER m_onePasswordAvailable CONSTANT)
     Q_PROPERTY(QString message MEMBER m_message NOTIFY messageChanged)
     Q_PROPERTY(bool messageIsError MEMBER m_messageIsError NOTIFY messageChanged)
     Q_PROPERTY(bool hasMessage MEMBER m_hasMessage NOTIFY messageChanged)
+    // What the last copy put on the clipboard, for the tests to read.
+    Q_PROPERTY(QString lastCopied MEMBER m_lastCopied NOTIFY copied)
 
 public:
     using QObject::QObject;
@@ -51,6 +53,10 @@ public:
     }
 
     Q_INVOKABLE void selectDatabase(int) {}
+    Q_INVOKABLE void copyText(const QString &text) {
+        m_lastCopied = text;
+        emit copied();
+    }
     Q_INVOKABLE bool isBitwardenDatabase(int) { return false; }
     Q_INVOKABLE bool isOnePasswordDatabase(int) { return false; }
     Q_INVOKABLE void cancelAccountCheck() { emit cancelAccountCheckCalled(); }
@@ -65,7 +71,7 @@ public:
     Q_INVOKABLE void sendBitwardenCode(const QString &) {}
     Q_INVOKABLE void cancelBitwardenLogin() {}
     Q_INVOKABLE void chooseBitwardenMethod(int) {}
-    Q_INVOKABLE void logoutBitwarden() {}
+    Q_INVOKABLE void logoutBitwarden(int) {}
     Q_INVOKABLE void onePasswordLogin(const QString &, const QString &, const QString &,
                                       const QString &, const QString &) {}
     Q_INVOKABLE void sendOnePasswordCode(const QString &) {}
@@ -73,6 +79,7 @@ public:
     Q_INVOKABLE void logoutOnePassword(int) {}
 
 signals:
+    void copied();
     void scanningChanged();
     void databasesChanged();
     void checkingAccountChanged();
@@ -95,7 +102,8 @@ private:
     QString m_loginStep;
     QString m_loginEmail;
     QString m_loginServer;
-    bool m_bitwardenAvailable = true;
+    QString m_lastCopied;
+    QVariantList m_loginMethods;
     bool m_onePasswordAvailable = true;
     QString m_message;
     bool m_messageIsError = false;

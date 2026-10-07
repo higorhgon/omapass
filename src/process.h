@@ -16,7 +16,7 @@ struct ProcResult {
 };
 
 // How long a command may take before it is given up on. The CLIs omapass
-// drives answer in seconds at worst (`bw` is the slow one), and a run that
+// drives answer in seconds at worst (`op` is the slow one), and a run that
 // never ends would otherwise keep a background task — and with it the whole
 // interface — waiting for good.
 constexpr int processTimeoutMs = 120000;

@@ -2,7 +2,6 @@
 
 #include "bitwardenvault.h"
 #include "pin.h"
-#include "bwcache.h"
 #include "clipboard.h"
 #include "filter.h"
 #include "generator.h"
@@ -11,6 +10,7 @@
 #include "passstore.h"
 
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QEvent>
 #include <QFutureWatcher>
@@ -28,12 +28,14 @@ namespace {
 constexpr int lockCheckIntervalMs = 5000;
 
 // How long an account check may take before the interface says it is
-// waiting. Reading bw's own data file answers in a millisecond, and a sheet
-// shown and taken away in that time reads as a glitch; a check that has to
-// run `bw` takes seconds, and then silence reads as a dead keypress.
+// waiting. Reading a local file answers in a millisecond, and a sheet shown
+// and taken away in that time reads as a glitch; a check that has to run
+// `op` takes seconds, and then silence reads as a dead keypress.
 constexpr int accountCheckNoticeMs = 200;
 
 const auto windowGeometrySetting = QStringLiteral("window/geometry");
+// The Bitwarden server last logged into, which the next login sheet offers.
+const auto lastServerSetting = QStringLiteral("bitwarden/lastServer");
 
 // Outcome of a backend call run in the background.
 struct TaskResult {
@@ -90,40 +92,20 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             break;
         }
     });
-    connect(&m_bitwardenLogin, &BitwardenLogin::succeeded, this, [this](const Secret &session) {
-        const QString email = m_loginEmail;
+    connect(&m_bitwardenLogin, &BitwardenLogin::succeeded, this, [this](BitwardenVault *vault) {
         setBusy(false);
         setLoginStep(QString());
+        QSettings().setValue(lastServerSetting, BwAccount::serverOf(vault->path()));
 
-        BitwardenVault::rememberAccount(email);
+        // The login already pulled and opened the vault: it goes straight
+        // in, and into the list for next time.
         refreshDatabases();
         emit databaseCreated();
-
-        // The account is in the list from here on; loading it goes through
-        // the unlock sheet's busy state, like any other open.
-        const DbRef ref{BitwardenVault::refPath(email), VaultKind::Bitwarden};
-        m_pendingDatabase = ref;
-        m_hasPendingDatabase = true;
-        refreshPinState();
-        emit pendingDatabaseChanged();
-
-        runInBackground(
-            [email, session]() {
-                OpenResult result;
-                result.vault = BitwardenVault::openWithSession(email, session, &result.error);
-                return result;
-            },
-            [this, ref](const OpenResult &result) {
-                if (result.vault)
-                    adoptVault(ref, result.vault);
-                else
-                    setUnlockError(result.error);
-            });
+        adoptVault({vault->path(), VaultKind::Bitwarden}, vault);
     });
     connect(&m_bitwardenLogin, &BitwardenLogin::failed, this,
             [this](const QString &error, BwLoginError kind) {
         setBusy(false);
-        m_loginPassword.clear();
 
         switch (kind) {
         case BwLoginError::WrongPassword:
@@ -133,8 +115,10 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_email")));
             break;
         case BwLoginError::InvalidCode:
+            // The login is still waiting on the code: another try goes to
+            // the same step, without typing the password again.
             setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_code")));
-            break;
+            return;
         case BwLoginError::ServerUnreachable:
             setUnlockError(I18n::t(QStringLiteral("bitwarden.server_unreachable"),
                                    QStringLiteral("server"), m_loginServer));
@@ -143,18 +127,14 @@ AppController::AppController(const AppConfig &config, QObject *parent)
             setUnlockError(I18n::t(QStringLiteral("bitwarden.server_certificate"),
                                    QStringLiteral("server"), m_loginServer));
             break;
-        case BwLoginError::AlreadyLoggedIn:
-            // Logged in from a terminal meanwhile: nothing left to do here
-            // but unlock, which the account's own entry does.
-            setLoginStep(QString());
-            addBitwardenAccount();
-            return;
+        case BwLoginError::UnsupportedTwoStep:
+            setUnlockError(I18n::t(QStringLiteral("bitwarden.unsupported_two_step")));
+            break;
         default:
             setUnlockError(error.isEmpty() ? I18n::t(QStringLiteral("bitwarden.login_failed")) : error);
             break;
         }
-        // Every failure ends the bw process, so the next try starts over from
-        // the credentials, e-mail kept.
+        // Anything else starts over from the credentials, e-mail kept.
         setLoginStep(QStringLiteral("credentials"));
     });
 
@@ -253,6 +233,9 @@ void AppController::applyLockSettings() {
 }
 
 AppController::~AppController() {
+    // A sync or login waiting on the network ends now rather than when the
+    // server gets round to answering; what it was doing is lost either way.
+    BwApi::abortAll();
     m_bitwardenLogin.cancel();
     m_onePasswordLogin.cancel();
     m_task.waitForFinished();
@@ -416,14 +399,6 @@ bool AppController::bitwardenBackend() const {
     return !m_vault.isNull() && m_vault->kind() == VaultKind::Bitwarden;
 }
 
-QString AppController::bitwardenAccount() const {
-    if (bitwardenBackend())
-        return BitwardenVault::emailOf(m_vault->path());
-    if (m_hasPendingDatabase && m_pendingDatabase.kind == VaultKind::Bitwarden)
-        return BitwardenVault::emailOf(m_pendingDatabase.path);
-    return QString();
-}
-
 DbRef AppController::pinTarget() const {
     if (!m_vault.isNull())
         return {m_vault->path(), m_vault->kind()};
@@ -573,9 +548,8 @@ struct AccountCheck {
 
 }
 
-// The two checks below read a file in the good case, but fall back to
-// running `bw` — seconds, since it is a Node binary — when that file cannot
-// answer. Blocking the interface on that turns a keypress into a freeze, so
+// The checks below read a file in the good case, but 1Password's can fall
+// back to running `op`, which takes seconds. Blocking the interface on that turns a keypress into a freeze, so
 // it happens here, off the thread, with a sheet saying so if it drags.
 void AppController::checkAccountThenAsk(const DbRef &ref) {
     const quint64 generation = ++m_accountCheckGeneration;
@@ -628,10 +602,9 @@ void AppController::checkAccountThenAsk(const DbRef &ref) {
             return check;
         }
 
-        const BwStatus status = BitwardenVault::status();
-        check.usable = status.loggedIn();
-        check.email = BitwardenVault::emailOf(ref.path);
-        check.server = bwServerLabel(status.serverUrl);
+        check.usable = BitwardenVault::hasSession(ref.path);
+        check.email = BwAccount::emailOf(ref.path);
+        check.server = BitwardenVault::serverLabel(ref.path);
         return check;
     });
     m_accountCheckTask = QFuture<void>(future);
@@ -710,7 +683,7 @@ void AppController::unlock(const QString &password) {
         });
 }
 
-// The PIN never reaches bw: it decrypts the master password kept in the
+// The PIN never reaches a backend: it decrypts the master password kept in the
 // keyring, and the usual unlock goes ahead with that.
 void AppController::unlockWithPin(const QString &pin) {
     if (m_busy || !m_hasPendingDatabase || !m_pinAvailable)
@@ -802,7 +775,7 @@ void AppController::adoptVault(const DbRef &ref, Vault *vault) {
     m_stage = QStringLiteral("entries");
     emit stageChanged();
 
-    // Opening read bw's local copy; what changed on the server since the
+    // Opening read omapass' own copy; what changed on the server since the
     // last sync arrives a moment later.
     if (vault->kind() == VaultKind::Bitwarden)
         startBackgroundSync();
@@ -877,6 +850,72 @@ void AppController::copyText(const QString &text) {
         showMessage(I18n::t(QStringLiteral("app.copy_error")), true);
 }
 
+bool AppController::fetchForCopy(const QString &entry, EntryData *data) {
+    if (m_vault.isNull())
+        return false;
+    if (isEmptyGroup(entry)) {
+        showMessage(I18n::t(QStringLiteral("app.empty_group")), true);
+        return false;
+    }
+    QString error;
+    if (!m_vault->fetchEntry(entry, data, &error)) {
+        showMessage(error, true);
+        return false;
+    }
+    m_history.recordUse(entry);
+    return true;
+}
+
+void AppController::copyUsername(const QString &entry) {
+    EntryData data;
+    if (!fetchForCopy(entry, &data))
+        return;
+    if (data.username.isEmpty()) {
+        showMessage(I18n::t(QStringLiteral("app.no_username")), true);
+        return;
+    }
+    if (Clipboard::copy(data.username))
+        showMessage(I18n::t(QStringLiteral("app.copied_username"), QStringLiteral("entry"), entry), false);
+    else
+        showMessage(I18n::t(QStringLiteral("app.copy_error")), true);
+}
+
+void AppController::copyUrl(const QString &entry) {
+    EntryData data;
+    if (!fetchForCopy(entry, &data))
+        return;
+    if (data.url.isEmpty()) {
+        showMessage(I18n::t(QStringLiteral("app.no_url")), true);
+        return;
+    }
+    if (Clipboard::copy(data.url))
+        showMessage(I18n::t(QStringLiteral("app.copied_url"), QStringLiteral("entry"), entry), false);
+    else
+        showMessage(I18n::t(QStringLiteral("app.copy_error")), true);
+}
+
+void AppController::openUrl(const QString &entry) {
+    EntryData data;
+    if (!fetchForCopy(entry, &data))
+        return;
+    if (data.url.isEmpty()) {
+        showMessage(I18n::t(QStringLiteral("app.no_url")), true);
+        return;
+    }
+
+    // Saved without a scheme ("exemplo.com") is how people type addresses;
+    // the browser needs one.
+    QUrl url = QUrl::fromUserInput(data.url);
+    if (!url.isValid() || url.scheme().isEmpty()) {
+        showMessage(I18n::t(QStringLiteral("app.open_url_error"), QStringLiteral("url"), data.url), true);
+        return;
+    }
+    if (QDesktopServices::openUrl(url))
+        showMessage(I18n::t(QStringLiteral("app.opening_url"), QStringLiteral("url"), url.toString()), false);
+    else
+        showMessage(I18n::t(QStringLiteral("app.open_url_error"), QStringLiteral("url"), data.url), true);
+}
+
 QVariantMap AppController::entryDetails(const QString &entry) {
     if (m_vault.isNull() || isEmptyGroup(entry)) {
         showMessage(I18n::t(QStringLiteral("app.empty_group")), true);
@@ -890,6 +929,7 @@ QVariantMap AppController::entryDetails(const QString &entry) {
     m_vault->fetchEntry(entry, &data, &error);
 
     return {{QStringLiteral("title"), m_vault->titleFor(entry, fallback)},
+            {QStringLiteral("username"), data.username},
             {QStringLiteral("url"), data.url},
             {QStringLiteral("notes"), data.notes}};
 }
@@ -1126,17 +1166,11 @@ void AppController::createPassStore(const QString &directory, const QString &key
     });
 }
 
-bool AppController::bitwardenAvailable() const {
-    return BitwardenVault::isAvailable();
-}
-
 bool AppController::onePasswordAvailable() const {
     return OnePasswordVault::isAvailable();
 }
 
 void AppController::setLoginStep(const QString &step) {
-    if (step.isEmpty())
-        m_loginPassword.clear();
     m_loginStep = step;
     emit loginChanged();
 }
@@ -1146,31 +1180,8 @@ void AppController::addBitwardenAccount() {
         return;
 
     setUnlockError(QString());
-    const BwStatus status = BitwardenVault::status();
-
-    // `bw` holds one account at a time, so adding another is only possible
-    // after leaving the current one.
-    if (status.loggedIn() && !BitwardenVault::rememberedAccount().isEmpty()) {
-        showMessage(I18n::t(QStringLiteral("bitwarden.one_account")), true);
-        return;
-    }
-
-    // Already logged in with bw (from a terminal, say): the account only
-    // needs adding to the list and unlocking.
-    if (status.loggedIn() && !status.userEmail.isEmpty()) {
-        BitwardenVault::rememberAccount(status.userEmail);
-        refreshDatabases();
-        emit databaseCreated();
-
-        m_pendingDatabase = {BitwardenVault::refPath(status.userEmail), VaultKind::Bitwarden};
-        m_hasPendingDatabase = true;
-        refreshPinState();
-        emit pendingDatabaseChanged();
-        return;
-    }
-
-    m_loginEmail = BitwardenVault::rememberedAccount();
-    m_loginServer = bwServerLabel(status.serverUrl);
+    m_loginEmail.clear();
+    m_loginServer = bwServerLabel(QSettings().value(lastServerSetting).toString());
     setLoginStep(QStringLiteral("credentials"));
 }
 
@@ -1186,36 +1197,38 @@ void AppController::bitwardenLogin(const QString &server, const QString &email,
     }
 
     const QString trimmed = email.trimmed();
-    if (trimmed.isEmpty()) {
+    if (trimmed.isEmpty() || !trimmed.contains(QLatin1Char('@'))) {
         setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_email")));
         return;
     }
 
     m_loginServer = bwServerLabel(*target);
     m_loginEmail = trimmed;
-    m_loginPassword = Secret(password);
     emit loginChanged();
-
-    // `bw config server` costs a Node start-up of its own, so it only runs
-    // when the server really changes; bitwarden.com goes back by name.
-    const bool sameServer = *target == BitwardenVault::status().serverUrl;
-    const QString configure = sameServer ? QString()
-                              : target->isEmpty() ? QStringLiteral("bitwarden.com")
-                                                  : *target;
 
     setBusy(true);
     setUnlockError(QString());
-    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, configure);
+    m_bitwardenLogin.start(*target, m_loginEmail, Secret(password));
 }
 
 void AppController::chooseBitwardenMethod(int method) {
-    if (m_busy || m_loginPassword.isEmpty())
+    if (m_busy || !m_bitwardenLogin.methods().contains(method))
         return;
 
-    setBusy(true);
+    // E-mail sends the code first, which takes a request; the others only
+    // change what is asked.
+    if (method == 1)
+        setBusy(true);
     setUnlockError(QString());
-    // The server was set on the first try, which is what got bw this far.
-    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, QString(), method);
+    m_bitwardenLogin.chooseMethod(method);
+}
+
+QVariantList AppController::loginMethods() const {
+    QVariantList methods;
+    const QList<int> available = m_bitwardenLogin.methods();
+    for (int method : available)
+        methods.append(method);
+    return methods;
 }
 
 void AppController::sendBitwardenCode(const QString &code) {
@@ -1239,26 +1252,22 @@ bool AppController::isBitwardenDatabase(int index) const {
         && m_filteredDatabases.at(index).kind == VaultKind::Bitwarden;
 }
 
-void AppController::logoutBitwarden() {
-    if (!requireIdle())
+void AppController::logoutBitwarden(int index) {
+    if (!requireIdle() || !isBitwardenDatabase(index))
         return;
 
-    const QString email = BitwardenVault::rememberedAccount();
+    const QString path = m_filteredDatabases.at(index).path;
     runInBackground(
-        [email]() {
+        [path]() {
             TaskResult result;
-            result.ok = BitwardenVault::logout(&result.error);
+            result.ok = BitwardenVault::logout(path, &result.error);
             // An account nobody is signed into has no business leaving its
             // master password behind in the keyring.
             if (result.ok)
-                Pin::clear(BitwardenVault::refPath(email));
+                Pin::clear(path);
             return result;
         },
         [this](const TaskResult &result) {
-            // The account only leaves the list once bw has really let go of
-            // it; otherwise omapass would hide an account still logged in.
-            if (result.ok)
-                BitwardenVault::forgetAccount();
             refreshPinState();
             refreshDatabases();
             showMessage(result.ok ? I18n::t(QStringLiteral("bitwarden.logged_out")) : result.error,

@@ -3,13 +3,13 @@ import QtQuick
 // Logs into a Bitwarden account. Two shapes: server, e-mail and master
 // password first, then — only if the account asks for one — a single code (two-step
 // login or new-device verification). The step comes from the controller,
-// which follows what `bw login` is actually prompting for.
+// which follows what the server asks for.
 Modal {
     id: root
 
     property string step: "credentials"
     // bitwarden.com, the EU cloud or a server of your own (Vaultwarden,
-    // self-hosted Bitwarden); comes filled with where bw points now.
+    // self-hosted Bitwarden); comes filled with the last one logged into.
     property string server: "bitwarden.com"
     property string email: ""
     property string errorText: ""

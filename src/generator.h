@@ -8,8 +8,8 @@
 // Password and passphrase generation, through `keepassxc-cli`, which omapass
 // already ships and which answers in about ten milliseconds — fast enough to
 // regenerate on every change in the sheet. The other backends' generators
-// are not used: `bw generate` takes a couple of seconds per password, and
-// `pass generate` writes an entry instead of just generating one.
+// are not used: `pass generate`, for one, writes an entry instead of just
+// generating one.
 
 struct GeneratorOptions {
     // Words from a wordlist instead of characters.

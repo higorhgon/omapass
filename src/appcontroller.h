@@ -49,16 +49,18 @@ class AppController : public QObject {
     // The database waiting to be unlocked has a PIN stored for it.
     Q_PROPERTY(bool pinAvailable READ pinAvailable NOTIFY pendingDatabaseChanged)
 
-    Q_PROPERTY(bool bitwardenAvailable READ bitwardenAvailable CONSTANT)
     Q_PROPERTY(bool onePasswordAvailable READ onePasswordAvailable CONSTANT)
     // Where a login sheet is: "" (closed); "credentials", "method", "code"
     // or "deviceCode" for Bitwarden; "opCredentials" or "opCode" for
     // 1Password.
     Q_PROPERTY(QString loginStep READ loginStep NOTIFY loginChanged)
     Q_PROPERTY(QString loginEmail READ loginEmail NOTIFY loginChanged)
-    // The server the Bitwarden login sheet starts with: where bw is pointed
-    // now, "bitwarden.com" by default.
+    // The server the Bitwarden login sheet starts with: the last one logged
+    // into, "bitwarden.com" by default.
     Q_PROPERTY(QString loginServer READ loginServer NOTIFY loginChanged)
+    // The two-step methods to choose from on the "method" step, as
+    // Bitwarden's TwoFactorProviderType numbers.
+    Q_PROPERTY(QVariantList loginMethods READ loginMethods NOTIFY loginChanged)
 
     Q_PROPERTY(QString vaultLabel READ vaultLabel NOTIFY stageChanged)
     Q_PROPERTY(bool passBackend READ passBackend NOTIFY stageChanged)
@@ -96,11 +98,11 @@ public:
     QVariantMap pendingDatabase() const;
     QString unlockError() const { return m_unlockError; }
 
-    bool bitwardenAvailable() const;
     bool onePasswordAvailable() const;
     QString loginStep() const { return m_loginStep; }
     QString loginEmail() const { return m_loginEmail; }
     QString loginServer() const { return m_loginServer; }
+    QVariantList loginMethods() const;
 
     QString vaultLabel() const;
     bool passBackend() const;
@@ -142,7 +144,7 @@ public:
     Q_INVOKABLE void sendBitwardenCode(const QString &code);
     Q_INVOKABLE void cancelBitwardenLogin();
     Q_INVOKABLE bool isBitwardenDatabase(int index) const;
-    Q_INVOKABLE void logoutBitwarden();
+    Q_INVOKABLE void logoutBitwarden(int index);
     Q_INVOKABLE QString validatePin(const QString &pin, const QString &confirm,
                                     bool allowText = false) const;
     Q_INVOKABLE QString pinWeakWarning(const QString &pin) const;
@@ -170,6 +172,10 @@ public:
 
     Q_INVOKABLE void copyPassword(const QString &entry);
     Q_INVOKABLE void copyText(const QString &text);
+    // The entry's login or URL to the clipboard, and its URL to the browser.
+    Q_INVOKABLE void copyUsername(const QString &entry);
+    Q_INVOKABLE void copyUrl(const QString &entry);
+    Q_INVOKABLE void openUrl(const QString &entry);
     Q_INVOKABLE QVariantMap entryDetails(const QString &entry);
     Q_INVOKABLE QVariantMap entryFields(const QString &entry);
     Q_INVOKABLE void saveEntry(const QVariantMap &fields);
@@ -216,8 +222,8 @@ private:
     void setBusy(bool busy);
     // Runs `work` on a worker thread with the app marked busy, then `done`
     // with its result back on this one. The backends block on external
-    // processes — `bw` takes seconds per call — and the window has to keep
-    // painting meanwhile.
+    // processes and the network — `op` takes seconds per call — and the
+    // window has to keep painting meanwhile.
     template <typename Work, typename Done>
     void runInBackground(Work work, Done done);
     // Whether the open vault can take a change right now; says why not on the
@@ -249,9 +255,11 @@ private:
     void applyEntryFilter();
     void openVault(const DbRef &ref, const Secret &secret);
     void adoptVault(const DbRef &ref, Vault *vault);
+    // The entry's fields for a copy, recording the use; says why not when
+    // they cannot be read.
+    bool fetchForCopy(const QString &entry, EntryData *data);
     void setLoginStep(const QString &step);
     // Account of the open vault, or of the one waiting to be unlocked.
-    QString bitwardenAccount() const;
     // The database a PIN would belong to: the open one, or the one waiting
     // to be unlocked.
     DbRef pinTarget() const;
@@ -327,9 +335,6 @@ private:
     // one that is already here: both can stop to ask for a two-step code,
     // and they go back to different places when they fail.
     bool m_onePasswordAdding = false;
-    // Kept only while a login is in progress: choosing a two-step method
-    // restarts `bw login`, which needs the password again.
-    Secret m_loginPassword;
 
     QStringList m_allEntries;
     QStringList m_filteredEntries;

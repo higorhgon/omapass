@@ -36,9 +36,6 @@ cli.doctor_gpg:
 cli.doctor_pass:
   pt-BR: "criar stores do pass"
   en: "creating pass stores"
-cli.doctor_bw:
-  pt-BR: "contas Bitwarden"
-  en: "Bitwarden accounts"
 cli.doctor_op:
   pt-BR: "contas 1Password"
   en: "1Password accounts"
@@ -234,6 +231,24 @@ app.add_error:
 app.copy_password_error:
   pt-BR: "Erro ao copiar senha."
   en: "Error copying password."
+app.no_username:
+  pt-BR: "Esta entrada não tem login."
+  en: "This entry has no login."
+app.no_url:
+  pt-BR: "Esta entrada não tem URL."
+  en: "This entry has no URL."
+app.copied_username:
+  pt-BR: "Login copiado: %{entry}"
+  en: "Login copied: %{entry}"
+app.copied_url:
+  pt-BR: "URL copiada: %{entry}"
+  en: "URL copied: %{entry}"
+app.opening_url:
+  pt-BR: "Abrindo %{url}"
+  en: "Opening %{url}"
+app.open_url_error:
+  pt-BR: "Não foi possível abrir %{url}"
+  en: "Could not open %{url}"
 app.copied_entry:
   pt-BR: "Copiado: %{entry}"
   en: "Copied: %{entry}"
@@ -307,9 +322,6 @@ backend.wrong_password:
   pt-BR: "Senha incorreta!"
   en: "Wrong password!"
 
-bitwarden.spawn_error:
-  pt-BR: "Erro ao executar o bw (instale o bitwarden-cli): %{err}"
-  en: "Error running bw (install bitwarden-cli): %{err}"
 bitwarden.not_logged_in:
   pt-BR: "A conta Bitwarden não está logada."
   en: "The Bitwarden account is not logged in."
@@ -325,12 +337,24 @@ bitwarden.invalid_code:
 bitwarden.login_failed:
   pt-BR: "Falha no login do Bitwarden."
   en: "Bitwarden login failed."
-bitwarden.logout_failed:
-  pt-BR: "Não foi possível sair da conta Bitwarden; ela continua conectada no bw."
-  en: "Could not log out of the Bitwarden account; it is still logged in to bw."
 bitwarden.logged_out:
   pt-BR: "Conta Bitwarden desconectada."
   en: "Bitwarden account logged out."
+bitwarden.network_error:
+  pt-BR: "Não foi possível falar com o servidor: %{err}"
+  en: "Could not reach the server: %{err}"
+bitwarden.certificate_error:
+  pt-BR: "Certificado do servidor não confiável: %{err}"
+  en: "Untrusted server certificate: %{err}"
+bitwarden.session_expired:
+  pt-BR: "A sessão do Bitwarden expirou; trave e entre na conta de novo."
+  en: "The Bitwarden session expired; lock and log in to the account again."
+bitwarden.unsupported_account:
+  pt-BR: "Esta conta usa uma forma de desbloqueio que o omapass não suporta (SSO sem senha mestra?)."
+  en: "This account unlocks in a way omapass does not support (SSO without a master password?)."
+bitwarden.unsupported_two_step:
+  pt-BR: "Nenhum método de verificação em duas etapas suportado (use aplicativo autenticador, e-mail ou YubiKey OTP)."
+  en: "No supported two-step method (use an authenticator app, e-mail or YubiKey OTP)."
 bitwarden.login_title:
   pt-BR: " Entrar no Bitwarden "
   en: " Log in to Bitwarden "
@@ -341,14 +365,14 @@ bitwarden.server_label:
   pt-BR: " Servidor "
   en: " Server "
 bitwarden.invalid_server:
-  pt-BR: "Servidor inválido! Use https:// (o bw não aceita http)."
-  en: "Invalid server! Use https:// (bw does not accept http)."
+  pt-BR: "Servidor inválido! Use https:// — o login não é enviado sem criptografia."
+  en: "Invalid server! Use https:// — the login is not sent unencrypted."
 bitwarden.server_unreachable:
   pt-BR: "Não foi possível conectar a %{server}."
   en: "Could not connect to %{server}."
 bitwarden.server_certificate:
-  pt-BR: "O certificado de %{server} não é confiável para o bw (veja NODE_EXTRA_CA_CERTS no README)."
-  en: "bw does not trust the certificate of %{server} (see NODE_EXTRA_CA_CERTS in the README)."
+  pt-BR: "O certificado de %{server} não é confiável (veja o README sobre certificados próprios)."
+  en: "The certificate of %{server} is not trusted (see the README on certificates of your own)."
 bitwarden.email_label:
   pt-BR: " E-mail "
   en: " E-mail "
@@ -379,12 +403,9 @@ bitwarden.method_email:
 bitwarden.method_yubikey:
   pt-BR: "YubiKey"
   en: "YubiKey"
-bitwarden.one_account:
-  pt-BR: "O bw mantém uma conta por vez: saia da atual com Ctrl+X antes de adicionar outra."
-  en: "bw keeps one account at a time: leave the current one with Ctrl+X before adding another."
 bitwarden.logout_confirm:
-  pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e o bw é desconectado. [y/N]"
-  en: "\nLog out of the Bitwarden account?\nIt leaves the list and bw is logged out. [y/N]"
+  pt-BR: "\nSair da conta Bitwarden?\nEla sai da lista e a cópia local é apagada. [y/N]"
+  en: "\nLog out of the Bitwarden account?\nIt leaves the list and its local copy is deleted. [y/N]"
 pin.title:
   pt-BR: " Desbloqueio por PIN "
   en: " PIN Unlock "
@@ -448,9 +469,6 @@ pin.setup_footer:
 pin.help:
   pt-BR: "Ativar/desativar desbloqueio por PIN"
   en: "Enable/disable PIN unlock"
-bitwarden.no_session:
-  pt-BR: "O Bitwarden ainda não está pronto para alterações; bloqueie e abra de novo."
-  en: "Bitwarden is not ready for changes yet; lock and open it again."
 bitwarden.wait_sync:
   pt-BR: "Aguarde a sincronização com o Bitwarden terminar."
   en: "Wait for the Bitwarden sync to finish."
@@ -760,12 +778,27 @@ ui.show_password:
 ui.footer_form_pass:
   pt-BR: "TAB/SHIFT-TAB: Navegar | ENTER: Confirmar"
   en: "TAB/SHIFT-TAB: Navigate | ENTER: Confirm"
+ui.info_login:
+  pt-BR: "Login"
+  en: "Login"
 ui.info_footer_full:
-  pt-BR: "Clique e arraste em um campo para selecionar e copiar | TAB: Alternar | ESC: Fechar"
-  en: "Click and drag in a field to select and copy | TAB: Switch | ESC: Close"
+  pt-BR: "ENTER: Copiar campo | Arraste para selecionar e copiar | TAB: Alternar | ESC: Fechar"
+  en: "ENTER: Copy field | Drag to select and copy | TAB: Switch | ESC: Close"
 ui.info_footer_pass:
-  pt-BR: "Clique e arraste para selecionar e copiar | ESC: Fechar"
-  en: "Click and drag to select and copy | ESC: Close"
+  pt-BR: "ENTER: Copiar | Arraste para selecionar e copiar | ESC: Fechar"
+  en: "ENTER: Copy | Drag to select and copy | ESC: Close"
+ui.context_copy_password:
+  pt-BR: "Copiar senha"
+  en: "Copy password"
+ui.context_copy_username:
+  pt-BR: "Copiar login"
+  en: "Copy login"
+ui.context_copy_url:
+  pt-BR: "Copiar URL"
+  en: "Copy URL"
+ui.context_open_url:
+  pt-BR: "Abrir URL"
+  en: "Open URL"
 ui.context_add_new:
   pt-BR: "Adicionar nova"
   en: "Add new"
@@ -778,6 +811,15 @@ ui.context_delete:
 ui.help_mouse_section:
   pt-BR: "MOUSE"
   en: "MOUSE"
+ui.help_copy_username:
+  pt-BR: "Copiar login"
+  en: "Copy login"
+ui.help_copy_url:
+  pt-BR: "Copiar URL"
+  en: "Copy URL"
+ui.help_open_url:
+  pt-BR: "Abrir URL no navegador"
+  en: "Open URL in the browser"
 ui.help_copy_password:
   pt-BR: "Copiar senha"
   en: "Copy password"
