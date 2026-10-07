@@ -28,6 +28,9 @@ FocusScope {
     signal deleteRequested()
     signal generateRequested()
     signal pinToggleRequested()
+    signal copyUsernameRequested()
+    signal copyUrlRequested()
+    signal openUrlRequested()
     signal helpRequested()
     signal quitRequested()
 
@@ -97,6 +100,16 @@ FocusScope {
         case Qt.Key_X: pane.deleteRequested(); return true;
         case Qt.Key_G: pane.generateRequested(); return true;
         case Qt.Key_I: pane.pinToggleRequested(); return true;
+        // B for the login as in KeePassXC; U, its key for the URL, already
+        // scrolls half a page here, so L (link) copies it and Shift+L opens
+        // it. Ctrl+O is taken by the settings, application-wide.
+        case Qt.Key_B: pane.copyUsernameRequested(); return true;
+        case Qt.Key_L:
+            if (event.modifiers & Qt.ShiftModifier)
+                pane.openUrlRequested();
+            else
+                pane.copyUrlRequested();
+            return true;
         // Ctrl+? reaches applications as Ctrl+Shift+/ or plain Ctrl+/
         // depending on the layout; both open the shortcut sheet.
         case Qt.Key_Question:

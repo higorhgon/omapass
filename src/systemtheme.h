@@ -39,6 +39,9 @@ private:
                               std::function<void(const QVariant &)> handler);
     void requestPortalDarkMode();
     void requestPortalTextScale();
+    // The first read of the text scale, waited for (briefly) instead of
+    // arriving after the first frame. Returns whether the portal answered.
+    bool readInitialTextScale();
     bool qtDarkMode(bool *known) const;
     void setDarkMode(bool darkMode);
     void setTextScale(qreal textScale);

@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Controls
 
 // Read-only view of an entry, opened with Tab. Selecting text copies it, the
-// way dragging over a field did in the TUI; Tab cycles between the fields.
+// way dragging over a field did in the TUI; Enter copies the whole field
+// under the cursor, and Tab cycles between the fields.
 //
 // A pass entry only shows the Title — the format has no URL or Notes of its
 // own.
@@ -78,6 +79,10 @@ Modal {
                     case Qt.Key_Q:
                         root.dismissed();
                         break;
+                    case Qt.Key_Return:
+                    case Qt.Key_Enter:
+                        controller.copyText(fieldColumn.value);
+                        break;
                     case Qt.Key_Tab:
                         if (fieldColumn.nextField)
                             fieldColumn.nextField.forceActiveFocus();
@@ -99,8 +104,18 @@ Modal {
         id: titleView
         label: i18n.t("common.title_word")
         value: root.details.title || ""
-        nextField: root.passBackend ? titleView.view : urlView.view
+        nextField: root.passBackend ? titleView.view : usernameView.view
         previousField: root.passBackend ? titleView.view : notesView.view
+    }
+
+    InfoField {
+        id: usernameView
+        objectName: "usernameField"
+        visible: !root.passBackend
+        label: i18n.t("ui.info_login")
+        value: root.details.username || ""
+        nextField: urlView.view
+        previousField: titleView.view
     }
 
     InfoField {
@@ -109,7 +124,7 @@ Modal {
         label: "URL"
         value: root.details.url || ""
         nextField: notesView.view
-        previousField: titleView.view
+        previousField: usernameView.view
     }
 
     InfoField {

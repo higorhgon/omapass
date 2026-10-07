@@ -8,10 +8,10 @@
 
 #include "secret.h"
 
-// Bitwarden's client-side cryptography, as far as reading a vault needs it:
-// deriving the master key, unwrapping keys and decrypting EncStrings. Kept to
-// what the formats in bw's data.json use; anything else is reported as
-// unsupported so the caller can fall back to `bw`.
+// Bitwarden's client-side cryptography: deriving the master key and the
+// hash the server checks at login, unwrapping keys, and decrypting and
+// encrypting EncStrings. Anything outside what the vault formats use is
+// reported as unsupported.
 //
 // Keys live in Botan::secure_vector, which wipes its memory when released.
 
@@ -24,8 +24,8 @@ struct BwKey {
     BwBytes mac;
 };
 
-// KdfConfig as stored in data.json (`kdfType` 0 = PBKDF2-SHA256,
-// 1 = Argon2id with `memory` in MiB).
+// An account's KDF settings (`type` 0 = PBKDF2-SHA256, 1 = Argon2id with
+// `memory` in MiB), as prelogin and sync report them.
 struct BwKdf {
     int type = 0;
     int iterations = 0;
@@ -41,6 +41,14 @@ std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &
 
 // derive_kdf_material followed by the HKDF-Expand "enc"/"mac" stretch.
 std::optional<BwKey> deriveMasterKey(const Secret &password, const QString &salt, const BwKdf &kdf);
+// The stretch alone, for when the material is needed for the hash too and
+// the (slow) KDF should run only once.
+std::optional<BwKey> stretchMasterKey(const BwBytes &material);
+
+// The master password hash sent at login, base64: PBKDF2-SHA256 with one
+// iteration, the KDF material as password and the master password as salt.
+// Empty if Botan fails.
+Secret masterPasswordHash(const BwBytes &material, const Secret &password);
 
 // A 64-byte key (enc ‖ mac) as a BwKey; empty when the size is wrong.
 std::optional<BwKey> keyFromBytes(const BwBytes &bytes);
@@ -51,9 +59,8 @@ std::optional<BwKey> keyFromBytes(const BwBytes &bytes);
 std::optional<BwBytes> decrypt(const QString &encString, const BwKey &key);
 std::optional<QString> decryptString(const QString &encString, const BwKey &key);
 
-// Encrypts into a type 2 EncString, with a fresh random IV each time. Used
-// for omapass' own PIN store, so what it writes reads back through the same
-// decrypt() as everything bw wrote.
+// Encrypts into a type 2 EncString, with a fresh random IV each time: what
+// the vault's items and folders are written with, and omapass' own PIN store.
 std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key);
 
 // Random bytes from the system generator, for a salt or an IV.

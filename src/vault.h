@@ -8,7 +8,7 @@
 
 // Abstraction over the supported password backends: KeePassXC (through
 // `keepassxc-cli`, see keepassvault.h), pass (through gpg, see passvault.h),
-// Bitwarden (through `bw`, see bitwardenvault.h) and 1Password (through
+// Bitwarden (its server API, see bitwardenvault.h) and 1Password (through
 // `op`, see onepasswordvault.h). The rest of the app only ever talks to
 // Vault/DbRef, so no backend's command shapes leak into the interface.
 

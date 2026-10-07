@@ -26,7 +26,7 @@ const auto applicationVersion = QStringLiteral("1.0.0");
 
 // What omapass needs from the system, and what each thing is for. The list
 // is here rather than in each backend because the point of `--doctor` is to
-// answer "why does this not show up?" in one place — with four CLIs, a
+// answer "why does this not show up?" in one place — with three CLIs, a
 // keyring, a clipboard and a wordlist in play, that question came up often
 // enough to deserve an answer that does not need reading the README.
 struct Tool {
@@ -38,7 +38,6 @@ const Tool tools[] = {
     {"keepassxc-cli", "cli.doctor_keepassxc"},
     {"gpg", "cli.doctor_gpg"},
     {"pass", "cli.doctor_pass"},
-    {"bw", "cli.doctor_bw"},
     {"op", "cli.doctor_op"},
     {"secret-tool", "cli.doctor_secret_tool"},
     {"script", "cli.doctor_script"},

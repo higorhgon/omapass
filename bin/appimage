@@ -76,7 +76,9 @@ build_appimage() {
     # application does not start at all; offscreen is what lets the finished
     # file be checked without a screen.
     EXTRA_PLATFORM_PLUGINS="libqwayland-generic.so;libqwayland-egl.so;libqoffscreen.so"
-    EXTRA_QT_PLUGINS="wayland-decoration-client;wayland-graphics-integration-client;wayland-shell-integration"
+    # tls: the Bitwarden backend speaks HTTPS through Qt, whose TLS backends
+    # are plugins of their own.
+    EXTRA_QT_PLUGINS="wayland-decoration-client;wayland-graphics-integration-client;wayland-shell-integration;tls"
     export APPIMAGE_EXTRACT_AND_RUN PATH QML_SOURCES_PATHS QMAKE VERSION
     export EXTRA_PLATFORM_PLUGINS EXTRA_QT_PLUGINS
 

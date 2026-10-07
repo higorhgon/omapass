@@ -73,6 +73,17 @@ FocusScope {
             page.mode = "pin";
     }
 
+    // Copying or opening needs an entry under the cursor; the controller
+    // says why when the entry has nothing to give.
+    function withEntry(action) {
+        const entry = currentEntry();
+        if (entry.length === 0) {
+            controller.showMessage(i18n.t("app.no_entry_selected"), true);
+            return;
+        }
+        action(entry);
+    }
+
     function confirmDelete() {
         const entry = currentEntry();
         if (entry.length === 0) {
@@ -115,6 +126,9 @@ FocusScope {
         onDeleteRequested: page.confirmDelete()
         onGenerateRequested: page.mode = "generate"
         onPinToggleRequested: page.togglePin()
+        onCopyUsernameRequested: page.withEntry(controller.copyUsername)
+        onCopyUrlRequested: page.withEntry(controller.copyUrl)
+        onOpenUrlRequested: page.withEntry(controller.openUrl)
         onHelpRequested: page.mode = "help"
         // With a database open, ESC and q lock it and go back to the list
         // instead of quitting: leaving the app is Ctrl+Q, and stepping out
@@ -133,8 +147,15 @@ FocusScope {
         parent: page
         // Built rather than fixed so the handler goes by the action it
         // picked, not by an index that shifts.
-        readonly property var actions: ["add", "edit", "delete", "generate"]
+        // pass entries have no login or URL of their own to offer.
+        readonly property var actions: controller.passBackend
+            ? ["copyPassword", "add", "edit", "delete", "generate"]
+            : ["copyPassword", "copyUsername", "copyUrl", "openUrl", "add", "edit", "delete", "generate"]
         readonly property var labels: ({
+            "copyPassword": i18n.t("ui.context_copy_password"),
+            "copyUsername": i18n.t("ui.context_copy_username"),
+            "copyUrl": i18n.t("ui.context_copy_url"),
+            "openUrl": i18n.t("ui.context_open_url"),
             "add": i18n.t("ui.context_add_new"),
             "edit": i18n.t("ui.context_edit"),
             "delete": i18n.t("ui.context_delete"),
@@ -145,7 +166,15 @@ FocusScope {
         onChosen: function(index) {
             close();
             const action = actions[index];
-            if (action === "add")
+            if (action === "copyPassword")
+                page.withEntry(controller.copyPassword);
+            else if (action === "copyUsername")
+                page.withEntry(controller.copyUsername);
+            else if (action === "copyUrl")
+                page.withEntry(controller.copyUrl);
+            else if (action === "openUrl")
+                page.withEntry(controller.openUrl);
+            else if (action === "add")
                 page.openAddForm();
             else if (action === "edit")
                 page.editSelected();
@@ -242,6 +271,9 @@ FocusScope {
             {
                 "title": i18n.t("help.actions_section"),
                 "items": [["ENTER", i18n.t("ui.help_copy_password")],
+                          ["CTRL-B", i18n.t("ui.help_copy_username")],
+                          ["CTRL-L", i18n.t("ui.help_copy_url")],
+                          ["CTRL-SHIFT-L", i18n.t("ui.help_open_url")],
                           ["TAB", i18n.t("ui.help_view_details")],
                           [i18n.t("common.space_key"), i18n.t("ui.help_open_menu")],
                           ["CTRL-A", i18n.t("ui.help_add_entry")],

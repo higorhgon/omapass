@@ -89,7 +89,39 @@ SystemTheme::SystemTheme(QObject *parent) : QObject(parent) {
         SLOT(handlePortalSettingChanged(QString,QString,QDBusVariant)));
 
     requestPortalDarkMode();
-    requestPortalTextScale();
+    // omapass departs from Omacalc here: its whole interface is sized by the
+    // text scale, so an answer landing after the first frame showed as the
+    // window drawing small and then growing. The portal usually answers in
+    // milliseconds; waiting that long once beats the visible jump.
+    if (!readInitialTextScale())
+        requestPortalTextScale();
+}
+
+bool SystemTheme::readInitialTextScale() {
+    // Long enough for a portal that is up, short enough that one that is
+    // down or still starting does not hold the window back noticeably.
+    constexpr int timeoutMs = 250;
+
+    const QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected())
+        return false;
+
+    QDBusMessage request = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.Settings"),
+        QStringLiteral("Read"));
+    request << QStringLiteral("org.gnome.desktop.interface") << QStringLiteral("text-scaling-factor");
+
+    const QDBusMessage reply = bus.call(request, QDBus::Block, timeoutMs);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return false;
+
+    bool known = false;
+    const qreal scale = sanitizedTextScale(reply.arguments().constFirst(), &known);
+    if (known)
+        m_textScale = scale;
+    return known;
 }
 
 void SystemTheme::refresh() {

@@ -1,62 +1,63 @@
 #pragma once
 
+#include <QDateTime>
 #include <QMutex>
 
 #include "bitwardenjson.h"
+#include "bwaccount.h"
+#include "bwapi.h"
 #include "vault.h"
 
-// Backend for a Bitwarden account, through the official `bw` CLI.
+// Backend for a Bitwarden account — bitwarden.com, the EU cloud or a server
+// of your own (Vaultwarden, self-hosted Bitwarden) — spoken to directly over
+// its API, with no CLI in between.
 //
-// Every `bw` run starts a Node program and takes a couple of seconds, so:
-// - opening decrypts bw's own encrypted copy (data.json, see BwCache)
-//   in-process, without running bw at all; only when that copy is in a shape
-//   BwCache does not know does it go through `bw unlock` and `bw list`;
-// - the whole vault is kept in memory while open, which makes copying,
-//   viewing and editing instant;
-// - writes update that copy from what `bw` returns instead of listing again;
-// - the slow calls (unlock, sync, writes) are meant to be run off the GUI
-//   thread — the cache is guarded for that.
+// - Opening decrypts omapass' own copy of the vault (BwAccountState) with
+//   the master password, without touching the network, so the list shows
+//   up at once and works offline.
+// - sync() then refreshes the access token and pulls from the server; the
+//   caller runs it in the background right after opening.
+// - Writes go straight to the server, encrypted here, and what it answers
+//   updates the copy on disk and in memory.
+// - Calls are synchronous and meant to run off the GUI thread; the vault in
+//   memory is guarded so a background sync can swap it while the interface
+//   reads.
 //
 // Security notes:
-// - The session key lives in a `Secret` and only reaches `bw` through the
-//   BW_SESSION variable of each child process, never argv.
-// - The master password goes through --passwordenv, and item/folder JSON
-//   (which carries the password) through stdin, so neither shows up in `ps`.
+// - The master password is only used to derive the keys, and is not kept.
+// - The access token lives in a `Secret` in memory; the refresh token is
+//   kept on disk encrypted with the user key, so the file alone reaches
+//   nothing.
 // - While the vault is open its items, passwords included, are held in
 //   memory; they are dropped when it is locked.
-// - Locking the vault runs `bw lock`, which also ends any session opened
-//   with `bw unlock` in a terminal.
 class BitwardenVault : public Vault {
 public:
-    static bool isAvailable();
+    // Every account omapass has a copy of, as database list entries; plus
+    // the one remembered by versions that drove `bw`, until it logs in again.
+    static QVector<DbRef> accounts();
+    // Whether the account can still reach the server without logging in
+    // again: a copy with a refresh token in it.
+    static bool hasSession(const QString &refPath);
+    // "e-mail" for bitwarden.com, "e-mail (host)" for any other server.
+    static QString displayName(const QString &refPath);
+    // The server, as the login sheet shows it.
+    static QString serverLabel(const QString &refPath);
 
-    // The account added through omapass, remembered so it can be listed
-    // without spawning `bw` at start-up. Empty when none.
-    static QString rememberedAccount();
-    static void rememberAccount(const QString &email);
-    static void forgetAccount();
+    // Forgets the account: its copy on disk goes, and with it the refresh
+    // token. Nothing is left that reaches the server.
+    static bool logout(const QString &refPath, QString *error);
+    // Whether `password` opens the account's copy, without opening it.
+    static bool verifyPassword(const QString &refPath, const Secret &password, QString *error);
 
-    static QString refPath(const QString &email);
-    static QString emailOf(const QString &refPath);
+    // Opens the account's copy with the master password.
+    static BitwardenVault *unlock(const QString &refPath, const Secret &password, QString *error);
+    // An account just logged into: `state` freshly synced and saved, `keys`
+    // opened, `accessToken` the one the login got.
+    static BitwardenVault *fromLogin(const BwAccountState &state, const BwKeys &keys,
+                                     const Secret &accessToken, int expiresIn);
 
-    // Read from bw's data.json when possible (instant), falling back to
-    // `bw status` (seconds) when the file is in a shape it does not know.
-    static BwStatus status();
-    // Logs out and checks that bw really is logged out afterwards: an
-    // account dropped from the list while it is still logged in is an
-    // account nobody can see to lock.
-    static bool logout(QString *error);
-
-    // Unlocks the logged-in account with the master password and loads it.
-    static BitwardenVault *unlock(const QString &email, const Secret &password, QString *error);
-    // Loads the account behind a session key `bw login` already handed back.
-    static BitwardenVault *openWithSession(const QString &email, const Secret &session,
-                                           QString *error);
-
-    // Gets a bw session if opening did not need one, pulls from the server
-    // and reloads. Opening skips all of it so the list shows up at once; the
-    // caller runs this afterwards, in the background. Changes need the
-    // session, so they wait for it.
+    // Refreshes the access token and pulls the vault from the server. Skipped
+    // when it was pulled a moment ago (right after logging in).
     bool sync(QString *error);
 
     void list(QStringList *entries, QStringList *groups) const override;
@@ -73,29 +74,37 @@ public:
     void close() override;
 
 private:
-    BitwardenVault(const QString &email, const Secret &session)
-        : Vault(VaultKind::Bitwarden, refPath(email)), m_session(session) {}
+    BitwardenVault(const BwAccountState &state, const BwKeys &keys);
 
-    static bool unlockSession(const Secret &password, Secret *session, QString *error);
-    bool reload(QString *error) const;
-    bool ensureSession(QString *error);
-    bool requireSession(QString *error) const;
+    // A valid access token, refreshing it when it is missing or about to
+    // expire. A refresh token the server no longer takes ends the session:
+    // it is dropped from the copy, and the next open asks to log in.
+    bool authorize(QString *error) const;
+    // An API call with the access token, retried once with a fresh one when
+    // the server says the token is no longer good.
+    BwResponse request(const QByteArray &method, const QString &path, QString *error,
+                       const QJsonObject &body = QJsonObject(), bool hasBody = false) const;
+    // Rebuilds the decrypted vault from m_state. Caller holds the mutex.
+    void rebuild() const;
+    void persist() const;
+    // Takes a cipher or folder the server answered with into the copy.
+    void storeCipher(const QJsonObject &cipher) const;
+    void storeFolder(const QJsonObject &folder) const;
+
     bool ensureFolder(const QString &group, QString *folderId, QString *error) const;
     bool lookup(const QString &entryPath, BwItemRef *ref, QJsonObject *item, QString *error) const;
-    // Stores what a create/edit returned and rebuilds the index.
-    void storeItem(const QByteArray &itemJson) const;
-    void storeFolder(const QByteArray &folderJson) const;
 
-    Secret m_session;
-    // Held only between a local unlock and the `bw unlock` that sync() runs
-    // right after, which needs it once more.
-    Secret m_password;
-
-    // Mutable because the Vault interface is const: the cache is refreshed
-    // by the very operations that change what it mirrors. The mutex lets a
+    // Mutable because the Vault interface is const: the copy is refreshed by
+    // the very operations that change what it mirrors. The mutex lets a
     // background sync swap it while the interface reads.
     mutable QMutex m_mutex;
-    mutable QHash<QString, QJsonObject> m_items;  // id → item, as bw returns it
+    mutable BwAccountState m_state;
+    mutable BwKeys m_keys;
+    mutable Secret m_accessToken;
+    mutable QDateTime m_tokenExpiry;
+    QDateTime m_syncedAt;
+
+    mutable QHash<QString, QJsonObject> m_items;  // id → decrypted item
     mutable QHash<QString, QString> m_folders;    // id → name
     mutable BwIndex m_index;
 };

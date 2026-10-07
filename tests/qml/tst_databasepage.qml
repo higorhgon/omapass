@@ -61,4 +61,18 @@ TestCase {
         controller.emitDatabases([]);
         compare(page.mode, "confirmCreate");
     }
+
+    // The two-step methods offered are the account's own, in the order the
+    // controller gives them, and picking one passes its provider number on.
+    function test_method_choice_lists_only_the_accounts_methods() {
+        controller.loginMethods = [0, 3];
+        controller.loginStep = "method";
+        const choice = findChild(page, "methodChoice");
+        verify(choice !== null);
+        tryVerify(function() { return choice.visible; }, 3000);
+        compare(choice.options.length, 2);
+        compare(choice.options[0], i18n.t("bitwarden.method_authenticator"));
+        compare(choice.options[1], i18n.t("bitwarden.method_yubikey"));
+        controller.loginStep = "";
+    }
 }

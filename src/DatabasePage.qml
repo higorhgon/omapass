@@ -92,8 +92,7 @@ FocusScope {
         readonly property var choices: {
             const list = [{"label": "KeePassXC (.kdbx)", "action": "createDb"},
                           {"label": "pass", "action": "createPass"}];
-            if (controller.bitwardenAvailable)
-                list.push({"label": "Bitwarden", "action": "bitwarden"});
+            list.push({"label": "Bitwarden", "action": "bitwarden"});
             if (controller.onePasswordAvailable)
                 list.push({"label": "1Password", "action": "onepassword"});
             return list;
@@ -142,11 +141,14 @@ FocusScope {
         visible: controller.loginStep === "credentials" || controller.loginStep === "code"
                  || controller.loginStep === "deviceCode"
         step: controller.loginStep
+        server: controller.loginServer
         email: controller.loginEmail
         errorText: controller.unlockError
         busy: controller.busy
 
-        onCredentialsSubmitted: function(email, password) { controller.bitwardenLogin(email, password); }
+        onCredentialsSubmitted: function(server, email, password) {
+            controller.bitwardenLogin(server, email, password);
+        }
         onCodeSubmitted: function(code) { controller.sendBitwardenCode(code); }
         onDismissed: controller.cancelBitwardenLogin()
     }
@@ -165,18 +167,22 @@ FocusScope {
         onDismissed: controller.cancelOnePasswordLogin()
     }
 
-    // Shown when the account has several two-step methods: bw would ask with
-    // a menu of its own, so the choice is made here and bw is started again
-    // with it. The values are bw's TwoFactorProviderType.
+    // Shown when the account has several two-step methods omapass can ask
+    // for. The values are Bitwarden's TwoFactorProviderType.
     ChoiceModal {
-        readonly property var methods: [0, 1, 3]
+        objectName: "methodChoice"
+        readonly property var methods: controller.loginMethods
+        readonly property var labels: ({
+            0: i18n.t("bitwarden.method_authenticator"),
+            1: i18n.t("bitwarden.method_email"),
+            3: i18n.t("bitwarden.method_yubikey")
+        })
 
         visible: controller.loginStep === "method"
         heading: i18n.t("bitwarden.method_title")
         hint: controller.busy ? i18n.t("bitwarden.logging_in") : i18n.t("db_app.footer_choose_type")
         cardWidth: Math.round(360 * window.s)
-        options: [i18n.t("bitwarden.method_authenticator"), i18n.t("bitwarden.method_email"),
-                  i18n.t("bitwarden.method_yubikey")]
+        options: methods.map(function(method) { return labels[method]; })
 
         onChosen: function(index) { controller.chooseBitwardenMethod(methods[index]); }
         onDismissed: controller.cancelBitwardenLogin()
@@ -189,7 +195,7 @@ FocusScope {
 
         onAccepted: {
             page.mode = "list";
-            controller.logoutBitwarden();
+            controller.logoutBitwarden(pane.currentIndex);
         }
         onDismissed: page.mode = "list"
     }

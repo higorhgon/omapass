@@ -3,32 +3,28 @@
 #include <QByteArray>
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 #include "vault.h"
 
-// The pure half of the Bitwarden backend: reading what `bw` prints and
-// building what it expects, with no process spawned. Kept apart so it can be
-// tested without an account or a network.
+// The pure half of the Bitwarden backend: the decrypted vault flattened into
+// omapass' path model, the server address, and what the login answers mean.
+// Kept apart so it can be tested without an account or a network.
 
-// `bw status`.
-struct BwStatus {
-    // "unauthenticated", "locked" or "unlocked"; empty when the output could
-    // not be read at all.
-    QString status;
-    QString userEmail;
-
-    bool loggedIn() const { return status == QLatin1String("locked") || status == QLatin1String("unlocked"); }
-};
-
-BwStatus parseBwStatus(const QString &json);
-
-// The same answer read from bw's own state file (data.json) instead of
-// spawning `bw status`, which takes seconds. The file cannot tell locked from
-// unlocked, so a logged-in account comes back as "locked". An empty status
-// means the file was there but not in a shape this understands.
-BwStatus parseBwDataFile(const QByteArray &json);
+// The server address typed on the login sheet, in the one form the account
+// is kept under: "https://host[:port][/path]", with no trailing slash. The
+// scheme may be left out and https is assumed. bitwarden.com (in any of its
+// spellings, or nothing at all) comes back empty; the EU cloud as
+// "https://vault.bitwarden.eu". Plain http — which would send the password
+// hash in the clear — or anything that is not an address is nullopt.
+std::optional<QString> normalizeBwServer(const QString &input);
+// How the login sheet shows a normalised server: "bitwarden.com" for the
+// default, the address itself otherwise.
+QString bwServerLabel(const QString &serverUrl);
 
 // One login item as the entry list knows it.
 struct BwItemRef {
@@ -47,17 +43,11 @@ struct BwIndex {
     QHash<QString, QString> folders;   // folder name → folder id (real folders only)
 };
 
-// `bw list items` keyed by id, and `bw list folders` as id → name (without
-// the "No Folder" pseudo-folder).
-QHash<QString, QJsonObject> parseBwItems(const QByteArray &itemsJson);
-QHash<QString, QString> parseBwFolders(const QByteArray &foldersJson);
-
 // Builds the index from items and folders. Items other than logins, or in
 // the trash, are left out. Two logins that would land on the same path both
 // get the start of their id appended (`Mail [1a2b3c4d]`), so every path is
 // unique and stays the same across runs.
 BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QString, QString> &folders);
-BwIndex buildBwIndex(const QByteArray &itemsJson, const QByteArray &foldersJson);
 
 // The fields omapass shows, read from an item object.
 EntryData bwEntryData(const QJsonObject &item);
@@ -66,34 +56,32 @@ EntryData bwEntryData(const QJsonObject &item);
 // group, so it is shown as a look-alike division slash instead.
 QString bwDisplayName(const QString &name);
 
-// Returns `itemJson` (from `bw get item`) with only the fields omapass edits
-// replaced — name, folder, username, password, first URI and notes. TOTP,
-// custom fields, further URIs and organisation data are carried over as they
-// were. An empty `itemJson` starts from a blank login item.
-QByteArray applyBwEntryData(const QByteArray &itemJson, const QString &name,
-                            const QString &folderId, const EntryData &data);
-
-// A folder object for `bw create folder` / `bw edit folder`.
-QByteArray bwFolderJson(const QString &name);
-
-// What an unsuccessful `bw login` or `bw unlock` meant, read from its output.
+// What an unsuccessful login meant.
 enum class BwLoginError {
     None,
     WrongPassword,
     InvalidEmail,
     InvalidCode,
-    AlreadyLoggedIn,
+    ServerUnreachable,   // nothing answered at the address
+    ServerCertificate,   // something answered, with a certificate the system does not trust
+    UnsupportedTwoStep,  // only two-step methods omapass cannot ask for (Duo, passkeys…)
     Other,
 };
 
-BwLoginError classifyBwError(const QString &output);
+// The error a login attempt got back from the server, read from its message.
+// `sentCode` says a two-step or new-device code went with the attempt, which
+// is then what any refusal is about.
+BwLoginError classifyBwLoginMessage(const QString &message, bool sentCode);
 
-// The prompts `bw login` shows while it waits for input on stdin.
+// What the login waits for after the credentials.
 enum class BwPrompt {
     None,
-    TwoFactorMethod,     // several 2FA providers and none chosen
+    TwoFactorMethod,     // several two-step methods and none chosen
     TwoFactorCode,       // code from the authenticator app, e-mail, key…
     NewDeviceCode,       // one-time code e-mailed for an unrecognised device
 };
 
-BwPrompt detectBwPrompt(const QString &stderrText);
+// The two-step methods omapass can ask for, among `providers` (the keys of
+// the server's TwoFactorProviders2): authenticator (0), e-mail (1) and
+// YubiKey OTP (3), in that order.
+QList<int> bwSupportedTwoFactor(const QList<int> &providers);
