@@ -27,6 +27,7 @@ class FakeController : public QObject {
     Q_PROPERTY(bool pinAvailable MEMBER m_pinAvailable CONSTANT)
     Q_PROPERTY(QString loginStep MEMBER m_loginStep NOTIFY loginChanged)
     Q_PROPERTY(QString loginEmail MEMBER m_loginEmail NOTIFY loginChanged)
+    Q_PROPERTY(QString loginServer MEMBER m_loginServer NOTIFY loginChanged)
     Q_PROPERTY(bool bitwardenAvailable MEMBER m_bitwardenAvailable CONSTANT)
     Q_PROPERTY(bool onePasswordAvailable MEMBER m_onePasswordAvailable CONSTANT)
     Q_PROPERTY(QString message MEMBER m_message NOTIFY messageChanged)
@@ -60,7 +61,7 @@ public:
     Q_INVOKABLE void createPassStore(const QString &, const QString &) {}
     Q_INVOKABLE void addBitwardenAccount() {}
     Q_INVOKABLE void addOnePasswordAccount() {}
-    Q_INVOKABLE void bitwardenLogin(const QString &, const QString &) {}
+    Q_INVOKABLE void bitwardenLogin(const QString &, const QString &, const QString &) {}
     Q_INVOKABLE void sendBitwardenCode(const QString &) {}
     Q_INVOKABLE void cancelBitwardenLogin() {}
     Q_INVOKABLE void chooseBitwardenMethod(int) {}
@@ -93,6 +94,7 @@ private:
     bool m_pinAvailable = false;
     QString m_loginStep;
     QString m_loginEmail;
+    QString m_loginServer;
     bool m_bitwardenAvailable = true;
     bool m_onePasswordAvailable = true;
     QString m_message;

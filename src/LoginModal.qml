@@ -1,20 +1,23 @@
 import QtQuick
 
-// Logs into a Bitwarden account. Two shapes: e-mail and master password
-// first, then — only if the account asks for one — a single code (two-step
+// Logs into a Bitwarden account. Two shapes: server, e-mail and master
+// password first, then — only if the account asks for one — a single code (two-step
 // login or new-device verification). The step comes from the controller,
 // which follows what `bw login` is actually prompting for.
 Modal {
     id: root
 
     property string step: "credentials"
+    // bitwarden.com, the EU cloud or a server of your own (Vaultwarden,
+    // self-hosted Bitwarden); comes filled with where bw points now.
+    property string server: "bitwarden.com"
     property string email: ""
     property string errorText: ""
     property bool busy: false
 
     readonly property bool askingCode: step === "code" || step === "deviceCode"
 
-    signal credentialsSubmitted(string email, string password)
+    signal credentialsSubmitted(string server, string email, string password)
     signal codeSubmitted(string code)
 
     heading: i18n.t("bitwarden.login_title")
@@ -32,6 +35,8 @@ Modal {
         if (root.askingCode) {
             codeField.text = "";
             codeField.field.forceActiveFocus();
+        } else if (serverField.text.trim().length === 0) {
+            serverField.field.forceActiveFocus();
         } else if (emailField.text.length === 0) {
             emailField.field.forceActiveFocus();
         } else {
@@ -40,6 +45,7 @@ Modal {
     }
 
     onShown: {
+        serverField.text = root.server;
         emailField.text = root.email;
         passwordField.text = "";
         codeField.text = "";
@@ -58,16 +64,33 @@ Modal {
     }
 
     function submitCredentials() {
-        if (emailField.text.trim().length === 0)
+        if (serverField.text.trim().length === 0)
+            serverField.field.forceActiveFocus();
+        else if (emailField.text.trim().length === 0)
             emailField.field.forceActiveFocus();
         else if (passwordField.text.length === 0)
             passwordField.field.forceActiveFocus();
         else
-            root.credentialsSubmitted(emailField.text, passwordField.text);
+            root.credentialsSubmitted(serverField.text, emailField.text, passwordField.text);
+    }
+
+    Field {
+        id: serverField
+        objectName: "serverField"
+        width: parent.width
+        visible: !root.askingCode
+        label: i18n.t("bitwarden.server_label")
+        enabled: !root.busy
+
+        onSubmitted: emailField.field.forceActiveFocus()
+        onNextRequested: emailField.field.forceActiveFocus()
+        onPreviousRequested: passwordField.field.forceActiveFocus()
+        onCancelled: root.dismissed()
     }
 
     Field {
         id: emailField
+        objectName: "emailField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("bitwarden.email_label")
@@ -75,12 +98,13 @@ Modal {
 
         onSubmitted: passwordField.field.forceActiveFocus()
         onNextRequested: passwordField.field.forceActiveFocus()
-        onPreviousRequested: passwordField.field.forceActiveFocus()
+        onPreviousRequested: serverField.field.forceActiveFocus()
         onCancelled: root.dismissed()
     }
 
     Field {
         id: passwordField
+        objectName: "passwordField"
         width: parent.width
         visible: !root.askingCode
         label: i18n.t("bitwarden.master_password_label")
@@ -88,7 +112,7 @@ Modal {
         enabled: !root.busy
 
         onSubmitted: root.submitCredentials()
-        onNextRequested: emailField.field.forceActiveFocus()
+        onNextRequested: serverField.field.forceActiveFocus()
         onPreviousRequested: emailField.field.forceActiveFocus()
         onCancelled: root.dismissed()
     }

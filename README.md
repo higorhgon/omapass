@@ -18,7 +18,7 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 
 - Suporte a KeePassXC e a pass — o omapass detecta ambos automaticamente e adapta a interface a cada um (entradas do pass, por exemplo, têm só Título e Senha, sem Usuário/URL/Notas no formulário)
 - No pass, o omapass guarda a passphrase só durante a sessão e decifra as entradas com ela
-- Contas Bitwarden (bitwarden.com) com login pela própria interface, incluindo verificação em duas etapas e verificação de novo dispositivo
+- Contas Bitwarden — bitwarden.com, a nuvem europeia ou um servidor próprio (Vaultwarden, Bitwarden self-hosted) — com login pela própria interface, incluindo verificação em duas etapas e verificação de novo dispositivo
 - Desbloqueio opcional por PIN, um PIN por banco, em qualquer backend
 - Contas 1Password com login pela própria interface (endereço, e-mail, Secret Key, senha mestra e, quando houver, código de duas etapas), com os cofres virando grupos e as etiquetas aninhadas abaixo deles
 - Seletor de banco de dados com busca multi-termo e navegação estilo vim
@@ -180,16 +180,21 @@ Na tela de seleção, `Ctrl+A` abre um menu perguntando o tipo de banco a criar:
 
 - **KeePassXC** — pede nome do arquivo e senha mestra; o banco é criado em `~/.config/omapass/databases/`.
 - **pass** — pede o diretório de destino (com autocomplete dos nomes de pasta existentes) e uma chave GPG dentre as já presentes no seu chaveiro. O omapass não gera chaves GPG novas — veja a seção abaixo para criar uma.
-- **Bitwarden** — aparece só com o `bw` instalado. Pede e-mail e senha mestra da sua conta; veja [Usando o Bitwarden](#usando-o-bitwarden).
+- **Bitwarden** — aparece só com o `bw` instalado. Pede servidor, e-mail e senha mestra da sua conta; veja [Usando o Bitwarden](#usando-o-bitwarden).
 - **1Password** — aparece só com o `op` instalado. Pede endereço, e-mail, Secret Key e senha mestra; veja [Usando o 1Password](#usando-o-1password).
 
 ### Usando o Bitwarden
 
 O omapass conversa com o Bitwarden pelo `bw`, então a conta fica logada no próprio
-`bw` (o mesmo login que `bw status` mostra no terminal). Só **bitwarden.com** é
-suportado — servidores próprios (Vaultwarden, self-hosted) não.
+`bw` (o mesmo login que `bw status` mostra no terminal). Funciona com **bitwarden.com**,
+com a nuvem europeia (**bitwarden.eu**) e com servidores próprios — **Vaultwarden** ou o
+Bitwarden self-hosted.
 
-- **Adicionando a conta**: `Ctrl+A` → **Bitwarden** → e-mail e senha mestra. Se a conta
+- **Adicionando a conta**: `Ctrl+A` → **Bitwarden** → servidor, e-mail e senha mestra. O
+  servidor vem preenchido com o que o `bw` já usa (`bitwarden.com` numa instalação nova);
+  para um Vaultwarden, troque pelo endereço dele — `https://vault.exemplo.com`, ou só
+  `vault.exemplo.com`, que o `https://` é suposto. Se o servidor mudou, o omapass roda
+  `bw config server` antes do login. Se a conta
   usa verificação em duas etapas, o omapass pede o código em seguida (com vários
   métodos cadastrados, pergunta antes qual usar: aplicativo autenticador, e-mail ou
   YubiKey). Num dispositivo novo, o Bitwarden manda um código por e-mail, que é pedido
@@ -216,6 +221,15 @@ suportado — servidores próprios (Vaultwarden, self-hosted) não.
 - **Excluir manda para a lixeira** do Bitwarden (recuperável pelo cofre web por 30 dias).
 - **Saindo da conta**: `Ctrl+X` sobre a conta na tela de bancos faz `bw logout`, tira a conta
   da lista e apaga o PIN guardado, se houver.
+- **Servidor próprio precisa de HTTPS**: o `bw` recusa endereços `http://`, então o omapass
+  também. Se o certificado do servidor não vem de uma autoridade pública (um certificado
+  autoassinado ou de uma CA interna), o `bw` — que é um programa Node — não confia nele e o
+  login avisa. Aponte o Node para o certificado da CA com `NODE_EXTRA_CA_CERTS` no ambiente
+  em que o omapass é aberto; no Hyprland, por exemplo, em `~/.config/hypr/hyprland.conf`:
+
+  ```
+  env = NODE_EXTRA_CA_CERTS,/caminho/para/ca.crt
+  ```
 
 - Cada comando do `bw` leva alguns segundos (é um programa Node). Por isso o cofre
   inteiro é carregado uma vez ao abrir — copiar, ver detalhes e editar são

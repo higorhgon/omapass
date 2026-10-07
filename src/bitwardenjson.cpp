@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -36,6 +37,26 @@ QJsonObject blankLoginItem() {
     return item;
 }
 
+const QString euServer = QStringLiteral("https://vault.bitwarden.eu");
+
+// A server as bw recorded it, normalised when it can be; an address that no
+// longer passes (plain http from an older bw) is kept as written.
+QString recordedServer(const QString &url) {
+    return normalizeBwServer(url).value_or(url);
+}
+
+// The server out of one of data.json's environment records. bw names its
+// two clouds by region and keeps an address only for its own servers.
+QString environmentServer(const QJsonObject &environment) {
+    const QString region = environment.value(QStringLiteral("region")).toString();
+    if (region == QLatin1String("EU"))
+        return euServer;
+    if (region == QLatin1String("Self-hosted"))
+        return recordedServer(environment.value(QStringLiteral("urls")).toObject()
+                                  .value(QStringLiteral("base")).toString());
+    return QString();
+}
+
 }
 
 BwStatus parseBwStatus(const QString &json) {
@@ -43,6 +64,7 @@ BwStatus parseBwStatus(const QString &json) {
     const QJsonObject object = QJsonDocument::fromJson(json.trimmed().toUtf8()).object();
     status.status = object.value(QStringLiteral("status")).toString();
     status.userEmail = object.value(QStringLiteral("userEmail")).toString();
+    status.serverUrl = recordedServer(object.value(QStringLiteral("serverUrl")).toString());
     return status;
 }
 
@@ -54,6 +76,16 @@ BwStatus parseBwDataFile(const QByteArray &json) {
 
     const QJsonObject root = document.object();
     const QString activeId = root.value(QStringLiteral("global_account_activeAccountId")).toString();
+
+    // `bw config server` writes the global record, and login copies it into
+    // the account's; the account's wins while there is one.
+    const QJsonObject accountEnvironment =
+        root.value(QStringLiteral("user_%1_environment_environment").arg(activeId)).toObject();
+    status.serverUrl = environmentServer(
+        !activeId.isEmpty() && accountEnvironment.contains(QStringLiteral("region"))
+            ? accountEnvironment
+            : root.value(QStringLiteral("global_environment_environment")).toObject());
+
     if (activeId.isEmpty()) {
         status.status = QStringLiteral("unauthenticated");
         return status;
@@ -68,6 +100,41 @@ BwStatus parseBwDataFile(const QByteArray &json) {
         return BwStatus();
     status.status = QStringLiteral("locked");
     return status;
+}
+
+std::optional<QString> normalizeBwServer(const QString &input) {
+    QString text = input.trimmed();
+    if (text.isEmpty())
+        return QString();
+    if (!text.contains(QLatin1String("://")))
+        text.prepend(QLatin1String("https://"));
+
+    const QUrl url(text, QUrl::StrictMode);
+    if (!url.isValid() || url.scheme().compare(QLatin1String("https"), Qt::CaseInsensitive) != 0
+        || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment())
+        return std::nullopt;
+
+    const QString host = url.host().toLower();
+    QString path = url.path();
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    if (url.port() == -1 && path.isEmpty()) {
+        if (host == QLatin1String("bitwarden.com") || host == QLatin1String("vault.bitwarden.com"))
+            return QString();
+        if (host == QLatin1String("bitwarden.eu") || host == QLatin1String("vault.bitwarden.eu"))
+            return euServer;
+    }
+
+    QUrl clean;
+    clean.setScheme(QStringLiteral("https"));
+    clean.setHost(host);
+    clean.setPort(url.port());
+    clean.setPath(path);
+    return clean.toString();
+}
+
+QString bwServerLabel(const QString &serverUrl) {
+    return serverUrl.isEmpty() ? QStringLiteral("bitwarden.com") : serverUrl;
 }
 
 QString bwDisplayName(const QString &name) {
@@ -232,6 +299,12 @@ BwLoginError classifyBwError(const QString &output) {
         return BwLoginError::InvalidCode;
     if (has("already logged in"))
         return BwLoginError::AlreadyLoggedIn;
+    // Node's TLS errors, as bw passes them on from fetch.
+    if (has("certificate") || has("CERT_") || has("UNABLE_TO_VERIFY_LEAF_SIGNATURE"))
+        return BwLoginError::ServerCertificate;
+    if (has("FetchError") || has("ECONNREFUSED") || has("ENOTFOUND") || has("EAI_AGAIN")
+        || has("ETIMEDOUT") || has("EHOSTUNREACH") || has("ECONNRESET"))
+        return BwLoginError::ServerUnreachable;
     return BwLoginError::Other;
 }
 

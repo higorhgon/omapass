@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 #include "vault.h"
 
 // The pure half of the Bitwarden backend: reading what `bw` prints and
@@ -18,6 +20,9 @@ struct BwStatus {
     // not be read at all.
     QString status;
     QString userEmail;
+    // The server bw is configured for, normalised (see normalizeBwServer):
+    // empty for bitwarden.com.
+    QString serverUrl;
 
     bool loggedIn() const { return status == QLatin1String("locked") || status == QLatin1String("unlocked"); }
 };
@@ -29,6 +34,16 @@ BwStatus parseBwStatus(const QString &json);
 // unlocked, so a logged-in account comes back as "locked". An empty status
 // means the file was there but not in a shape this understands.
 BwStatus parseBwDataFile(const QByteArray &json);
+
+// The server address typed on the login sheet, in the form `bw config server`
+// takes: "https://host[:port][/path]", with no trailing slash. The scheme may
+// be left out and https is assumed. bitwarden.com (in any of its spellings,
+// or nothing at all) comes back empty, which is bw's default. bw refuses
+// plain http, so that, or anything that is not an address, is nullopt.
+std::optional<QString> normalizeBwServer(const QString &input);
+// How the login sheet shows a normalised server: "bitwarden.com" for the
+// default, the address itself otherwise.
+QString bwServerLabel(const QString &serverUrl);
 
 // One login item as the entry list knows it.
 struct BwItemRef {
@@ -83,6 +98,8 @@ enum class BwLoginError {
     InvalidEmail,
     InvalidCode,
     AlreadyLoggedIn,
+    ServerUnreachable,   // nothing answered at the configured address
+    ServerCertificate,   // something answered, with a certificate Node does not trust
     Other,
 };
 

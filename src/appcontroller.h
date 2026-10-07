@@ -56,6 +56,9 @@ class AppController : public QObject {
     // 1Password.
     Q_PROPERTY(QString loginStep READ loginStep NOTIFY loginChanged)
     Q_PROPERTY(QString loginEmail READ loginEmail NOTIFY loginChanged)
+    // The server the Bitwarden login sheet starts with: where bw is pointed
+    // now, "bitwarden.com" by default.
+    Q_PROPERTY(QString loginServer READ loginServer NOTIFY loginChanged)
 
     Q_PROPERTY(QString vaultLabel READ vaultLabel NOTIFY stageChanged)
     Q_PROPERTY(bool passBackend READ passBackend NOTIFY stageChanged)
@@ -97,6 +100,7 @@ public:
     bool onePasswordAvailable() const;
     QString loginStep() const { return m_loginStep; }
     QString loginEmail() const { return m_loginEmail; }
+    QString loginServer() const { return m_loginServer; }
 
     QString vaultLabel() const;
     bool passBackend() const;
@@ -132,7 +136,8 @@ public:
 
     // Bitwarden account
     Q_INVOKABLE void addBitwardenAccount();
-    Q_INVOKABLE void bitwardenLogin(const QString &email, const QString &password);
+    Q_INVOKABLE void bitwardenLogin(const QString &server, const QString &email,
+                                    const QString &password);
     Q_INVOKABLE void chooseBitwardenMethod(int method);
     Q_INVOKABLE void sendBitwardenCode(const QString &code);
     Q_INVOKABLE void cancelBitwardenLogin();
@@ -315,6 +320,7 @@ private:
     OnePasswordLogin m_onePasswordLogin;
     QString m_loginStep;
     QString m_loginEmail;
+    QString m_loginServer;
     // The 1Password sign-in address, kept while its login sheet is open.
     QString m_loginAddress;
     // Whether the 1Password run in flight is adding an account or opening

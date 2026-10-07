@@ -135,6 +135,14 @@ AppController::AppController(const AppConfig &config, QObject *parent)
         case BwLoginError::InvalidCode:
             setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_code")));
             break;
+        case BwLoginError::ServerUnreachable:
+            setUnlockError(I18n::t(QStringLiteral("bitwarden.server_unreachable"),
+                                   QStringLiteral("server"), m_loginServer));
+            break;
+        case BwLoginError::ServerCertificate:
+            setUnlockError(I18n::t(QStringLiteral("bitwarden.server_certificate"),
+                                   QStringLiteral("server"), m_loginServer));
+            break;
         case BwLoginError::AlreadyLoggedIn:
             // Logged in from a terminal meanwhile: nothing left to do here
             // but unlock, which the account's own entry does.
@@ -560,6 +568,7 @@ struct AccountCheck {
     bool usable = false;   // still logged in / still configured
     bool gone = false;     // dropped from the backend behind omapass' back
     QString email;         // Bitwarden only: who to put on the login sheet
+    QString server;        // …and on which server
 };
 
 }
@@ -604,6 +613,7 @@ void AppController::checkAccountThenAsk(const DbRef &ref) {
         // Logged out behind omapass' back: the master password alone cannot
         // unlock it, so the login sheet takes over.
         m_loginEmail = check.email;
+        m_loginServer = check.server;
         setLoginStep(QStringLiteral("credentials"));
     });
 
@@ -618,8 +628,10 @@ void AppController::checkAccountThenAsk(const DbRef &ref) {
             return check;
         }
 
-        check.usable = BitwardenVault::status().loggedIn();
+        const BwStatus status = BitwardenVault::status();
+        check.usable = status.loggedIn();
         check.email = BitwardenVault::emailOf(ref.path);
+        check.server = bwServerLabel(status.serverUrl);
         return check;
     });
     m_accountCheckTask = QFuture<void>(future);
@@ -1158,12 +1170,20 @@ void AppController::addBitwardenAccount() {
     }
 
     m_loginEmail = BitwardenVault::rememberedAccount();
+    m_loginServer = bwServerLabel(status.serverUrl);
     setLoginStep(QStringLiteral("credentials"));
 }
 
-void AppController::bitwardenLogin(const QString &email, const QString &password) {
+void AppController::bitwardenLogin(const QString &server, const QString &email,
+                                   const QString &password) {
     if (m_busy)
         return;
+
+    const std::optional<QString> target = normalizeBwServer(server);
+    if (!target) {
+        setUnlockError(I18n::t(QStringLiteral("bitwarden.invalid_server")));
+        return;
+    }
 
     const QString trimmed = email.trimmed();
     if (trimmed.isEmpty()) {
@@ -1171,13 +1191,21 @@ void AppController::bitwardenLogin(const QString &email, const QString &password
         return;
     }
 
+    m_loginServer = bwServerLabel(*target);
     m_loginEmail = trimmed;
     m_loginPassword = Secret(password);
     emit loginChanged();
 
+    // `bw config server` costs a Node start-up of its own, so it only runs
+    // when the server really changes; bitwarden.com goes back by name.
+    const bool sameServer = *target == BitwardenVault::status().serverUrl;
+    const QString configure = sameServer ? QString()
+                              : target->isEmpty() ? QStringLiteral("bitwarden.com")
+                                                  : *target;
+
     setBusy(true);
     setUnlockError(QString());
-    m_bitwardenLogin.start(m_loginEmail, m_loginPassword);
+    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, configure);
 }
 
 void AppController::chooseBitwardenMethod(int method) {
@@ -1186,7 +1214,8 @@ void AppController::chooseBitwardenMethod(int method) {
 
     setBusy(true);
     setUnlockError(QString());
-    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, method);
+    // The server was set on the first try, which is what got bw this far.
+    m_bitwardenLogin.start(m_loginEmail, m_loginPassword, QString(), method);
 }
 
 void AppController::sendBitwardenCode(const QString &code) {

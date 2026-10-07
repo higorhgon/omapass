@@ -96,6 +96,20 @@ const char bwDataFileLoggedIn[] =
 const char bwDataFileLoggedOut[] =
     "{\"global_account_activeAccountId\":null,\"global_account_accounts\":{}}";
 
+// A Vaultwarden account, the way `bw config server` and `bw login` leave
+// data.json (the shape of bw 2026.2).
+const char bwDataFileSelfHosted[] =
+    "{\"global_account_activeAccountId\":\"u1\","
+    "\"global_account_accounts\":{\"u1\":{\"email\":\"a@b.com\"}},"
+    "\"global_environment_environment\":{\"region\":\"Self-hosted\",\"urls\":{\"base\":\"https://old.example\"}},"
+    "\"user_u1_environment_environment\":{\"region\":\"Self-hosted\","
+    "\"urls\":{\"base\":\"https://vault.example.com:8443\",\"api\":null}}}";
+
+// Logged out after `bw config server`: only the global record is left.
+const char bwDataFileLoggedOutEu[] =
+    "{\"global_account_activeAccountId\":null,\"global_account_accounts\":{},"
+    "\"global_environment_environment\":{\"region\":\"EU\",\"urls\":{}}}";
+
 const char bwFolders[] =
     "["
     "{\"object\":\"folder\",\"id\":\"f1\",\"name\":\"Work/Mail\"},"
@@ -395,6 +409,45 @@ private slots:
         QVERIFY(parseBwDataFile("{\"global_account_activeAccountId\":\"u9\"}").status.isEmpty());
     }
 
+    void bitwardenServerIsReadWhereBwKeepsIt() {
+        QCOMPARE(parseBwDataFile(bwDataFileLoggedIn).serverUrl, QString());
+        QCOMPARE(parseBwDataFile(bwDataFileSelfHosted).serverUrl,
+                 QStringLiteral("https://vault.example.com:8443"));
+        QCOMPARE(parseBwDataFile(bwDataFileLoggedOutEu).serverUrl,
+                 QStringLiteral("https://vault.bitwarden.eu"));
+
+        QCOMPARE(parseBwStatus(QString::fromUtf8(bwStatusLocked)).serverUrl, QString());
+        QCOMPARE(parseBwStatus(QStringLiteral("{\"serverUrl\":\"https://vw.lan/\",\"status\":\"locked\"}"))
+                     .serverUrl,
+                 QStringLiteral("https://vw.lan"));
+    }
+
+    void bitwardenServerIsNormalised() {
+        // bitwarden.com, however it is written, is bw's default.
+        for (const char *cloud : {"", "  ", "bitwarden.com", "vault.bitwarden.com",
+                                  "https://vault.bitwarden.com/", "HTTPS://Bitwarden.com"})
+            QCOMPARE(normalizeBwServer(QString::fromUtf8(cloud)), std::optional<QString>(QString()));
+
+        QCOMPARE(normalizeBwServer(QStringLiteral("bitwarden.eu")),
+                 std::optional<QString>(QStringLiteral("https://vault.bitwarden.eu")));
+        QCOMPARE(normalizeBwServer(QStringLiteral(" vault.example.com ")),
+                 std::optional<QString>(QStringLiteral("https://vault.example.com")));
+        QCOMPARE(normalizeBwServer(QStringLiteral("https://Vault.Example.com:8443/bw/")),
+                 std::optional<QString>(QStringLiteral("https://vault.example.com:8443/bw")));
+        QCOMPARE(normalizeBwServer(QStringLiteral("localhost:8099")),
+                 std::optional<QString>(QStringLiteral("https://localhost:8099")));
+
+        // bw refuses plain http, and anything that is not an address.
+        QVERIFY(!normalizeBwServer(QStringLiteral("http://vault.example.com")));
+        QVERIFY(!normalizeBwServer(QStringLiteral("ftp://vault.example.com")));
+        QVERIFY(!normalizeBwServer(QStringLiteral("https://")));
+        QVERIFY(!normalizeBwServer(QStringLiteral("https://user:pw@vault.example.com")));
+        QVERIFY(!normalizeBwServer(QStringLiteral("vault example com")));
+
+        QCOMPARE(bwServerLabel(QString()), QStringLiteral("bitwarden.com"));
+        QCOMPARE(bwServerLabel(QStringLiteral("https://vw.lan")), QStringLiteral("https://vw.lan"));
+    }
+
     void bitwardenEntryDataReadsTheFirstUri() {
         const EntryData data = bwEntryData(QJsonDocument::fromJson(bwItemWithExtras).object());
         QCOMPARE(data.username, QStringLiteral("u"));
@@ -473,6 +526,16 @@ private slots:
                  BwLoginError::InvalidCode);
         QCOMPARE(classifyBwError(QStringLiteral("You are already logged in as a@b.com.")),
                  BwLoginError::AlreadyLoggedIn);
+        // What bw 2026.2 prints when a self-hosted server is down or its
+        // certificate is not trusted.
+        QCOMPARE(classifyBwError(QStringLiteral(
+                     "FetchError: request to https://localhost:8098/identity/accounts/prelogin failed, reason: \n"
+                     "  code: 'ECONNREFUSED'")),
+                 BwLoginError::ServerUnreachable);
+        QCOMPARE(classifyBwError(QStringLiteral(
+                     "FetchError: request to https://localhost:8099/identity/accounts/prelogin failed, "
+                     "reason: unable to verify the first certificate")),
+                 BwLoginError::ServerCertificate);
         QCOMPARE(classifyBwError(QStringLiteral("Something else")), BwLoginError::Other);
         QCOMPARE(classifyBwError(QString()), BwLoginError::None);
     }

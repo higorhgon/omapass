@@ -19,8 +19,11 @@ public:
     ~BitwardenLogin() override;
 
     // `method` is a TwoFactorProviderType (0 authenticator, 1 e-mail,
-    // 3 YubiKey), or -1 to let bw decide.
-    void start(const QString &email, const Secret &password, int method = -1);
+    // 3 YubiKey), or -1 to let bw decide. A non-empty `server` is handed to
+    // `bw config server` first (which only works logged out, as bw is here);
+    // empty leaves bw's server as it is.
+    void start(const QString &email, const Secret &password, const QString &server = QString(),
+               int method = -1);
     void sendCode(const QString &code);
     void cancel();
 
@@ -33,10 +36,16 @@ signals:
     void failed(const QString &error, BwLoginError kind);
 
 private:
+    QProcess *spawn(const QStringList &args, const QProcessEnvironment &env);
+    void startLogin();
     void onStderr();
     void onFinished(int exitCode, QProcess::ExitStatus status);
 
     QProcess *m_process = nullptr;
+    // What the login needs once `bw config server` is done.
+    QString m_email;
+    Secret m_password;
+    int m_method = -1;
     QString m_stderr;
     QSet<int> m_promptsSeen;
     bool m_stopping = false;

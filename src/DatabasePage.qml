@@ -142,11 +142,14 @@ FocusScope {
         visible: controller.loginStep === "credentials" || controller.loginStep === "code"
                  || controller.loginStep === "deviceCode"
         step: controller.loginStep
+        server: controller.loginServer
         email: controller.loginEmail
         errorText: controller.unlockError
         busy: controller.busy
 
-        onCredentialsSubmitted: function(email, password) { controller.bitwardenLogin(email, password); }
+        onCredentialsSubmitted: function(server, email, password) {
+            controller.bitwardenLogin(server, email, password);
+        }
         onCodeSubmitted: function(code) { controller.sendBitwardenCode(code); }
         onDismissed: controller.cancelBitwardenLogin()
     }

@@ -337,6 +337,18 @@ bitwarden.login_title:
 bitwarden.logging_in:
   pt-BR: "Conectando ao Bitwarden…"
   en: "Connecting to Bitwarden…"
+bitwarden.server_label:
+  pt-BR: " Servidor "
+  en: " Server "
+bitwarden.invalid_server:
+  pt-BR: "Servidor inválido! Use https:// (o bw não aceita http)."
+  en: "Invalid server! Use https:// (bw does not accept http)."
+bitwarden.server_unreachable:
+  pt-BR: "Não foi possível conectar a %{server}."
+  en: "Could not connect to %{server}."
+bitwarden.server_certificate:
+  pt-BR: "O certificado de %{server} não é confiável para o bw (veja NODE_EXTRA_CA_CERTS no README)."
+  en: "bw does not trust the certificate of %{server} (see NODE_EXTRA_CA_CERTS in the README)."
 bitwarden.email_label:
   pt-BR: " E-mail "
   en: " E-mail "
