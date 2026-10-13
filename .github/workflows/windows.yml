@@ -113,6 +113,36 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem dist | Format-Table Name, Length
 
+      - name: Confere o instalador (instala, confere os atalhos, desinstala)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dist -Filter *-setup.exe).FullName
+          $destino = Join-Path $env:RUNNER_TEMP "omapass-instalado"
+          $log = Join-Path $env:RUNNER_TEMP "instalador.log"
+          # Todas as opções marcadas, numa pasta escolhida.
+          $p = Start-Process $setup -Wait -PassThru -ArgumentList @(
+              "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$destino",
+              "/TASKS=startmenuicon,desktopicon", "/LOG=$log")
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "instalador saiu com $($p.ExitCode)" }
+
+          $falhou = $false
+          foreach ($item in @(
+              "$destino\omapass.exe",
+              "$destino\platforms\qwindows.dll",
+              "$destino\unins000.exe",
+              "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\omapass.lnk",
+              "$env:PUBLIC\Desktop\omapass.lnk")) {
+              if (Test-Path $item) { "ok: $item" } else { "FALTA: $item"; $falhou = $true }
+          }
+          if ($falhou) { Get-Content $log -Tail 40; throw "instalação incompleta" }
+
+          # Desinstala e confere que nada ficou.
+          $u = Start-Process "$destino\unins000.exe" -Wait -PassThru -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES"
+          if ($u.ExitCode -ne 0) { throw "desinstalador saiu com $($u.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path "$destino\omapass.exe") { throw "o desinstalador deixou o executável" }
+          "desinstalado"
+
       - uses: actions/upload-artifact@v4
         with:
           name: omapass-windows-x64
