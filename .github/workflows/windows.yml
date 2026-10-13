@@ -1,0 +1,84 @@
+name: Windows
+
+# Build do omapass para Windows x64, reaproveitado pelo CI (a cada PR, para
+# que a compilação não quebre sem aviso) e pelo workflow de release (que
+# anexa o zip). Compila com o MinGW do MSYS2 — o mesmo g++ e as mesmas
+# bibliotecas (Qt 6, Botan 3, zlib) do Linux, sem um segundo conjunto de
+# dependências para manter.
+on:
+  workflow_call:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            zip
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-botan
+            mingw-w64-ucrt-x86_64-zlib
+
+      - name: Compila
+        run: |
+          mkdir build
+          cd build
+          qmake6 ../omapass.pro
+          mingw32-make -j"$(nproc)" release
+          find . -name omapass.exe
+
+      - name: Monta a pasta do pacote
+        run: |
+          versao="$(sed -n 's/.*applicationVersion = QStringLiteral("\([^"]*\)").*/\1/p' src/main.cpp)"
+          pasta="omapass-$versao-windows-x64"
+          exe="$(find build -name omapass.exe | head -n 1)"
+          mkdir -p "dist/$pasta"
+          cp "$exe" "dist/$pasta/"
+
+          # Qt: plugins de plataforma, módulos QML e as DLLs do próprio Qt.
+          deploy="$(command -v windeployqt6 || command -v windeployqt-qt6 || command -v windeployqt)"
+          "$deploy" --release --no-translations --qmldir src "dist/$pasta/omapass.exe"
+
+          # O que o windeployqt não conhece (Botan, zlib, o runtime do MinGW)
+          # e as dependências delas; só o que veio do MSYS2, nunca o sistema.
+          ldd "dist/$pasta/omapass.exe" | awk '/ucrt64/ {print $3}' | while read -r dll; do
+            cp -n "$dll" "dist/$pasta/"
+          done
+
+          cp -r wordlists "dist/$pasta/wordlists"
+          cp LICENSE README.md "dist/$pasta/"
+          echo "PASTA=$pasta" >> "$GITHUB_ENV"
+
+      - name: Confere que o executável sobe
+        run: |
+          # Sem janela: só a versão, o que já exige que o Qt e as DLLs
+          # estejam todos no lugar.
+          "dist/$PASTA/omapass.exe" --version
+
+      - name: Gera o zip
+        run: |
+          cd dist
+          zip -qr "$PASTA.zip" "$PASTA"
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omapass-windows-x64
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7

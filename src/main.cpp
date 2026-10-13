@@ -1,6 +1,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -176,7 +177,13 @@ int main(int argc, char *argv[]) {
     // ~/.config/fontconfig/fonts.conf — so the desktop's chosen monospace is
     // what omapass draws with. Its size follows the desktop text scale, which
     // keeps the chrome (menus, dialogs) growing with the rest.
+#ifdef Q_OS_WIN
+    // No fontconfig here, so the generic family name means nothing: the
+    // system's own fixed-width font is the equivalent.
+    const QFont interfaceFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#else
     const QFont interfaceFont(QStringLiteral("monospace"));
+#endif
     const qreal basePointSize = interfaceFont.pointSizeF() > 0 ? interfaceFont.pointSizeF()
                                                                : app.font().pointSizeF();
     const auto applyInterfaceFont = [&app, interfaceFont, basePointSize](qreal textScale) {

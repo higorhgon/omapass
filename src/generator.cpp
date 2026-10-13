@@ -122,6 +122,9 @@ QStringList wordlistDirectories() {
         Config::configDir() + QStringLiteral("/wordlists"),
         // Installed beside omapass (PREFIX/share/omapass/…), wherever that is.
         appDir + QStringLiteral("/../share/omapass/wordlists"),
+        // Beside the executable (the Windows package, which has no
+        // PREFIX/share to speak of).
+        appDir + QStringLiteral("/wordlists"),
         // Running from build/: the lists in the repository.
         appDir + QStringLiteral("/../wordlists"),
     };

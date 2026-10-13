@@ -2,20 +2,24 @@
 // copyright David Heinemeier Hansson. See systemtheme.h.
 #include "systemtheme.h"
 
+#ifdef OMAPASS_HAS_DBUS
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusVariant>
+#endif
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QVariant>
 
 namespace {
 QVariant unwrapVariant(QVariant value) {
+#ifdef OMAPASS_HAS_DBUS
     while (value.canConvert<QDBusVariant>())
         value = value.value<QDBusVariant>().variant();
+#endif
     return value;
 }
 
@@ -80,6 +84,7 @@ SystemTheme::SystemTheme(QObject *parent) : QObject(parent) {
     }
 #endif
 
+#ifdef OMAPASS_HAS_DBUS
     QDBusConnection::sessionBus().connect(
         QString(),
         QStringLiteral("/org/freedesktop/portal/desktop"),
@@ -87,6 +92,7 @@ SystemTheme::SystemTheme(QObject *parent) : QObject(parent) {
         QStringLiteral("SettingChanged"),
         this,
         SLOT(handlePortalSettingChanged(QString,QString,QDBusVariant)));
+#endif
 
     requestPortalDarkMode();
     // omapass departs from Omacalc here: its whole interface is sized by the
@@ -97,6 +103,17 @@ SystemTheme::SystemTheme(QObject *parent) : QObject(parent) {
         requestPortalTextScale();
 }
 
+#ifndef OMAPASS_HAS_DBUS
+// Without D-Bus there is no portal to ask: Qt's own light/dark is what there
+// is, and the text scale stays at 1.
+bool SystemTheme::readInitialTextScale() {
+    return false;
+}
+
+void SystemTheme::requestPortalSetting(const QString &, const QString &,
+                                       std::function<void(const QVariant &)>) {}
+
+#else
 bool SystemTheme::readInitialTextScale() {
     // Long enough for a portal that is up, short enough that one that is
     // down or still starting does not hold the window back noticeably.
@@ -160,6 +177,8 @@ void SystemTheme::requestPortalSetting(const QString &nameSpace, const QString &
     });
 }
 
+#endif  // OMAPASS_HAS_DBUS
+
 void SystemTheme::requestPortalDarkMode() {
     requestPortalSetting(QStringLiteral("org.freedesktop.appearance"),
                          QStringLiteral("color-scheme"),
@@ -182,6 +201,7 @@ void SystemTheme::requestPortalTextScale() {
     });
 }
 
+#ifdef OMAPASS_HAS_DBUS
 void SystemTheme::handlePortalSettingChanged(const QString &nameSpace, const QString &key,
                                              const QDBusVariant &value) {
     if (key == QStringLiteral("text-scaling-factor")) {
@@ -212,6 +232,7 @@ void SystemTheme::handlePortalSettingChanged(const QString &nameSpace, const QSt
     else
         refresh();
 }
+#endif
 
 bool SystemTheme::qtDarkMode(bool *known) const {
     *known = false;

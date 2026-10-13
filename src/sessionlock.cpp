@@ -1,11 +1,13 @@
 #include "sessionlock.h"
 
 #include <QCoreApplication>
+#ifdef OMAPASS_HAS_DBUS
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#endif
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTimer>
@@ -30,6 +32,11 @@ SessionLockWatcher::SessionLockWatcher(QObject *parent) : QObject(parent) {
     startHyprlandPollingIfApplicable();
 }
 
+#ifndef OMAPASS_HAS_DBUS
+// No logind to listen to without D-Bus.
+void SessionLockWatcher::watchLogind() {}
+void SessionLockWatcher::subscribeToLogindLock(const QString &) {}
+#else
 void SessionLockWatcher::watchLogind() {
     const QDBusConnection bus = QDBusConnection::systemBus();
     if (!bus.isConnected())
@@ -70,6 +77,7 @@ void SessionLockWatcher::subscribeToLogindLock(const QString &sessionPath) {
         logindService, sessionPath, logindSessionInterface, QStringLiteral("Lock"),
         this, SLOT(handleLogindLock()));
 }
+#endif
 
 void SessionLockWatcher::handleLogindLock() {
     fire();

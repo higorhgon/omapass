@@ -1,7 +1,8 @@
-name: AppImage
+name: Release
 
-# Disparado à mão: o AppImage é um artefato de entrega, não algo para sair a
-# cada push. Compila, anexa o arquivo a uma release e some.
+# Disparado à mão: um release é entrega, não algo para sair a cada push.
+# Compila o AppImage (Linux) e o zip (Windows) em paralelo e, só se os dois
+# saírem, publica os arquivos numa release com um SHA256SUMS.
 on:
   workflow_dispatch:
     inputs:
@@ -15,15 +16,19 @@ on:
         default: false
         type: boolean
 
-# Necessário para criar a release e subir o arquivo nela.
+# Necessário para criar a release e subir os arquivos nela.
 permissions:
   contents: write
 
 jobs:
-  appimage:
+  linux:
     # Fixo, não `latest`: o AppImage herda a glibc de onde foi gerado, e uma
     # troca silenciosa de runner reduziria em que máquinas ele roda.
     runs-on: ubuntu-24.04
+
+    outputs:
+      versao: ${{ steps.pacote.outputs.versao }}
+      tag: ${{ steps.pacote.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
@@ -52,31 +57,56 @@ jobs:
           [ -n "$tag" ] || tag="v$versao"
           {
             echo "versao=$versao"
-            echo "arquivo=$arquivo"
             echo "tag=$tag"
           } >> "$GITHUB_OUTPUT"
 
-      # Acompanha o AppImage: é a forma de quem baixa conferir que o arquivo
-      # chegou inteiro.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omapass-linux-x64
+          path: dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    uses: ./.github/workflows/windows.yml
+
+  publicar:
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: omapass-*-x64
+          path: dist
+          merge-multiple: true
+
+      # Acompanha os arquivos: é a forma de quem baixa conferir que chegaram
+      # inteiros.
       - name: Calcula o SHA256
-        env:
-          ARQUIVO: ${{ steps.pacote.outputs.arquivo }}
-        run: cd dist && sha256sum "$(basename "$ARQUIVO")" > SHA256SUMS
+        run: |
+          cd dist
+          ls -la
+          sha256sum omapass-* > SHA256SUMS
+          cat SHA256SUMS
 
       # `gh` já vem no runner, então nada de terceiros para publicar. Uma
       # release que já exista é reaproveitada, com os arquivos substituídos:
-      # regerar o AppImage de uma versão é justamente o caso comum.
+      # regerar os pacotes de uma versão é justamente o caso comum. A tag
+      # nasce no commit que foi compilado, não no que a branch padrão for
+      # depois.
       - name: Publica na release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.pacote.outputs.tag }}
-          ARQUIVO: ${{ steps.pacote.outputs.arquivo }}
-          VERSAO: ${{ steps.pacote.outputs.versao }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.linux.outputs.tag }}
+          VERSAO: ${{ needs.linux.outputs.versao }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ARQUIVO" dist/SHA256SUMS --clobber
+            gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" "$ARQUIVO" dist/SHA256SUMS \
+            gh release create "$TAG" dist/* \
+              --target "$GITHUB_SHA" \
               --title "omapass $VERSAO" \
               --generate-notes \
               ${{ inputs.prerelease && '--prerelease' || '' }}
