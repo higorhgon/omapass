@@ -12,22 +12,19 @@ jobs:
     container: archlinux:latest
 
     steps:
-      # Antes do checkout: a action precisa do git para trazer o submodule.
       - name: Instala as dependências
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel git cmake \
+            base-devel git \
             qt6-base qt6-declarative qt6-tools \
-            botan zlib minizip pcsclite libusb readline
+            botan zlib
 
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Testa
         run: ./bin/test
 
-      - name: Compila (omapass e keepassxc-cli)
+      - name: Compila
         run: ./bin/build
 
   # Ubuntu LTS, que ainda traz Botan 2: o omapass compila com as duas
@@ -37,23 +34,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Instala as dependências
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake pkg-config \
+            build-essential pkg-config \
             qmake6 qt6-base-dev qt6-declarative-dev qt6-tools-dev \
             qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-controls \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-workerscript \
-            libgl-dev libbotan-2-dev zlib1g-dev libminizip-dev libpcsclite-dev \
-            libusb-1.0-0-dev libreadline-dev libxkbcommon-dev
+            libgl-dev libbotan-2-dev zlib1g-dev libxkbcommon-dev
 
       - name: Testa
         run: ./bin/test
 
-      - name: Compila (omapass e keepassxc-cli)
+      - name: Compila
         run: ./bin/build

@@ -4,8 +4,8 @@
 
 Gerenciador de senhas com interface Qt Quick, escrito em C++, que segue o tema
 do Omarchy, a fonte monoespaçada do sistema e o modo claro/escuro
-automaticamente. Suporta quatro backends: **KeePassXC** (.kdbx, via
-`keepassxc-cli`), **pass** — the standard unix password manager (via `gpg`) —,
+automaticamente. Suporta quatro backends: **KeePass/KeePassXC** (.kdbx, lido e gravado
+pelo próprio omapass, sem programa externo), **pass** — the standard unix password manager (via `gpg`) —,
 **Bitwarden** (falando direto com a API do servidor — bitwarden.com ou um
 Vaultwarden próprio, sem CLI) e **1Password** (via o CLI oficial `op`).
 
@@ -30,8 +30,8 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Motor de frecency (frequência + recência) para ordenação inteligente
 - Cores vindas do tema do Omarchy, com sobreposição opcional por tema próprio em TOML
 - Lista de entradas em colunas — tipo (senha/ssh), nome, grupo, login e URL — e a busca
-  multi-termo olha todas elas (no pass e no KeePassXC, só tipo, nome e grupo: login e URL
-  exigiriam abrir cada entrada)
+  multi-termo olha todas elas (no pass, só tipo, nome e grupo: login e URL exigiriam
+  abrir cada entrada)
 - Atalhos de teclado: `j/k`, `gg/G`, `Ctrl+U/D`, `/` para buscar — os mesmos da versão TUI
 - Suporte a mouse: clique, duplo-clique e botão direito na lista; seleção de texto nos detalhes da entrada
 
@@ -42,12 +42,13 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Linux, em Wayland ou X11. A cópia de senhas usa o clipboard do próprio Qt, sem depender de nenhum programa externo.
 - `wl-clipboard` (`wl-copy`) é **opcional** e só entra em sessões Wayland, onde melhora a limpeza automática do clipboard: o `wl-copy --clear` solta a seleção pelo `wlr-data-control`, que não exige que a janela esteja em foco — e a limpeza acontece 10 segundos depois da cópia, quando o foco já está na janela em que você colou. Sem ele, a limpeza depende do compositor aceitar a escrita do Qt nesse momento. Em X11 não faz diferença e não é usado.
 - Para o desbloqueio por PIN (opcional, em qualquer banco): `secret-tool`, do `libsecret`, e um chaveiro do sistema destravado — o Omarchy já traz os dois. Sem isso, a opção de PIN simplesmente não aparece.
-- Botan 3 (`botan` no Arch/Omarchy) ou Botan 2.19+ (`libbotan-2-dev` no Ubuntu 24.04 LTS, que ainda não tem o 3) — usado na criptografia das contas Bitwarden, e já exigido para compilar o `keepassxc-cli`
+- Botan 3 (`botan` no Arch/Omarchy) ou Botan 2.19+ (`libbotan-2-dev` no Ubuntu 24.04 LTS, que ainda não tem o 3) — usado na criptografia dos bancos KeePass e das contas Bitwarden
+- ZLIB (`zlib` / `zlib1g-dev`) — compressão dos bancos `.kdbx`
 
-Para bancos **KeePassXC**:
-
-- `./bin/build` já compila um `keepassxc-cli` a partir do submodule vendorizado em `vendor/keepassxc` (um fork somente-CLI do KeePassXC) e `sudo make install` o deixa no PATH junto do `omapass` — não é preciso instalar o KeePassXC completo. Isso exige, na máquina que compila: `cmake`, Botan, ZLIB, Minizip, PCSC, libusb, readline e Qt 6 (Core/Concurrent/Gui/Test).
-- Alternativamente, qualquer `keepassxc-cli` (do pacote oficial do KeePassXC, por exemplo) já disponível no PATH também funciona.
+Para bancos **KeePass/KeePassXC** não é preciso instalar nada: o omapass lê e grava
+`.kdbx` (formatos 3.1 e 4, com AES-256, ChaCha20 ou Twofish e AES-KDF, Argon2d ou Argon2id)
+por conta própria. Bancos protegidos por arquivo-chave ou por chave de hardware ainda não
+são suportados — só senha.
 
 Para bancos **pass**:
 
@@ -85,23 +86,20 @@ sudo apt install build-essential cmake pkg-config qmake6 qt6-base-dev \
   libusb-1.0-0-dev libreadline-dev libxkbcommon-dev
 ```
 
-Daí em diante é igual ao Arch: `./bin/build` (que compila o `keepassxc-cli` junto) e
-`sudo make install`. Verificado num container `ubuntu:24.04` — Qt 6.4.2, Botan 2.19.3 —
-com os testes passando e os dois binários gerados. O CI compila nas duas distribuições a
+Daí em diante é igual ao Arch: `./bin/build` e `sudo make install`. Verificado num
+container `ubuntu:24.04` — Qt 6.4.2, Botan 2.19.3 — com os testes passando e o binário
+gerado. O CI compila nas duas distribuições a
 cada mudança, então isso não volta a quebrar sem aviso.
 
 ## Instalação
 
 ```bash
-git clone --recurse-submodules https://github.com/higorhgon/omapass.git
+git clone https://github.com/higorhgon/omapass.git
 cd omapass
 make
 ```
 
-(Se já clonou sem `--recurse-submodules`, rode `git submodule update --init` antes de `make`.)
-
-O binário fica em `build/omapass`, e o `keepassxc-cli` compilado do submodule em
-`build/keepassxc-cli`. Os testes rodam com `make test`.
+O binário fica em `build/omapass`. Os testes rodam com `make test`.
 
 Para instalar no sistema (padrão `PREFIX=/usr/local`):
 
@@ -115,23 +113,11 @@ ou para instalar em `~/.local`:
 make install PREFIX="$HOME/.local"
 ```
 
-Isso também instala o `keepassxc-cli` compilado do submodule em `$(BINDIR)`; se
-o KeePassXC completo já estiver instalado no sistema, essa cópia pode
-sombreá-lo no PATH dependendo da ordem de `$PATH` — é o comportamento
-pretendido (usar a variante somente-CLI no lugar da instalação completa).
-
-Para desinstalar:
-
-```bash
-sudo make uninstall
-```
-
-`PREFIX` e `DESTDIR` são configuráveis, por exemplo `make install PREFIX=/usr DESTDIR="$pkgdir"` para empacotamento.
 
 ### AppImage
 
-`make appimage` gera um arquivo único — Qt, os módulos QML, o `keepassxc-cli` e as listas de
-palavras, tudo dentro — em `dist/omapass-<versão>-x86_64.AppImage`:
+`make appimage` gera um arquivo único — Qt, os módulos QML e as listas de palavras, tudo
+dentro — em `dist/omapass-<versão>-x86_64.AppImage`:
 
 ```bash
 make appimage          # compila num container Ubuntu 24.04 (docker ou podman)
@@ -144,8 +130,7 @@ só em sistemas igualmente recentes. `bin/appimage --native` existe para experim
 localmente, e avisa disso.
 
 Os CLIs dos backends **não** vão dentro: `op`, `gpg` e `pass` continuam sendo do
-sistema, porque são eles que guardam as suas contas e chaves. O `keepassxc-cli` vai, porque o
-omapass o compila junto. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
+sistema, porque são eles que guardam as suas contas e chaves. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
 em que ele estiver rodando.
 
 Para publicar, o workflow **AppImage** (em Actions → AppImage → Run workflow) faz o mesmo
@@ -156,8 +141,8 @@ caso de quem só está regerando o pacote de uma versão.
 
 ### Empacotando para o Arch
 
-`packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório, submodule
-incluído (`makepkg -si` dentro dele). Quando houver versões marcadas, ele vira um
+`packaging/PKGBUILD` monta um pacote a partir do HEAD do repositório
+(`makepkg -si` dentro dele). Quando houver versões marcadas, ele vira um
 `omapass` comum com tarball e `pkgver` fixo.
 
 ## Uso
@@ -374,7 +359,7 @@ dois modos:
   (`l/1/I`, `O/0`), excluir caracteres específicos e um conjunto personalizado, que substitui
   as classes.
 - **Frase** — número de palavras e separador. A lista segue o idioma da interface: em
-  português usa a lista pt-BR do omapass, e em inglês a lista EFF que vem do KeePassXC, ambas
+  português usa a lista pt-BR do omapass, e em inglês a lista EFF, ambas
   com 7.776 palavras (12,9 bits de entropia por palavra).
 
 A senha é gerada de novo a cada ajuste, e `Ctrl+R` sorteia outra sem mudar nada. `Enter` copia
@@ -382,10 +367,11 @@ para a área de transferência, com a mesma limpeza automática de 10 segundos d
 do formulário de entrada, `Ctrl+G` sobre o campo Senha abre o mesmo gerador e `Enter` preenche o
 campo em vez de copiar. As escolhas ficam guardadas para a próxima vez.
 
-O gerador é sempre o `keepassxc-cli`, mesmo em bancos do pass ou do Bitwarden: ele responde em
-cerca de 10 ms, e o `pass generate` não gera sem criar uma entrada. As listas de palavras são instaladas pelo
+O gerador é sempre o do próprio omapass, mesmo em bancos do pass ou do Bitwarden: ele responde
+na hora, e o `pass generate` não gera sem criar uma entrada. Caracteres e palavras saem da fonte
+de números aleatórios do sistema, sorteados sem viés. As listas de palavras são instaladas pelo
 `make install` em `$(PREFIX)/share/omapass/wordlists`; rodando direto de `build/`, elas são lidas
-do repositório e do submodule. Sem lista alguma, o modo frase não aparece.
+do repositório (`wordlists/`; a lista em inglês é a EFF Large Wordlist, CC BY 3.0 US). Sem lista alguma, o modo frase não aparece.
 
 Para escolher outra lista, use `wordlist` no `config.toml`:
 
@@ -407,7 +393,7 @@ lugares nem palavras ofensivas, e nenhuma palavra sendo prefixo de outra.
 
 ## Segurança
 
-- **Backend KeePassXC**: a senha da entrada é sempre passada ao `keepassxc-cli` via stdin, mas `keepassxc-cli` não aceita usuário/URL/notas por stdin — esses campos vão como argumentos (`-u`, `--url`, `--notes`) em `add`/`edit`. Isso é uma limitação do `keepassxc-cli`, não do omapass: durante a execução do processo, outro usuário local com acesso a `/proc/<pid>/cmdline` (ou `ps aux`) pode ler esses valores. A senha em si nunca passa por argv. O backend **pass** não tem essa limitação — toda a entrada (senha e metadados) é enviada por stdin ao `gpg`/`pass insert`.
+- **Backend KeePass**: o banco é decifrado dentro do omapass, uma vez, ao abrir — nenhuma senha, usuário ou URL passa por argumentos de processo nem por outro programa. Enquanto o banco está aberto, as entradas (senhas incluídas) ficam na memória do omapass; são descartadas ao travar. Cada alteração regrava o arquivo por inteiro, de forma atômica (arquivo temporário e troca), na mesma versão do formato; se outro programa (o próprio KeePassXC, um cliente de sincronização) trocar o arquivo, o omapass o lê de novo antes de mexer, em vez de sobrescrever a mudança dele. Arquivos-chave e chaves de hardware (YubiKey) não são suportados.
 - **Backend Bitwarden**: o omapass fala com o servidor só por HTTPS, com a criptografia dos clientes oficiais: PBKDF2-SHA256 ou Argon2id conforme a conta, HKDF, AES-256-CBC com HMAC-SHA256 verificado antes de decifrar e RSA-OAEP para chaves de organização, via Botan. A senha mestra nunca sai da máquina — ao servidor vai só o hash de login, como nos clientes oficiais — e não fica guardada: serve para derivar as chaves e é descartada. A cópia local da conta (`~/.local/share/omapass/bitwarden/`, legível só pelo seu usuário) guarda o cofre cifrado como o servidor o entrega, e o token que permite voltar a falar com o servidor (refresh token) vai **cifrado com a chave do usuário** — sem a senha mestra, o arquivo não abre nada nem chega ao servidor. O token de acesso, de curta duração, fica só na memória. Enquanto o cofre está aberto, os itens (senhas incluídas) ficam na memória do omapass; são descartados ao travar. Alterações são cifradas no omapass antes de sair.
 - **Desbloqueio por PIN**: nenhum backend aceita PIN (o Bitwarden e o `op` só conhecem a senha mestra, um `.kdbx` é cifrado com a dele, e o pass quer a passphrase GPG) — então é a **senha do banco** que fica guardada, cifrada com uma chave derivada do PIN (PBKDF2-SHA256, 600.000 iterações, com salt aleatório) no formato AES-256-CBC + HMAC-SHA256, no chaveiro do sistema (`secret-tool`, atributos `service=omapass account=pin:<caminho do banco>` — um por banco). O contador de tentativas erradas fica no `omapass.conf` sob um resumo SHA-256 do caminho, para o arquivo não listar onde estão seus bancos. O PIN em si não é guardado, nem um hash dele: o PIN errado falha na verificação do HMAC. **O limite honesto:** um PIN de 4 dígitos são 10.000 combinações, e quem conseguir ler o chaveiro pode testá-las offline — as 600.000 iterações são a única barreira, e o limite de 5 tentativas é da interface, não da criptografia. Use 6 dígitos ou mais — ou marque letras e símbolos, que é o jeito barato de multiplicar isso por milhares — e deixe o PIN desligado em máquina compartilhada. Nem a senha mestra nem o PIN passam por argumentos de processo.
 - **Backend 1Password**: a senha mestra é digitada no próprio prompt do `op` (que roda com um terminal emprestado do `script`), a Secret Key vai pela variável de ambiente `OP_SECRET_KEY` e o JSON dos itens (que carrega a senha) pelo stdin do `op item create`/`op item edit` — nada disso aparece em argv, que o próprio `op` avisa ser legível por outros processos; o ambiente de um processo, ao contrário da linha de comando, só é legível pelo próprio usuário. O token de sessão fica num `Secret` e só chega ao `op` pela variável de ambiente que o próprio `op` nomeou ao devolvê-lo. A senha mestra **não** fica guardada depois de abrir: quando a sessão expira (30 minutos de inatividade), o omapass tranca e pede a senha de novo, em vez de manter a senha em memória para renovar sozinho. Enquanto o cofre está aberto, os itens já abertos (senhas incluídas) ficam na memória do omapass e são descartados ao travar. Travar o cofre roda `op signout`, o que **também encerra a sessão do `op` no terminal**.
@@ -429,7 +415,7 @@ Ao gravar, só os valores dessas chaves mudam: comentários, ordem das linhas e 
 omapass não conhece ficam como estavam. `Ctrl+F` no modal abre o seletor de arquivos para uma
 lista de palavras sua; o arquivo escolhido é **copiado** para `~/.config/omapass/wordlists/`, e o
 caminho da cópia é gravado — assim a lista continua valendo se você mover ou apagar o original.
-Listas com menos de 1.296 palavras (o mínimo do `keepassxc-cli`) são recusadas na hora, com o
+Listas com menos de 1.296 palavras (o mínimo para a frase ter força) são recusadas na hora, com o
 número de palavras na mensagem.
 
 Arquivos em `~/.config/omapass/`:
@@ -445,7 +431,7 @@ Arquivos em `~/.config/omapass/`:
 
 `path` define onde o omapass procura **tanto** arquivos `.kdbx` quanto password-stores do pass (diretórios com `.gpg-id`); o `~/.password-store` convencional é sempre verificado, mesmo que `path` aponte para outro lugar.
 
-`language` controla o idioma da interface, em ordem de prioridade: (1) valor explícito no config.toml (`"pt-BR"`/`"en"`); (2) na ausência de um valor explícito (`"auto"` ou omitido), autodetecção pelo `$LANG`/`$LC_ALL` do sistema; (3) se nada foi configurado nem detectado, o padrão é inglês. Só o texto gerado pelo próprio omapass é traduzido — mensagens de erro que vêm direto do `keepassxc-cli`, `pass` ou `gpg` continuam no idioma dessas ferramentas, fora do controle do omapass.
+`language` controla o idioma da interface, em ordem de prioridade: (1) valor explícito no config.toml (`"pt-BR"`/`"en"`); (2) na ausência de um valor explícito (`"auto"` ou omitido), autodetecção pelo `$LANG`/`$LC_ALL` do sistema; (3) se nada foi configurado nem detectado, o padrão é inglês. Só o texto gerado pelo próprio omapass é traduzido — mensagens de erro que vêm direto do `pass` ou do `gpg` continuam no idioma dessas ferramentas, fora do controle do omapass.
 
 Exemplo de `config.toml`:
 

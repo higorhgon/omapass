@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
-// Generates a password (or a diceware passphrase) with keepassxc-cli, which
+// Generates a password (or a diceware passphrase) in-process, which
 // answers in milliseconds — so every change to the options regenerates right
 // away and what you see is what you get.
 //

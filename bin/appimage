@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Builds a portable omapass: one file carrying Qt, the QML it uses, the
-# bundled keepassxc-cli and the wordlists.
+# Builds a portable omapass: one file carrying Qt, the QML it uses and the
+# wordlists.
 #
 # By default it builds inside an Ubuntu 24.04 container, and that is not a
 # detail: an AppImage only runs where glibc is at least as new as the one it

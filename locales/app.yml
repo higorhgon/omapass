@@ -27,9 +27,6 @@ cli.help_doctor:
 cli.doctor_missing:
   pt-BR: "não encontrado"
   en: "not found"
-cli.doctor_keepassxc:
-  pt-BR: "bancos KeePassXC"
-  en: "KeePassXC databases"
 cli.doctor_gpg:
   pt-BR: "stores do pass"
   en: "pass stores"
@@ -262,9 +259,6 @@ app.delete_error:
   pt-BR: "Erro ao excluir: %{err}"
   en: "Error deleting: %{err}"
 
-keepass.spawn_error:
-  pt-BR: "Não foi possível executar keepassxc-cli: %{err}"
-  en: "Could not run keepassxc-cli: %{err}"
 keepass.wait_error:
   pt-BR: "Falha ao aguardar keepassxc-cli: %{err}"
   en: "Failed waiting for keepassxc-cli: %{err}"
