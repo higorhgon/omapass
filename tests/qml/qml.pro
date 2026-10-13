@@ -1,4 +1,8 @@
-QT += core gui qml quick qmltest dbus
+QT += core gui qml quick qmltest
+qtHaveModule(dbus) {
+    QT += dbus
+    DEFINES += OMAPASS_HAS_DBUS
+}
 # No crypto here: these tests draw components, and the sources they need
 # (theme, text scale, translations) do not touch Botan.
 CONFIG += c++20

@@ -8,7 +8,9 @@
 
 #include <functional>
 
+#ifdef OMAPASS_HAS_DBUS
 class QDBusVariant;
+#endif
 
 class SystemTheme : public QObject {
     Q_OBJECT
@@ -30,9 +32,11 @@ signals:
 public slots:
     void refresh();
 
+#ifdef OMAPASS_HAS_DBUS
 private slots:
     void handlePortalSettingChanged(const QString &nameSpace, const QString &key,
                                     const QDBusVariant &value);
+#endif
 
 private:
     void requestPortalSetting(const QString &nameSpace, const QString &key,

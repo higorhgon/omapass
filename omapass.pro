@@ -1,4 +1,12 @@
-QT += core gui qml quick quickcontrols2 dbus concurrent network
+QT += core gui qml quick quickcontrols2 concurrent network
+
+# D-Bus is how the app follows the Linux desktop (the freedesktop portal for
+# light/dark and text size, logind for the session lock). Where Qt has none
+# (Windows), those two simply have nothing to listen to.
+qtHaveModule(dbus) {
+    QT += dbus
+    DEFINES += OMAPASS_HAS_DBUS
+}
 
 CONFIG += c++20 release link_pkgconfig
 # Botan 3 where the distribution has it (Arch), Botan 2 where it does not
@@ -77,3 +85,11 @@ SOURCES += \
     src/vault.cpp
 
 RESOURCES += src/resources.qrc
+
+win32 {
+    LIBS += -luser32
+    # The icon of omapass.exe itself (Explorer, taskbar, shortcuts).
+    RC_ICONS = icons/omapass.ico
+    QMAKE_TARGET_PRODUCT = omapass
+    QMAKE_TARGET_DESCRIPTION = omapass
+}

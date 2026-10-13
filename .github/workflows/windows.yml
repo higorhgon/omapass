@@ -1,0 +1,153 @@
+name: Windows
+
+# Build do omapass para Windows x64, reaproveitado pelo CI (a cada PR, para
+# que a compilação não quebre sem aviso) e pelo workflow de release (que
+# anexa o zip). Compila com o MinGW do MSYS2 — o mesmo g++ e as mesmas
+# bibliotecas (Qt 6, Botan 3, zlib) do Linux, sem um segundo conjunto de
+# dependências para manter.
+on:
+  workflow_call:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            zip
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-libbotan
+            mingw-w64-ucrt-x86_64-zlib
+
+      - name: Compila
+        run: |
+          mkdir build
+          cd build
+          qmake6 ../omapass.pro
+          mingw32-make -j"$(nproc)" release
+          find . -name omapass.exe
+
+      - name: Monta a pasta do pacote
+        run: |
+          versao="$(sed -n 's/.*applicationVersion = QStringLiteral("\([^"]*\)").*/\1/p' src/main.cpp)"
+          pasta="omapass-$versao-windows-x64"
+          exe="$(find build -name omapass.exe | head -n 1)"
+          mkdir -p "dist/$pasta"
+          cp "$exe" "dist/$pasta/"
+
+          # Qt: plugins de plataforma, módulos QML e as DLLs do próprio Qt.
+          deploy="$(command -v windeployqt6 || command -v windeployqt-qt6 || command -v windeployqt)"
+          "$deploy" --release --no-translations --qmldir src "dist/$pasta/omapass.exe"
+
+          # O que o windeployqt não conhece (Botan, zlib, o runtime do MinGW)
+          # e as dependências delas; só o que veio do MSYS2, nunca o sistema.
+          ldd "dist/$pasta/omapass.exe" | awk '/ucrt64/ {print $3}' | while read -r dll; do
+            cp -n "$dll" "dist/$pasta/"
+          done
+
+          # Sem isto o Qt deduz o prefixo de onde estão as DLLs (aqui, a
+          # pasta acima) e procura plugins e módulos QML lá — não acha, e a
+          # interface não abre. Com o qt.conf ele olha ao lado do executável.
+          printf '[Paths]\nPrefix = .\nBinaries = .\nPlugins = .\nImports = qml\nQmlImports = qml\n' \
+              > "dist/$pasta/qt.conf"
+
+          cp -r wordlists "dist/$pasta/wordlists"
+          cp LICENSE README.md "dist/$pasta/"
+          echo "PASTA=$pasta" >> "$GITHUB_ENV"
+
+      - name: Confere que o executável sobe
+        run: |
+          # Sem janela: só a versão, o que já exige que o Qt e as DLLs
+          # estejam todos no lugar.
+          "dist/$PASTA/omapass.exe" --version
+
+      - name: Confere que a interface carrega
+        run: |
+          # Abre de verdade, com o renderizador por software (o runner não
+          # tem GPU): se o Main.qml não carregar o processo morre na hora; se
+          # carregar, ele segue vivo até o timeout (124) o encerrar.
+          #
+          # Num ambiente limpo, de propósito: dentro do shell do MSYS2 o Qt
+          # acharia plugins e QML em /ucrt64 e o teste passaria mesmo com um
+          # pacote que não abre numa máquina sem o MSYS2.
+          set +e
+          env -i SYSTEMROOT="$SYSTEMROOT" QT_QUICK_BACKEND=software \
+              /usr/bin/timeout 10 "dist/$PASTA/omapass.exe"
+          codigo=$?
+          set -e
+          if [ "$codigo" -ne 124 ]; then
+            echo "A interface nao ficou de pe (codigo $codigo)." >&2
+            exit 1
+          fi
+
+      - name: Gera o zip (portátil)
+        run: |
+          cd dist
+          zip -qr "$PASTA.zip" "$PASTA"
+          ls -la
+
+      # O instalador pergunta a pasta (Arquivos de Programas por padrão) e
+      # oferece os atalhos como opções. O Inno Setup vem do Chocolatey.
+      - name: Gera o instalador
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $versao = $env:PASTA -replace '^omapass-', '' -replace '-windows-x64$', ''
+          $fonte = (Resolve-Path "dist/$env:PASTA").Path
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" "/DSourceDir=$fonte" "/Odist" packaging/windows/omapass.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Confere o instalador (instala, confere os atalhos, desinstala)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dist -Filter *-setup.exe).FullName
+          $destino = Join-Path $env:RUNNER_TEMP "omapass-instalado"
+          $log = Join-Path $env:RUNNER_TEMP "instalador.log"
+          # Todas as opções marcadas, numa pasta escolhida.
+          $p = Start-Process $setup -Wait -PassThru -ArgumentList @(
+              "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$destino",
+              "/TASKS=startmenuicon,desktopicon", "/LOG=$log")
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "instalador saiu com $($p.ExitCode)" }
+
+          $falhou = $false
+          foreach ($item in @(
+              "$destino\omapass.exe",
+              "$destino\platforms\qwindows.dll",
+              "$destino\unins000.exe",
+              "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\omapass.lnk",
+              "$env:PUBLIC\Desktop\omapass.lnk")) {
+              if (Test-Path $item) { "ok: $item" } else { "FALTA: $item"; $falhou = $true }
+          }
+          if ($falhou) { Get-Content $log -Tail 40; throw "instalação incompleta" }
+
+          # Desinstala e confere que nada ficou.
+          $u = Start-Process "$destino\unins000.exe" -Wait -PassThru -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES"
+          if ($u.ExitCode -ne 0) { throw "desinstalador saiu com $($u.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path "$destino\omapass.exe") { throw "o desinstalador deixou o executável" }
+          "desinstalado"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omapass-windows-x64
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
+          if-no-files-found: error
+          retention-days: 7

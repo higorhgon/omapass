@@ -25,5 +25,6 @@
         <file alias="SettingsModal.qml">SettingsModal.qml</file>
         <file alias="UnlockModal.qml">UnlockModal.qml</file>
         <file alias="locales/app.yml">../locales/app.yml</file>
+        <file alias="omapass.png">../icons/omapass-256.png</file>
     </qresource>
 </RCC>

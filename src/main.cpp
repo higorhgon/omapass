@@ -1,6 +1,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -19,6 +20,12 @@
 #include "palette.h"
 #include "sessionlock.h"
 #include "systemtheme.h"
+
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -153,7 +160,11 @@ int main(int argc, char *argv[]) {
     app.setApplicationName(QStringLiteral("omapass"));
     app.setApplicationVersion(applicationVersion);
     app.setOrganizationName(QStringLiteral("omapass"));
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omapass")));
+    // The icon theme has it where omapass is installed as a package; the
+    // copy inside the binary is for where there is no theme (Windows, a
+    // portable build).
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omapass"),
+                                       QIcon(QStringLiteral(":/omapass.png"))));
 
     // Basic rather than Material: every control here is drawn against the
     // Omarchy palette, and Material's own chrome (filled text containers,
@@ -176,7 +187,13 @@ int main(int argc, char *argv[]) {
     // ~/.config/fontconfig/fonts.conf — so the desktop's chosen monospace is
     // what omapass draws with. Its size follows the desktop text scale, which
     // keeps the chrome (menus, dialogs) growing with the rest.
+#ifdef Q_OS_WIN
+    // No fontconfig here, so the generic family name means nothing: the
+    // system's own fixed-width font is the equivalent.
+    const QFont interfaceFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#else
     const QFont interfaceFont(QStringLiteral("monospace"));
+#endif
     const qreal basePointSize = interfaceFont.pointSizeF() > 0 ? interfaceFont.pointSizeF()
                                                                : app.font().pointSizeF();
     const auto applyInterfaceFont = [&app, interfaceFont, basePointSize](qreal textScale) {
@@ -199,10 +216,13 @@ int main(int argc, char *argv[]) {
     Strings strings;
 
     QQmlApplicationEngine engine;
+    QStringList loadProblems;
     QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app,
-                     [](const QList<QQmlError> &warnings) {
-        for (const QQmlError &warning : warnings)
+                     [&loadProblems](const QList<QQmlError> &warnings) {
+        for (const QQmlError &warning : warnings) {
             qWarning().noquote() << warning.toString();
+            loadProblems.append(warning.toString());
+        }
     });
 
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), &controller);
@@ -217,6 +237,14 @@ int main(int argc, char *argv[]) {
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Could not load the omapass interface; resource available:"
                     << QFile::exists(QStringLiteral(":/Main.qml"));
+#ifdef Q_OS_WIN
+        // A Windows GUI program has no console, so without this a failure to
+        // start is a process that simply never shows a window.
+        const QString text = QStringLiteral("Could not load the omapass interface.\n\n")
+            + loadProblems.join(QLatin1Char('\n')).left(1500);
+        MessageBoxW(nullptr, reinterpret_cast<const wchar_t *>(text.utf16()), L"omapass",
+                    MB_OK | MB_ICONERROR);
+#endif
         return -1;
     }
 
