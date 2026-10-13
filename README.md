@@ -133,11 +133,34 @@ Os CLIs dos backends **não** vão dentro: `op`, `gpg` e `pass` continuam sendo 
 sistema, porque são eles que guardam as suas contas e chaves. `./omapass-*.AppImage --doctor` diz o que foi encontrado na máquina
 em que ele estiver rodando.
 
-Para publicar, o workflow **AppImage** (em Actions → AppImage → Run workflow) faz o mesmo
-`make appimage` no GitHub e anexa o arquivo, com um `SHA256SUMS`, a uma release. É disparado
-à mão de propósito: o AppImage é entrega, não saída de cada push. Sem informar nada, ele usa
-a tag `v<versão do main.cpp>`; se a release já existir, os arquivos são substituídos, que é o
-caso de quem só está regerando o pacote de uma versão.
+### Windows (x64)
+
+O mesmo código compila para Windows com o MinGW do MSYS2 (UCRT64): Qt 6, Botan 3 e zlib. O
+workflow `windows.yml` faz isso a cada PR e gera um `omapass-<versão>-windows-x64.zip` — o
+executável, as DLLs do Qt/Botan/runtime, os módulos QML e as listas de palavras; é só
+descompactar e abrir `omapass.exe`. Para compilar à mão, num shell UCRT64 do MSYS2 com
+`mingw-w64-ucrt-x86_64-{gcc,make,pkgconf,qt6-base,qt6-declarative,qt6-tools,libbotan,zlib}`:
+
+```bash
+mkdir build && cd build
+qmake6 ../omapass.pro
+mingw32-make release
+```
+
+No Windows funcionam os bancos KeePass (`.kdbx`) e as contas Bitwarden — os dois são falados
+pelo próprio omapass. O que depende de programas do Linux fica de fora: o `pass` e o `gpg`
+(se estiverem no PATH, funcionam), o PIN (`secret-tool`) e a trava de sessão do desktop. O
+claro/escuro vem do Qt; a escala do texto do desktop não é lida. A configuração fica em
+`%USERPROFILE%\.config\omapass`.
+
+### Releases
+
+Para publicar, o workflow **Release** (em Actions → Release → Run workflow) compila o
+AppImage e o zip do Windows em paralelo e, só se os dois saírem, anexa os arquivos, com um
+`SHA256SUMS`, a uma release. É disparado à mão de propósito: um release é entrega, não saída
+de cada push. Sem informar nada, ele usa a tag `v<versão do main.cpp>`, criada no commit que
+foi compilado; se a release já existir, os arquivos são substituídos, que é o caso de quem só
+está regerando os pacotes de uma versão.
 
 ### Empacotando para o Arch
 
