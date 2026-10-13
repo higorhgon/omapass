@@ -2,11 +2,15 @@
 
 #include "config.h"
 #include "i18n.h"
-#include "process.h"
 
 #include <QCoreApplication>
 #include <QFile>
 #include <QStandardPaths>
+
+#include <botan/system_rng.h>
+
+#include <limits>
+#include <vector>
 
 namespace {
 
@@ -18,6 +22,53 @@ constexpr int minLength = 4;
 constexpr int maxLength = 128;
 constexpr int minWords = 3;
 constexpr int maxWords = 16;
+
+// What each class draws from. Special is the printable ASCII punctuation;
+// "similar" are the characters that are easy to take for one another.
+const QString lowerSet = QStringLiteral("abcdefghijklmnopqrstuvwxyz");
+const QString upperSet = QStringLiteral("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+const QString numberSet = QStringLiteral("0123456789");
+const QString specialSet = QStringLiteral("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
+const QString similarSet = QStringLiteral("iIl1|Lo0O");
+
+// A uniform number in [0, bound), without modulo bias.
+quint32 randomBelow(quint32 bound) {
+    if (bound <= 1)
+        return 0;
+    const quint32 limit = std::numeric_limits<quint32>::max() - (std::numeric_limits<quint32>::max() % bound);
+    for (;;) {
+        quint32 value = 0;
+        Botan::system_rng().randomize(reinterpret_cast<uint8_t *>(&value), sizeof(value));
+        if (value < limit)
+            return value % bound;
+    }
+}
+
+QString withoutChars(const QString &set, const QString &removed) {
+    QString out;
+    for (const QChar c : set) {
+        if (!removed.contains(c))
+            out.append(c);
+    }
+    return out;
+}
+
+QStringList readWords(const QString &path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    QStringList words;
+    while (!file.atEnd()) {
+        QString line = QString::fromUtf8(file.readLine()).trimmed();
+        // A list with dice numbers ("11111<TAB>abacus") keeps the word.
+        const int tab = line.lastIndexOf(QLatin1Char('\t'));
+        if (tab >= 0)
+            line = line.mid(tab + 1).trimmed();
+        if (!line.isEmpty())
+            words.append(line);
+    }
+    return words;
+}
 
 }
 
@@ -32,42 +83,10 @@ GeneratorOptions normalize(GeneratorOptions options) {
     if (!options.custom.isEmpty())
         return options;
 
-    // Every class off would leave keepassxc-cli with nothing to draw from.
+    // Every class off would leave nothing to draw from.
     if (!options.lower && !options.upper && !options.numbers && !options.special)
         options.lower = true;
     return options;
-}
-
-QStringList arguments(const GeneratorOptions &options, const QString &wordlist) {
-    const GeneratorOptions bounded = normalize(options);
-
-    if (bounded.passphrase) {
-        return {QStringLiteral("diceware"), QStringLiteral("-W"), QString::number(bounded.words),
-                QStringLiteral("-w"), wordlist};
-    }
-
-    QStringList args{QStringLiteral("generate"), QStringLiteral("-L"),
-                     QString::number(bounded.length)};
-
-    if (!bounded.custom.isEmpty()) {
-        args << QStringLiteral("-c") << bounded.custom;
-    } else {
-        if (bounded.lower)
-            args << QStringLiteral("-l");
-        if (bounded.upper)
-            args << QStringLiteral("-U");
-        if (bounded.numbers)
-            args << QStringLiteral("-n");
-        if (bounded.special)
-            args << QStringLiteral("-s");
-    }
-
-    if (bounded.excludeSimilar)
-        args << QStringLiteral("--exclude-similar");
-    if (!bounded.exclude.isEmpty())
-        args << QStringLiteral("-x") << bounded.exclude;
-
-    return args;
 }
 
 void configure(const QString &configured, const QString &language) {
@@ -103,9 +122,8 @@ QStringList wordlistDirectories() {
         Config::configDir() + QStringLiteral("/wordlists"),
         // Installed beside omapass (PREFIX/share/omapass/…), wherever that is.
         appDir + QStringLiteral("/../share/omapass/wordlists"),
-        // Running from build/: the lists in the repository and in the submodule.
+        // Running from build/: the lists in the repository.
         appDir + QStringLiteral("/../wordlists"),
-        appDir + QStringLiteral("/../vendor/keepassxc/share/wordlists"),
     };
 
     const QStringList data = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
@@ -130,41 +148,83 @@ QString wordlistPath() {
 }
 
 bool generate(const GeneratorOptions &options, Secret *password, QString *error) {
-    const QString wordlist = options.passphrase ? wordlistPath() : QString();
-    if (options.passphrase && wordlist.isEmpty()) {
-        *error = I18n::t(QStringLiteral("generator.no_wordlist"));
-        return false;
-    }
+    const GeneratorOptions bounded = normalize(options);
 
-    // Straight to the process rather than through runKpcli(): generating
-    // needs no database and no password on stdin, so it does not depend on
-    // the vault backends at all.
-    const ProcResult result = runProcess(QStringLiteral("keepassxc-cli"), arguments(options, wordlist));
-    if (!result.started) {
-        *error = I18n::t(QStringLiteral("keepass.spawn_error"), QStringLiteral("err"), result.err);
-        return false;
-    }
-    if (!result.success) {
-        *error = result.err.trimmed();
-        if (error->isEmpty())
+    try {
+        if (bounded.passphrase) {
+            const QString wordlist = wordlistPath();
+            if (wordlist.isEmpty()) {
+                *error = I18n::t(QStringLiteral("generator.no_wordlist"));
+                return false;
+            }
+            const QStringList words = readWords(wordlist);
+            if (words.size() < minimumWordlistSize) {
+                *error = I18n::t(QStringLiteral("generator.error"));
+                return false;
+            }
+
+            QStringList chosen;
+            for (int i = 0; i < bounded.words; ++i)
+                chosen.append(words.at(int(randomBelow(quint32(words.size())))));
+            QString phrase = chosen.join(bounded.separator);
+            *password = Secret(phrase);
+            phrase.fill(QChar(0));
+            return true;
+        }
+
+        // The classes in use, each with the characters left after the
+        // exclusions; a custom set stands alone.
+        QString removed = bounded.exclude;
+        if (bounded.excludeSimilar)
+            removed += similarSet;
+
+        QStringList groups;
+        if (!bounded.custom.isEmpty()) {
+            groups << withoutChars(bounded.custom, removed);
+        } else {
+            if (bounded.lower)
+                groups << withoutChars(lowerSet, removed);
+            if (bounded.upper)
+                groups << withoutChars(upperSet, removed);
+            if (bounded.numbers)
+                groups << withoutChars(numberSet, removed);
+            if (bounded.special)
+                groups << withoutChars(specialSet, removed);
+        }
+        groups.removeAll(QString());
+        if (groups.isEmpty()) {
             *error = I18n::t(QStringLiteral("generator.error"));
-        return false;
-    }
+            return false;
+        }
 
-    QString generated = result.out.trimmed();
-    if (generated.isEmpty()) {
+        QString pool;
+        for (const QString &group : std::as_const(groups))
+            pool += group;
+
+        // One from every class first, so the result meets what was asked
+        // for; the rest from the whole pool; then shuffled so the guaranteed
+        // ones do not sit at the front.
+        std::vector<QChar> picked;
+        for (const QString &group : std::as_const(groups)) {
+            if (int(picked.size()) < bounded.length)
+                picked.push_back(group.at(int(randomBelow(quint32(group.size())))));
+        }
+        while (int(picked.size()) < bounded.length)
+            picked.push_back(pool.at(int(randomBelow(quint32(pool.size())))));
+        for (size_t i = picked.size(); i > 1; --i)
+            std::swap(picked[i - 1], picked[randomBelow(quint32(i))]);
+
+        QString generated;
+        generated.reserve(int(picked.size()));
+        for (const QChar c : picked)
+            generated.append(c);
+        *password = Secret(generated);
+        generated.fill(QChar(0));
+        return true;
+    } catch (const std::exception &) {
         *error = I18n::t(QStringLiteral("generator.error"));
         return false;
     }
-
-    // keepassxc-cli always separates diceware words with a space; anything
-    // else the sheet asks for is put in here.
-    if (options.passphrase && options.separator != QStringLiteral(" "))
-        generated.replace(QLatin1Char(' '), options.separator);
-
-    *password = Secret(generated);
-    generated.fill(QChar(0));
-    return true;
 }
 
 }

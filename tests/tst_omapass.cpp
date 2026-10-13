@@ -1262,44 +1262,67 @@ private slots:
         QVERIFY(key != Pin::attemptsKey(store));
     }
 
-    void generatorArgumentsFollowTheOptions() {
+    void generatorHonoursClassesLengthAndExclusions() {
         GeneratorOptions options;
-        options.length = 24;
+        options.length = 40;
         options.special = false;
         options.excludeSimilar = true;
         options.exclude = QStringLiteral("aeiou");
 
-        const QStringList args = Generator::arguments(options, QString());
-        QCOMPARE(args.first(), QStringLiteral("generate"));
-        QVERIFY(args.contains(QStringLiteral("-L")));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-L")) + 1), QStringLiteral("24"));
-        QVERIFY(args.contains(QStringLiteral("-l")));
-        QVERIFY(args.contains(QStringLiteral("-U")));
-        QVERIFY(args.contains(QStringLiteral("-n")));
-        QVERIFY(!args.contains(QStringLiteral("-s")));
-        QVERIFY(args.contains(QStringLiteral("--exclude-similar")));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-x")) + 1), QStringLiteral("aeiou"));
+        for (int round = 0; round < 20; ++round) {
+            Secret generated;
+            QString error;
+            QVERIFY(Generator::generate(options, &generated, &error));
+            const QString text = generated.toString();
+            QCOMPARE(text.size(), 40);
+            bool lower = false, upper = false, number = false;
+            for (const QChar c : text) {
+                QVERIFY2(c.isLetterOrNumber(), "no special characters were asked for");
+                QVERIFY(!QStringLiteral("aeiouiIl1|Lo0O").contains(c));
+                lower |= c.isLower();
+                upper |= c.isUpper();
+                number |= c.isDigit();
+            }
+            QVERIFY(lower && upper && number);
+        }
     }
 
     void generatorCustomSetReplacesTheClasses() {
         GeneratorOptions options;
-        options.custom = QStringLiteral("abc123");
+        options.custom = QStringLiteral("ab");
+        options.length = 30;
 
-        const QStringList args = Generator::arguments(options, QString());
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-c")) + 1), QStringLiteral("abc123"));
-        QVERIFY(!args.contains(QStringLiteral("-l")));
-        QVERIFY(!args.contains(QStringLiteral("-U")));
+        Secret generated;
+        QString error;
+        QVERIFY(Generator::generate(options, &generated, &error));
+        for (const QChar c : generated.toString())
+            QVERIFY(c == QLatin1Char('a') || c == QLatin1Char('b'));
     }
 
-    void generatorPassphraseAsksForWordsAndWordlist() {
+    void generatorPassphraseDrawsWordsFromTheList() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString list = dir.filePath(QStringLiteral("w.wordlist"));
+        QFile file(list);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        for (int i = 0; i < Generator::minimumWordlistSize; ++i)
+            file.write(QByteArray("palavra") + QByteArray::number(i) + "\n");
+        file.close();
+
+        Generator::configure(list, QStringLiteral("en"));
         GeneratorOptions options;
         options.passphrase = true;
-        options.words = 7;
+        options.words = 5;
+        options.separator = QStringLiteral("-");
 
-        const QStringList args = Generator::arguments(options, QStringLiteral("/tmp/eff.wordlist"));
-        QCOMPARE(args.first(), QStringLiteral("diceware"));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-W")) + 1), QStringLiteral("7"));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-w")) + 1), QStringLiteral("/tmp/eff.wordlist"));
+        Secret generated;
+        QString error;
+        QVERIFY(Generator::generate(options, &generated, &error));
+        const QStringList words = generated.toString().split(QLatin1Char('-'));
+        QCOMPARE(words.size(), 5);
+        for (const QString &word : words)
+            QVERIFY(word.startsWith(QStringLiteral("palavra")));
+        Generator::configure(QStringLiteral("auto"), QStringLiteral("en"));
     }
 
     void generatorWordlistFollowsConfigAndLanguage() {
@@ -1333,7 +1356,7 @@ private slots:
         const GeneratorOptions bounded = Generator::normalize(options);
         QCOMPARE(bounded.length, 4);
         QCOMPARE(bounded.words, 16);
-        // Nothing selected would leave keepassxc-cli with no characters.
+        // Nothing selected would leave no characters to draw from.
         QVERIFY(bounded.lower);
 
         GeneratorOptions custom;
