@@ -823,6 +823,9 @@ ui.context_copy_url:
 ui.context_open_url:
   pt-BR: "Abrir URL"
   en: "Open URL"
+ui.context_info:
+  pt-BR: "Informações"
+  en: "Information"
 ui.context_add_new:
   pt-BR: "Adicionar nova"
   en: "Add new"
