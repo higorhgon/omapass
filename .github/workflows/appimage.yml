@@ -27,9 +27,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          # O keepassxc-cli vai dentro do AppImage e vem do submodule.
-          submodules: recursive
 
       # `make appimage` compila dentro do container Ubuntu LTS descrito em
       # packaging/appimage.Dockerfile — o mesmo caminho de quem gera na

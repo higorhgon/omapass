@@ -27,9 +27,6 @@ cli.help_doctor:
 cli.doctor_missing:
   pt-BR: "não encontrado"
   en: "not found"
-cli.doctor_keepassxc:
-  pt-BR: "bancos KeePassXC"
-  en: "KeePassXC databases"
 cli.doctor_gpg:
   pt-BR: "stores do pass"
   en: "pass stores"
@@ -262,15 +259,33 @@ app.delete_error:
   pt-BR: "Erro ao excluir: %{err}"
   en: "Error deleting: %{err}"
 
-keepass.spawn_error:
-  pt-BR: "Não foi possível executar keepassxc-cli: %{err}"
-  en: "Could not run keepassxc-cli: %{err}"
 keepass.wait_error:
   pt-BR: "Falha ao aguardar keepassxc-cli: %{err}"
   en: "Failed waiting for keepassxc-cli: %{err}"
 keepass.mkdir_error:
   pt-BR: "Erro ao criar diretório: %{err}"
   en: "Error creating directory: %{err}"
+keepass.save_error:
+  pt-BR: "Não foi possível gravar o banco: %{err}"
+  en: "Could not save the database: %{err}"
+keepass.corrupt:
+  pt-BR: "O banco de dados está corrompido."
+  en: "The database is corrupt."
+keepass.unsupported:
+  pt-BR: "Este banco usa um recurso que o omapass não suporta (%{detail})."
+  en: "This database uses a feature omapass does not support (%{detail})."
+keepass.unreadable:
+  pt-BR: "Não foi possível ler o banco: %{err}"
+  en: "Could not read the database: %{err}"
+keepass.entry_not_found:
+  pt-BR: "Entrada não encontrada: %{entry}"
+  en: "Entry not found: %{entry}"
+keepass.group_not_found:
+  pt-BR: "Grupo não encontrado: %{group}"
+  en: "Group not found: %{group}"
+keepass.group_exists:
+  pt-BR: "Já existe um grupo com o nome %{group}."
+  en: "A group named %{group} already exists."
 keepass.file_exists:
   pt-BR: "Arquivo já existe!"
   en: "File already exists!"

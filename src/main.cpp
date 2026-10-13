@@ -35,7 +35,6 @@ struct Tool {
 };
 
 const Tool tools[] = {
-    {"keepassxc-cli", "cli.doctor_keepassxc"},
     {"gpg", "cli.doctor_gpg"},
     {"pass", "cli.doctor_pass"},
     {"op", "cli.doctor_op"},

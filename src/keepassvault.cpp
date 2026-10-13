@@ -1,233 +1,228 @@
 #include "keepassvault.h"
 
+#include <QFileInfo>
+#include <QMutexLocker>
+
+#include <algorithm>
+
+#include "i18n.h"
+
+namespace {
+
+QString lastSegment(const QString &path) {
+    const int slash = path.lastIndexOf(QLatin1Char('/'));
+    return slash < 0 ? path : path.mid(slash + 1);
+}
+
+}  // namespace
+
+QString KeepassVault::openError(KdbxStatus status, const QString &detail) {
+    switch (status) {
+    case KdbxStatus::WrongPassword:
+        return I18n::t(QStringLiteral("backend.wrong_password"));
+    case KdbxStatus::Unreadable:
+        return I18n::t(QStringLiteral("keepass.unreadable"), QStringLiteral("err"), detail);
+    case KdbxStatus::Unsupported:
+        return I18n::t(QStringLiteral("keepass.unsupported"), QStringLiteral("detail"), detail);
+    case KdbxStatus::Corrupt:
+    case KdbxStatus::Ok:
+        break;
+    }
+    return I18n::t(QStringLiteral("keepass.corrupt"));
+}
+
+KeepassVault::KeepassVault(const QString &path, const Secret &password, std::unique_ptr<KdbxDatabase> db)
+    : Vault(VaultKind::Keepass, path), m_password(password), m_db(std::move(db)) {
+    stamp();
+}
+
+KeepassVault *KeepassVault::unlock(const QString &path, const Secret &password, QString *error) {
+    KdbxStatus status = KdbxStatus::Corrupt;
+    QString detail;
+    std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(path, password, &status, &detail);
+    if (!db) {
+        *error = openError(status, detail);
+        return nullptr;
+    }
+    return new KeepassVault(path, password, std::move(db));
+}
+
+void KeepassVault::stamp() const {
+    const QFileInfo info(path());
+    m_modified = info.lastModified();
+    m_size = info.size();
+}
+
+bool KeepassVault::refresh(QString *error) const {
+    const QFileInfo info(path());
+    if (info.lastModified() == m_modified && info.size() == m_size)
+        return true;
+
+    KdbxStatus status = KdbxStatus::Corrupt;
+    QString detail;
+    std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(path(), m_password, &status, &detail);
+    if (!db) {
+        *error = openError(status, detail);
+        return false;
+    }
+    m_db = std::move(db);
+    stamp();
+    return true;
+}
+
+// Writes the in-memory database. When that fails the file is left as it was,
+// and memory is read back from it so the two do not drift.
+bool KeepassVault::commit(QString *error) const {
+    const QString failure = m_db->save(path());
+    if (failure.isEmpty()) {
+        stamp();
+        return true;
+    }
+    *error = failure;
+
+    KdbxStatus status = KdbxStatus::Corrupt;
+    if (std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(path(), m_password, &status))
+        m_db = std::move(db);
+    return false;
+}
+
 void KeepassVault::list(QStringList *entries, QStringList *groups) const {
     entries->clear();
     groups->clear();
 
-    const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-Rfq"), path()},
-                                     {m_password});
-    if (!result.success)
+    const QMutexLocker locker(&m_mutex);
+    QString error;
+    if (!refresh(&error))
         return;
-
-    QStringList lines;
-    const auto rawLines = result.out.split(QLatin1Char('\n'));
-    for (const QString &raw : rawLines) {
-        const QString line = raw.trimmed();
-        if (line.isEmpty())
-            continue;
-        lines.append(line);
-        if (line.endsWith(QLatin1Char('/')))
-            groups->append(line.chopped(1));
-        else
-            entries->append(line);
-    }
-
-    // `ls -Rfq` lists a group both as "Work/" and through its children,
-    // so emptiness is decided against the raw listing rather than the
-    // split lists.
-    for (const QString &group : std::as_const(*groups)) {
-        const QString prefix = group + QLatin1Char('/');
-        const bool isEmpty = !std::any_of(lines.cbegin(), lines.cend(),
-                                          [&prefix](const QString &line) {
-            return line.startsWith(prefix) && line != prefix;
-        });
-        if (isEmpty)
-            entries->append(group + emptyGroupSuffix());
-    }
+    m_db->list(entries, groups);
+    appendEmptyGroups(*groups, entries);
 }
 
-bool KeepassVault::fetchEntryMeta(const QString &entryPath, EntryMeta *meta) const {
-    // One run for both: with several -a, the values come one per line, in
-    // the order asked, empty when the attribute is.
-    const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(), entryPath,
-                                      QStringLiteral("-a"), QStringLiteral("UserName"),
-                                      QStringLiteral("-a"), QStringLiteral("URL")},
-                                     {m_password});
-    if (!result.success)
-        return false;
-    const QStringList lines = result.out.split(QLatin1Char('\n'));
-    meta->username = lines.value(0).trimmed();
-    meta->url = lines.value(1).trimmed();
-    return true;
+QHash<QString, EntryMeta> KeepassVault::entryMeta() const {
+    QHash<QString, EntryMeta> meta;
+    const QMutexLocker locker(&m_mutex);
+    QString error;
+    if (!refresh(&error))
+        return meta;
+    const auto all = m_db->allEntries();
+    for (const auto &item : all) {
+        EntryMeta entry;
+        entry.username = item.second.username;
+        entry.url = item.second.url;
+        meta.insert(item.first, entry);
+    }
+    return meta;
 }
 
 QString KeepassVault::titleFor(const QString &entryPath, const QString &fallback) const {
-    const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(), entryPath,
-                                      QStringLiteral("-a"), QStringLiteral("Title")},
-                                     {m_password});
-    const QString title = result.success ? result.out.trimmed() : QString();
-    return title.isEmpty() ? fallback : title;
+    const QMutexLocker locker(&m_mutex);
+    QString error;
+    KdbxEntry entry;
+    if (!refresh(&error) || !m_db->entry(entryPath, &entry) || entry.title.isEmpty())
+        return fallback;
+    return entry.title;
 }
 
 bool KeepassVault::fetchPassword(const QString &entryPath, Secret *password, QString *error) const {
-    const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(),
-                                      entryPath, QStringLiteral("-a"), QStringLiteral("Password")},
-                                     {m_password});
-    if (!result.success) {
-        *error = result.err;
+    EntryData data;
+    if (!fetchEntry(entryPath, &data, error))
         return false;
-    }
-    *password = Secret(result.out.trimmed());
+    *password = data.password;
     return true;
 }
 
-bool KeepassVault::fetchEntry(const QString &entryPath, EntryData *data, QString * /*error*/) const {
-    const auto attribute = [this, &entryPath](const QString &name) {
-        const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(),
-                                          entryPath, QStringLiteral("-a"), name},
-                                         {m_password});
-        return result.success ? result.out.trimmed() : QString();
-    };
+bool KeepassVault::fetchEntry(const QString &entryPath, EntryData *data, QString *error) const {
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
+        return false;
 
-    data->username = attribute(QStringLiteral("UserName"));
-    data->password = Secret(attribute(QStringLiteral("Password")));
-    data->url = attribute(QStringLiteral("URL"));
-    data->notes = attribute(QStringLiteral("Notes"));
+    KdbxEntry entry;
+    if (!m_db->entry(entryPath, &entry)) {
+        *error = I18n::t(QStringLiteral("keepass.entry_not_found"), QStringLiteral("entry"), entryPath);
+        return false;
+    }
+    data->username = entry.username;
+    data->password = entry.password;
+    data->url = entry.url;
+    data->notes = entry.notes;
     data->extra.clear();
     return true;
 }
 
 bool KeepassVault::addEntry(const QString &entryPath, const QString &group, const EntryData &data,
                             QString *error) const {
-    if (!group.isEmpty())
-        runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), path(), group}, {m_password});
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
+        return false;
 
-    const KpResult result = runKpcli({QStringLiteral("add"), QStringLiteral("-q"),
-                                      QStringLiteral("-p"), QStringLiteral("-u"), data.username,
-                                      QStringLiteral("--url"), data.url,
-                                      QStringLiteral("--notes"), data.notes, path(), entryPath},
-                                     {m_password, data.password, data.password});
-    if (!result.success) {
-        *error = result.err;
+    KdbxEntry entry;
+    entry.title = lastSegment(entryPath);
+    entry.username = data.username;
+    entry.password = data.password;
+    entry.url = data.url;
+    entry.notes = data.notes;
+
+    const QString failure = m_db->addEntry(group, entry);
+    if (!failure.isEmpty()) {
+        *error = failure;
         return false;
     }
-    return true;
+    return commit(error);
 }
 
 bool KeepassVault::editEntry(const QString &oldPath, const QString &newPath, const QString &group,
                              const EntryData &data, QString *error) const {
-    if (!group.isEmpty())
-        runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), path(), group}, {m_password});
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
+        return false;
 
-    if (newPath != oldPath) {
-        // keepassxc-cli's `mv` takes [database] [source] [target group];
-        // the root is spelled "/".
-        const QString destination = group.isEmpty() ? QStringLiteral("/") : group;
-        runKpcli({QStringLiteral("mv"), QStringLiteral("-q"), path(), oldPath, destination},
-                 {m_password});
-    }
+    KdbxEntry entry;
+    entry.title = lastSegment(newPath);
+    entry.username = data.username;
+    entry.password = data.password;
+    entry.url = data.url;
+    entry.notes = data.notes;
 
-    const KpResult result = runKpcli({QStringLiteral("edit"), QStringLiteral("-q"),
-                                      QStringLiteral("-p"), QStringLiteral("-u"), data.username,
-                                      QStringLiteral("--url"), data.url,
-                                      QStringLiteral("--notes"), data.notes, path(), newPath},
-                                     {m_password, data.password, data.password});
-    if (!result.success) {
-        *error = result.err;
+    const QString failure = m_db->editEntry(oldPath, group, entry);
+    if (!failure.isEmpty()) {
+        *error = failure;
         return false;
     }
-    return true;
+    return commit(error);
 }
 
 bool KeepassVault::removeEntry(const QString &entryPath, QString *error) const {
-    const KpResult result = runKpcli({QStringLiteral("rm"), QStringLiteral("-q"), path(), entryPath},
-                                     {m_password});
-    if (!result.success) {
-        *error = result.err;
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
+        return false;
+    const QString failure = m_db->removeEntry(entryPath);
+    if (!failure.isEmpty()) {
+        *error = failure;
         return false;
     }
-    return true;
+    return commit(error);
 }
 
 bool KeepassVault::renameGroup(const QString &oldGroup, const QString &newName, QString *error) const {
-    const QString parent = parentGroup(oldGroup);
-    const QString newGroup = parent.isEmpty() ? newName : parent + QLatin1Char('/') + newName;
-
-    // keepassxc-cli has no native group rename: rebuild the subtree under the
-    // new name, move each entry across keeping its relative path, then delete
-    // the old (now empty) tree from the leaves up.
-    QStringList entries;
-    QStringList groups;
-    list(&entries, &groups);
-    const QString oldPrefix = oldGroup + QLatin1Char('/');
-
-    // Every step is checked and aborts on the first failure: this is
-    // multi-step (a sequence of mkdir/mv), so swallowing an error midway
-    // would leave the group tree half-rebuilt.
-    const auto mkdir = [this, error](const QString &group) {
-        const KpResult result = runKpcli({QStringLiteral("mkdir"), QStringLiteral("-q"), path(), group},
-                                         {m_password});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    };
-    const auto move = [this, error](const QString &source, const QString &destinationGroup) {
-        const KpResult result = runKpcli({QStringLiteral("mv"), QStringLiteral("-q"), path(), source,
-                                          destinationGroup},
-                                         {m_password});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-        return true;
-    };
-
-    // The new group is always created, even when `oldGroup` has no children —
-    // otherwise an empty group would simply vanish, since the mkdir/mv calls
-    // below only build destinations for content that actually exists.
-    if (!mkdir(newGroup))
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
         return false;
-
-    for (const QString &group : std::as_const(groups)) {
-        if (!group.startsWith(oldPrefix))
-            continue;
-        if (!mkdir(newGroup + QLatin1Char('/') + group.mid(oldPrefix.size())))
-            return false;
+    const QString failure = m_db->renameGroup(oldGroup, newName);
+    if (!failure.isEmpty()) {
+        *error = failure;
+        return false;
     }
-
-    const QString suffix = emptyGroupSuffix();
-    for (const QString &entry : std::as_const(entries)) {
-        if (entry.endsWith(suffix) || !entry.startsWith(oldPrefix))
-            continue;
-
-        const QString relative = entry.mid(oldPrefix.size());
-        const int slash = relative.lastIndexOf(QLatin1Char('/'));
-        const QString destination = slash < 0
-            ? newGroup
-            : newGroup + QLatin1Char('/') + relative.left(slash);
-
-        if (!mkdir(destination) || !move(entry, destination))
-            return false;
-    }
-
-    QStringList oldTree;
-    for (const QString &group : std::as_const(groups)) {
-        if (group == oldGroup || group.startsWith(oldPrefix))
-            oldTree.append(group);
-    }
-    std::sort(oldTree.begin(), oldTree.end(), [](const QString &a, const QString &b) {
-        return a.size() > b.size();
-    });
-    for (const QString &group : std::as_const(oldTree)) {
-        const KpResult result = runKpcli({QStringLiteral("rmdir"), QStringLiteral("-q"), path(), group},
-                                         {m_password});
-        if (!result.success) {
-            *error = result.err;
-            return false;
-        }
-    }
-
-    return true;
+    return commit(error);
 }
 
 bool KeepassVault::removeGroup(const QString &group, QString *error) const {
-    const KpResult result = runKpcli({QStringLiteral("rmdir"), QStringLiteral("-q"), path(), group},
-                                     {m_password});
-    if (!result.success) {
-        *error = result.err;
+    const QMutexLocker locker(&m_mutex);
+    if (!refresh(error))
+        return false;
+    const QString failure = m_db->removeGroup(group);
+    if (!failure.isEmpty()) {
+        *error = failure;
         return false;
     }
-    return true;
+    return commit(error);
 }

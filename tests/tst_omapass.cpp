@@ -10,6 +10,7 @@
 #include "generator.h"
 #include "history.h"
 #include "i18n.h"
+#include "kdbx.h"
 #include "kdbx2pass.h"
 #include "onepasswordlogin.h"
 #include "onepasswordvault.h"
@@ -380,32 +381,6 @@ private slots:
         data.extra = {QStringLiteral("otp: ABCDEF"), QStringLiteral("notes: manter")};
         QCOMPARE(QString::fromUtf8(buildPassEntryContent(data)),
                  QStringLiteral("p\nusername: u\nurl: https://x\notp: ABCDEF\nnotes: manter\n"));
-    }
-
-    void csvParsesPlainRows() {
-        const QVector<QStringList> rows = Kdbx2Pass::parseCsv(QStringLiteral("a,b,c\n1,2,3\n"));
-        QCOMPARE(rows.size(), 2);
-        QCOMPARE(rows.at(0), QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
-        QCOMPARE(rows.at(1), QStringList({QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3")}));
-    }
-
-    void csvKeepsCommasAndNewlinesInsideQuotes() {
-        const QVector<QStringList> rows =
-            Kdbx2Pass::parseCsv(QStringLiteral("Title,Notes\nfoo,\"linha1,\nlinha2\"\n"));
-        QCOMPARE(rows.size(), 2);
-        QCOMPARE(rows.at(1).at(1), QStringLiteral("linha1,\nlinha2"));
-    }
-
-    void csvUnescapesDoubledQuotes() {
-        const QVector<QStringList> rows =
-            Kdbx2Pass::parseCsv(QStringLiteral("Title\n\"ele disse \"\"oi\"\"\"\n"));
-        QCOMPARE(rows.at(1).at(0), QStringLiteral("ele disse \"oi\""));
-    }
-
-    void csvAcceptsAMissingTrailingNewline() {
-        const QVector<QStringList> rows = Kdbx2Pass::parseCsv(QStringLiteral("a,b\n1,2"));
-        QCOMPARE(rows.size(), 2);
-        QCOMPARE(rows.at(1), QStringList({QStringLiteral("1"), QStringLiteral("2")}));
     }
 
     void titlesAreSanitisedForTheFilesystem() {
@@ -1287,44 +1262,67 @@ private slots:
         QVERIFY(key != Pin::attemptsKey(store));
     }
 
-    void generatorArgumentsFollowTheOptions() {
+    void generatorHonoursClassesLengthAndExclusions() {
         GeneratorOptions options;
-        options.length = 24;
+        options.length = 40;
         options.special = false;
         options.excludeSimilar = true;
         options.exclude = QStringLiteral("aeiou");
 
-        const QStringList args = Generator::arguments(options, QString());
-        QCOMPARE(args.first(), QStringLiteral("generate"));
-        QVERIFY(args.contains(QStringLiteral("-L")));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-L")) + 1), QStringLiteral("24"));
-        QVERIFY(args.contains(QStringLiteral("-l")));
-        QVERIFY(args.contains(QStringLiteral("-U")));
-        QVERIFY(args.contains(QStringLiteral("-n")));
-        QVERIFY(!args.contains(QStringLiteral("-s")));
-        QVERIFY(args.contains(QStringLiteral("--exclude-similar")));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-x")) + 1), QStringLiteral("aeiou"));
+        for (int round = 0; round < 20; ++round) {
+            Secret generated;
+            QString error;
+            QVERIFY(Generator::generate(options, &generated, &error));
+            const QString text = generated.toString();
+            QCOMPARE(text.size(), 40);
+            bool lower = false, upper = false, number = false;
+            for (const QChar c : text) {
+                QVERIFY2(c.isLetterOrNumber(), "no special characters were asked for");
+                QVERIFY(!QStringLiteral("aeiouiIl1|Lo0O").contains(c));
+                lower |= c.isLower();
+                upper |= c.isUpper();
+                number |= c.isDigit();
+            }
+            QVERIFY(lower && upper && number);
+        }
     }
 
     void generatorCustomSetReplacesTheClasses() {
         GeneratorOptions options;
-        options.custom = QStringLiteral("abc123");
+        options.custom = QStringLiteral("ab");
+        options.length = 30;
 
-        const QStringList args = Generator::arguments(options, QString());
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-c")) + 1), QStringLiteral("abc123"));
-        QVERIFY(!args.contains(QStringLiteral("-l")));
-        QVERIFY(!args.contains(QStringLiteral("-U")));
+        Secret generated;
+        QString error;
+        QVERIFY(Generator::generate(options, &generated, &error));
+        for (const QChar c : generated.toString())
+            QVERIFY(c == QLatin1Char('a') || c == QLatin1Char('b'));
     }
 
-    void generatorPassphraseAsksForWordsAndWordlist() {
+    void generatorPassphraseDrawsWordsFromTheList() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString list = dir.filePath(QStringLiteral("w.wordlist"));
+        QFile file(list);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        for (int i = 0; i < Generator::minimumWordlistSize; ++i)
+            file.write(QByteArray("palavra") + QByteArray::number(i) + "\n");
+        file.close();
+
+        Generator::configure(list, QStringLiteral("en"));
         GeneratorOptions options;
         options.passphrase = true;
-        options.words = 7;
+        options.words = 5;
+        options.separator = QStringLiteral("-");
 
-        const QStringList args = Generator::arguments(options, QStringLiteral("/tmp/eff.wordlist"));
-        QCOMPARE(args.first(), QStringLiteral("diceware"));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-W")) + 1), QStringLiteral("7"));
-        QCOMPARE(args.at(args.indexOf(QStringLiteral("-w")) + 1), QStringLiteral("/tmp/eff.wordlist"));
+        Secret generated;
+        QString error;
+        QVERIFY(Generator::generate(options, &generated, &error));
+        const QStringList words = generated.toString().split(QLatin1Char('-'));
+        QCOMPARE(words.size(), 5);
+        for (const QString &word : words)
+            QVERIFY(word.startsWith(QStringLiteral("palavra")));
+        Generator::configure(QStringLiteral("auto"), QStringLiteral("en"));
     }
 
     void generatorWordlistFollowsConfigAndLanguage() {
@@ -1358,7 +1356,7 @@ private slots:
         const GeneratorOptions bounded = Generator::normalize(options);
         QCOMPARE(bounded.length, 4);
         QCOMPARE(bounded.words, 16);
-        // Nothing selected would leave keepassxc-cli with no characters.
+        // Nothing selected would leave no characters to draw from.
         QVERIFY(bounded.lower);
 
         GeneratorOptions custom;
@@ -1374,6 +1372,153 @@ private slots:
 
         secret.clear();
         QVERIFY(secret.isEmpty());
+    }
+
+    void kdbxRoundTripsEntriesGroupsAndHistory() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("t.kdbx"));
+        const Secret password(QStringLiteral("correct horse"));
+
+        auto db = KdbxDatabase::create(password, QStringLiteral("Teste"));
+        QVERIFY(db);
+        KdbxEntry entry;
+        entry.title = QStringLiteral("Gmail");
+        entry.username = QStringLiteral("ana@example.com");
+        entry.password = Secret(QStringLiteral("s3cr&t <pw>"));
+        entry.url = QStringLiteral("https://mail.example");
+        entry.notes = QStringLiteral("linha 1\nlinha 2 ção");
+        QVERIFY(db->addEntry(QStringLiteral("Trabalho/Email"), entry).isEmpty());
+        entry.title = QStringLiteral("Raiz");
+        QVERIFY(db->addEntry(QString(), entry).isEmpty());
+        QVERIFY(db->save(path).isEmpty());
+
+        KdbxStatus status = KdbxStatus::Corrupt;
+        QVERIFY(!KdbxDatabase::open(path, Secret(QStringLiteral("wrong")), &status));
+        QCOMPARE(status, KdbxStatus::WrongPassword);
+
+        QString detail;
+        auto reopened = KdbxDatabase::open(path, password, &status, &detail);
+        QVERIFY2(reopened, qPrintable(QStringLiteral("status %1: %2").arg(int(status)).arg(detail)));
+        QStringList entries, groups;
+        reopened->list(&entries, &groups);
+        QCOMPARE(entries, QStringList({QStringLiteral("Raiz"), QStringLiteral("Trabalho/Email/Gmail")}));
+        QCOMPARE(groups, QStringList({QStringLiteral("Trabalho"), QStringLiteral("Trabalho/Email")}));
+
+        KdbxEntry read;
+        QVERIFY(reopened->entry(QStringLiteral("Trabalho/Email/Gmail"), &read));
+        QCOMPARE(read.password.toString(), QStringLiteral("s3cr&t <pw>"));
+        QCOMPARE(read.notes, QStringLiteral("linha 1\nlinha 2 ção"));
+        QCOMPARE(read.url, QStringLiteral("https://mail.example"));
+
+        // Edit: moves, changes the password, renames the group, recycles.
+        read.password = Secret(QStringLiteral("novo"));
+        read.title = QStringLiteral("Gmail 2");
+        QVERIFY(reopened->editEntry(QStringLiteral("Trabalho/Email/Gmail"), QStringLiteral("Pessoal"), read).isEmpty());
+        QVERIFY(reopened->renameGroup(QStringLiteral("Pessoal"), QStringLiteral("Casa")).isEmpty());
+        QVERIFY(reopened->removeEntry(QStringLiteral("Raiz")).isEmpty());
+        QVERIFY(reopened->save(path).isEmpty());
+
+        auto again = KdbxDatabase::open(path, password, &status);
+        QVERIFY(again);
+        again->list(&entries, &groups);
+        QVERIFY(entries.contains(QStringLiteral("Casa/Gmail 2")));
+        QVERIFY(entries.contains(QStringLiteral("Recycle Bin/Raiz")));
+        QVERIFY(!entries.contains(QStringLiteral("Raiz")));
+        QVERIFY(again->entry(QStringLiteral("Casa/Gmail 2"), &read));
+        QCOMPARE(read.password.toString(), QStringLiteral("novo"));
+    }
+
+    void kdbxLegacyFormatRoundTrips() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("v3.kdbx"));
+        const Secret password(QStringLiteral("antigo"));
+
+        auto db = KdbxDatabase::create(password, QStringLiteral("V3"), true);
+        QVERIFY(db);
+        KdbxEntry entry;
+        entry.title = QStringLiteral("Velho");
+        entry.password = Secret(QStringLiteral("p4ss"));
+        QVERIFY(db->addEntry(QStringLiteral("G"), entry).isEmpty());
+        QVERIFY(db->save(path).isEmpty());
+
+        KdbxStatus status = KdbxStatus::Corrupt;
+        QVERIFY(!KdbxDatabase::open(path, Secret(QStringLiteral("x")), &status));
+        QCOMPARE(status, KdbxStatus::WrongPassword);
+
+        auto reopened = KdbxDatabase::open(path, password, &status);
+        QVERIFY(reopened);
+        KdbxEntry read;
+        QVERIFY(reopened->entry(QStringLiteral("G/Velho"), &read));
+        QCOMPARE(read.password.toString(), QStringLiteral("p4ss"));
+        // Saved again it is still a 3.1 file, and still opens.
+        QVERIFY(reopened->save(path).isEmpty());
+        QVERIFY(KdbxDatabase::open(path, password, &status));
+
+        // KeePassXC reads it too, when it is around.
+        const QString cli = QStandardPaths::findExecutable(QStringLiteral("keepassxc-cli"));
+        if (!cli.isEmpty()) {
+            QProcess process;
+            process.start(cli, {QStringLiteral("ls"), QStringLiteral("-Rfq"), path});
+            process.write("antigo\n");
+            process.closeWriteChannel();
+            QVERIFY(process.waitForFinished(60000));
+            QVERIFY(process.readAllStandardOutput().contains("G/Velho"));
+        }
+    }
+
+    void kdbxInteroperatesWithKeepassxcCli() {
+        QString cli = QStandardPaths::findExecutable(QStringLiteral("keepassxc-cli"));
+        if (cli.isEmpty())
+            cli = QStringLiteral(OMAPASS_SRC_ROOT "/build/keepassxc-cli");
+        if (!QFileInfo::exists(cli))
+            QSKIP("keepassxc-cli is not available");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("cli.kdbx"));
+        const auto run = [&cli](const QStringList &args, const QByteArray &input, QByteArray *out = nullptr) {
+            QProcess process;
+            process.start(cli, args);
+            process.write(input);
+            process.closeWriteChannel();
+            process.waitForFinished(60000);
+            if (out)
+                *out = process.readAllStandardOutput();
+            return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+        };
+
+        // A database made by KeePassXC opens here.
+        QVERIFY(run({QStringLiteral("db-create"), QStringLiteral("-p"), path}, "pw\npw\n"));
+        QVERIFY(run({QStringLiteral("mkdir"), QStringLiteral("-q"), path, QStringLiteral("Site")}, "pw\n"));
+        QVERIFY(run({QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral("-p"), QStringLiteral("-u"),
+                     QStringLiteral("bob"), path, QStringLiteral("Site/Login")},
+                    "pw\nsegredo-cli\nsegredo-cli\n"));
+
+        KdbxStatus status = KdbxStatus::Corrupt;
+        auto db = KdbxDatabase::open(path, Secret(QStringLiteral("pw")), &status);
+        QVERIFY2(db, "KeePassXC's database did not open");
+        KdbxEntry entry;
+        QVERIFY(db->entry(QStringLiteral("Site/Login"), &entry));
+        QCOMPARE(entry.username, QStringLiteral("bob"));
+        QCOMPARE(entry.password.toString(), QStringLiteral("segredo-cli"));
+
+        // And what this writes, KeePassXC reads.
+        KdbxEntry added;
+        added.title = QStringLiteral("Novo");
+        added.username = QStringLiteral("eva");
+        added.password = Secret(QStringLiteral("segredo-omapass"));
+        QVERIFY(db->addEntry(QStringLiteral("Site"), added).isEmpty());
+        QVERIFY(db->save(path).isEmpty());
+
+        QByteArray out;
+        QVERIFY(run({QStringLiteral("ls"), QStringLiteral("-Rfq"), path}, "pw\n", &out));
+        QVERIFY(out.contains("Site/Novo"));
+        QVERIFY(run({QStringLiteral("show"), QStringLiteral("-q"), QStringLiteral("-s"), path,
+                     QStringLiteral("Site/Novo"), QStringLiteral("-a"), QStringLiteral("Password")},
+                    "pw\n", &out));
+        QCOMPARE(QString::fromUtf8(out).trimmed(), QStringLiteral("segredo-omapass"));
     }
 
     void copiedSecretsDoNotShareStorage() {

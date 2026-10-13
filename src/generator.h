@@ -5,11 +5,10 @@
 
 #include "secret.h"
 
-// Password and passphrase generation, through `keepassxc-cli`, which omapass
-// already ships and which answers in about ten milliseconds — fast enough to
-// regenerate on every change in the sheet. The other backends' generators
-// are not used: `pass generate`, for one, writes an entry instead of just
-// generating one.
+// Password and passphrase generation, in-process: fast enough to regenerate
+// on every change in the sheet, and the same for every backend (`pass
+// generate`, for one, writes an entry instead of just generating one).
+// Characters and words are drawn uniformly from the system's random source.
 
 struct GeneratorOptions {
     // Words from a wordlist instead of characters.
@@ -34,15 +33,13 @@ struct GeneratorOptions {
 
 namespace Generator {
 
-// Below this many words keepassxc-cli refuses to use a wordlist (6^4).
+// Below this many words a list is refused: with fewer, six words would not
+// carry the strength a passphrase is meant to (6^4).
 constexpr int minimumWordlistSize = 1296;
 
 // Bounds the numbers and makes sure at least one character class is on, so
-// the sheet cannot ask for something keepassxc-cli would refuse.
+// the sheet cannot ask for something that has nothing to draw from.
 GeneratorOptions normalize(GeneratorOptions options);
-
-// The `keepassxc-cli` command line for these options. Exposed for testing.
-QStringList arguments(const GeneratorOptions &options, const QString &wordlist);
 
 // Which wordlist the passphrase mode uses. `configured` is the config file's
 // `generator.wordlist`: "auto" follows `language`, "pt-BR"/"en" name a list

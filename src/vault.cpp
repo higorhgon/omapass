@@ -93,24 +93,6 @@ QStringList findPassStores(const QString &searchPath) {
 
 }
 
-KpResult runKpcli(const QStringList &args, const QVector<Secret> &stdinLines) {
-    QByteArray stdinData;
-    for (const Secret &line : stdinLines)
-        stdinData.append(line.bytes()).append('\n');
-
-    const ProcResult result = runProcess(QStringLiteral("keepassxc-cli"), args, stdinData);
-    stdinData.fill('\0');
-
-    KpResult kp;
-    kp.started = result.started;
-    kp.success = result.success;
-    kp.out = result.out;
-    kp.err = result.started
-        ? result.err
-        : I18n::t(QStringLiteral("keepass.spawn_error"), QStringLiteral("err"), result.err);
-    return kp;
-}
-
 void appendEmptyGroups(const QStringList &groups, QStringList *entries) {
     for (const QString &group : groups) {
         const QString prefix = group + QLatin1Char('/');
@@ -214,12 +196,18 @@ bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
         return false;
     }
 
-    const KpResult result = runKpcli({QStringLiteral("db-create"), QStringLiteral("-p"), path},
-                                     {password, password});
-    if (!result.success) {
-        *error = result.err;
+    const std::unique_ptr<KdbxDatabase> db = KdbxDatabase::create(password, name);
+    if (!db) {
+        *error = I18n::t(QStringLiteral("keepass.corrupt"));
         return false;
     }
+    const QString failure = db->save(path);
+    if (!failure.isEmpty()) {
+        *error = failure;
+        return false;
+    }
+    // Passwords live in this file; nobody else on the machine needs to read it.
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 
     *createdPath = path;
     return true;
@@ -228,17 +216,12 @@ bool Vault::createKeepassDatabase(const QString &name, const Secret &password,
 bool Vault::verifySecret(const DbRef &ref, const Secret &secret, QString *error) {
     switch (ref.kind) {
     case VaultKind::Keepass: {
-        const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},
-                                         {secret});
-        if (!result.started) {
-            *error = result.err;
-            return false;
-        }
-        if (!result.success) {
-            *error = I18n::t(QStringLiteral("backend.wrong_password"));
-            return false;
-        }
-        return true;
+        KdbxStatus status = KdbxStatus::Corrupt;
+        QString detail;
+        if (KdbxDatabase::open(ref.path, secret, &status, &detail))
+            return true;
+        *error = KeepassVault::openError(status, detail);
+        return false;
     }
     case VaultKind::Pass: {
         const PassStore store(ref.path);
@@ -261,19 +244,8 @@ Vault *Vault::open(const DbRef &ref, const Secret &secret, QString *error) {
     if (ref.kind == VaultKind::OnePassword)
         return OnePasswordVault::unlock(OnePasswordVault::accountOf(ref.path), secret, error);
 
-    if (ref.kind == VaultKind::Keepass) {
-        const KpResult result = runKpcli({QStringLiteral("ls"), QStringLiteral("-q"), ref.path},
-                                         {secret});
-        if (!result.started) {
-            *error = result.err;
-            return nullptr;
-        }
-        if (!result.success) {
-            *error = I18n::t(QStringLiteral("backend.wrong_password"));
-            return nullptr;
-        }
-        return new KeepassVault(ref.path, secret);
-    }
+    if (ref.kind == VaultKind::Keepass)
+        return KeepassVault::unlock(ref.path, secret, error);
 
     if (!PassStore::isStore(ref.path)) {
         *error = I18n::t(QStringLiteral("pass.store_not_initialized"), QStringLiteral("path"), ref.path);
