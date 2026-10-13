@@ -63,9 +63,6 @@ jobs:
           # Sem isto o Qt deduz o prefixo de onde estão as DLLs (aqui, a
           # pasta acima) e procura plugins e módulos QML lá — não acha, e a
           # interface não abre. Com o qt.conf ele olha ao lado do executável.
-          printf '[Paths]\nPrefix = .\nBinaries = .\nPlugins = .\nImports = qml\nQmlImports = qml\n' \
-              > "dist/$pasta/qt.conf"
-
           cp -r wordlists "dist/$pasta/wordlists"
           cp LICENSE README.md "dist/$pasta/"
           echo "PASTA=$pasta" >> "$GITHUB_ENV"
