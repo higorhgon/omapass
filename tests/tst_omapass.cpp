@@ -462,6 +462,13 @@ private slots:
         QCOMPARE(data.notes, QStringLiteral("n"));
     }
 
+    void bitwardenDisplayNameDropsLeadingBlanks() {
+        QCOMPARE(bwDisplayName(QStringLiteral("  Deploy ")), QStringLiteral("Deploy"));
+        QCOMPARE(bwDisplayName(QString(QChar(0xFEFF)) + QStringLiteral("Deploy")), QStringLiteral("Deploy"));
+        QCOMPARE(bwDisplayName(QStringLiteral("a/b")), QStringLiteral("a") + QChar(0x2215) + QStringLiteral("b"));
+        QCOMPARE(bwDisplayName(QStringLiteral("   ")), QStringLiteral("(untitled)"));
+    }
+
     void bitwardenSshKeyIsListedWithAFileReadyKey() {
         const QJsonObject item = QJsonDocument::fromJson(
             R"({"id":"s1","type":5,"name":"Deploy","notes":"n","folderId":null,"deletedDate":null,

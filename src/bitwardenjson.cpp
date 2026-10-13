@@ -49,9 +49,21 @@ QString bwServerLabel(const QString &serverUrl) {
 }
 
 QString bwDisplayName(const QString &name) {
-    QString display = name;
+    // Leading blanks and zero-width characters (a stray space, a BOM from a
+    // paste) would show as padding in the name column.
+    const auto skippable = [](QChar c) {
+        return c.isSpace() || c.category() == QChar::Other_Format;
+    };
+    int first = 0;
+    int last = name.size();
+    while (first < last && skippable(name.at(first)))
+        ++first;
+    while (last > first && skippable(name.at(last - 1)))
+        --last;
+
+    QString display = name.mid(first, last - first);
     display.replace(QLatin1Char('/'), QChar(0x2215));
-    return display.trimmed().isEmpty() ? QStringLiteral("(untitled)") : display;
+    return display.isEmpty() ? QStringLiteral("(untitled)") : display;
 }
 
 BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QString, QString> &folders) {
