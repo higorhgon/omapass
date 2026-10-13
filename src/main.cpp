@@ -29,7 +29,7 @@
 
 namespace {
 
-const auto applicationVersion = QStringLiteral("1.2.0");
+const auto applicationVersion = QStringLiteral("1.3.0");
 
 // What omapass needs from the system, and what each thing is for. The list
 // is here rather than in each backend because the point of `--doctor` is to
