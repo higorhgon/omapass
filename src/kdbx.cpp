@@ -4,7 +4,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
-#include <QTimeZone>
 #include <QUuid>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -444,8 +443,8 @@ QString timeStamp(bool binary) {
     const QDateTime now = QDateTime::currentDateTimeUtc();
     if (!binary)
         return now.toString(QStringLiteral("yyyy-MM-ddTHH:mm:ssZ"));
-    const QDateTime epoch(QDate(1, 1, 1), QTime(0, 0), QTimeZone::UTC);
-    const qint64 seconds = epoch.secsTo(now);
+    // Seconds since 0001-01-01, which is 62135596800 before the Unix epoch.
+    const qint64 seconds = now.toSecsSinceEpoch() + 62135596800LL;
     return QString::fromLatin1(le64(quint64(seconds)).toBase64());
 }
 
