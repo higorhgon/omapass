@@ -21,6 +21,12 @@
 #include "sessionlock.h"
 #include "systemtheme.h"
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 namespace {
 
 const auto applicationVersion = QStringLiteral("1.2.0");
@@ -206,10 +212,13 @@ int main(int argc, char *argv[]) {
     Strings strings;
 
     QQmlApplicationEngine engine;
+    QStringList loadProblems;
     QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app,
-                     [](const QList<QQmlError> &warnings) {
-        for (const QQmlError &warning : warnings)
+                     [&loadProblems](const QList<QQmlError> &warnings) {
+        for (const QQmlError &warning : warnings) {
             qWarning().noquote() << warning.toString();
+            loadProblems.append(warning.toString());
+        }
     });
 
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), &controller);
@@ -224,6 +233,14 @@ int main(int argc, char *argv[]) {
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Could not load the omapass interface; resource available:"
                     << QFile::exists(QStringLiteral(":/Main.qml"));
+#ifdef Q_OS_WIN
+        // A Windows GUI program has no console, so without this a failure to
+        // start is a process that simply never shows a window.
+        const QString text = QStringLiteral("Could not load the omapass interface.\n\n")
+            + loadProblems.join(QLatin1Char('\n')).left(1500);
+        MessageBoxW(nullptr, reinterpret_cast<const wchar_t *>(text.utf16()), L"omapass",
+                    MB_OK | MB_ICONERROR);
+#endif
         return -1;
     }
 

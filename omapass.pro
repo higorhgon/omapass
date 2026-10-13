@@ -85,3 +85,5 @@ SOURCES += \
     src/vault.cpp
 
 RESOURCES += src/resources.qrc
+
+win32: LIBS += -luser32

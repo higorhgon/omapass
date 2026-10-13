@@ -60,6 +60,12 @@ jobs:
             cp -n "$dll" "dist/$pasta/"
           done
 
+          # Sem isto o Qt deduz o prefixo de onde estão as DLLs (aqui, a
+          # pasta acima) e procura plugins e módulos QML lá — não acha, e a
+          # interface não abre. Com o qt.conf ele olha ao lado do executável.
+          printf '[Paths]\nPrefix = .\nBinaries = .\nPlugins = .\nImports = qml\nQmlImports = qml\n' \
+              > "dist/$pasta/qt.conf"
+
           cp -r wordlists "dist/$pasta/wordlists"
           cp LICENSE README.md "dist/$pasta/"
           echo "PASTA=$pasta" >> "$GITHUB_ENV"
@@ -75,9 +81,13 @@ jobs:
           # Abre de verdade, com o renderizador por software (o runner não
           # tem GPU): se o Main.qml não carregar o processo morre na hora; se
           # carregar, ele segue vivo até o timeout (124) o encerrar.
-          export QT_QUICK_BACKEND=software
+          #
+          # Num ambiente limpo, de propósito: dentro do shell do MSYS2 o Qt
+          # acharia plugins e QML em /ucrt64 e o teste passaria mesmo com um
+          # pacote que não abre numa máquina sem o MSYS2.
           set +e
-          timeout 10 "dist/$PASTA/omapass.exe"
+          env -i SYSTEMROOT="$SYSTEMROOT" QT_QUICK_BACKEND=software \
+              /usr/bin/timeout 10 "dist/$PASTA/omapass.exe"
           codigo=$?
           set -e
           if [ "$codigo" -ne 124 ]; then
