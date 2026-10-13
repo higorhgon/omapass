@@ -103,17 +103,7 @@ SystemTheme::SystemTheme(QObject *parent) : QObject(parent) {
         requestPortalTextScale();
 }
 
-#ifndef OMAPASS_HAS_DBUS
-// Without D-Bus there is no portal to ask: Qt's own light/dark is what there
-// is, and the text scale stays at 1.
-bool SystemTheme::readInitialTextScale() {
-    return false;
-}
-
-void SystemTheme::requestPortalSetting(const QString &, const QString &,
-                                       std::function<void(const QVariant &)>) {}
-
-#else
+#ifdef OMAPASS_HAS_DBUS
 bool SystemTheme::readInitialTextScale() {
     // Long enough for a portal that is up, short enough that one that is
     // down or still starting does not hold the window back noticeably.
@@ -141,6 +131,14 @@ bool SystemTheme::readInitialTextScale() {
     return known;
 }
 
+#else
+// Without D-Bus there is no portal to ask: Qt's own light/dark is what there
+// is, and the text scale stays at 1.
+bool SystemTheme::readInitialTextScale() {
+    return false;
+}
+#endif
+
 void SystemTheme::refresh() {
     bool known = false;
     const bool qtDark = qtDarkMode(&known);
@@ -151,6 +149,7 @@ void SystemTheme::refresh() {
     requestPortalTextScale();
 }
 
+#ifdef OMAPASS_HAS_DBUS
 // Ask the desktop portal for a single setting without holding up the GUI
 // thread; the handler only runs when a valid answer comes back, so a missing
 // or stalled portal simply leaves the current state alone.
@@ -177,7 +176,10 @@ void SystemTheme::requestPortalSetting(const QString &nameSpace, const QString &
     });
 }
 
-#endif  // OMAPASS_HAS_DBUS
+#else
+void SystemTheme::requestPortalSetting(const QString &, const QString &,
+                                       std::function<void(const QVariant &)>) {}
+#endif
 
 void SystemTheme::requestPortalDarkMode() {
     requestPortalSetting(QStringLiteral("org.freedesktop.appearance"),

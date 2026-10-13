@@ -31,7 +31,7 @@ jobs:
             mingw-w64-ucrt-x86_64-qt6-base
             mingw-w64-ucrt-x86_64-qt6-declarative
             mingw-w64-ucrt-x86_64-qt6-tools
-            mingw-w64-ucrt-x86_64-botan
+            mingw-w64-ucrt-x86_64-libbotan
             mingw-w64-ucrt-x86_64-zlib
 
       - name: Compila
