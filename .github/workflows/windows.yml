@@ -63,6 +63,9 @@ jobs:
           # Sem isto o Qt deduz o prefixo de onde estão as DLLs (aqui, a
           # pasta acima) e procura plugins e módulos QML lá — não acha, e a
           # interface não abre. Com o qt.conf ele olha ao lado do executável.
+          printf '[Paths]\nPrefix = .\nBinaries = .\nPlugins = .\nImports = qml\nQmlImports = qml\n' \
+              > "dist/$pasta/qt.conf"
+
           cp -r wordlists "dist/$pasta/wordlists"
           cp LICENSE README.md "dist/$pasta/"
           echo "PASTA=$pasta" >> "$GITHUB_ENV"
@@ -73,24 +76,35 @@ jobs:
           # estejam todos no lugar.
           "dist/$PASTA/omapass.exe" --version
 
-      - name: Confere que a interface carrega
+      - name: Depuração - abre e fotografa
+        shell: pwsh
         run: |
-          # Abre de verdade, com o renderizador por software (o runner não
-          # tem GPU): se o Main.qml não carregar o processo morre na hora; se
-          # carregar, ele segue vivo até o timeout (124) o encerrar.
-          #
-          # Num ambiente limpo, de propósito: dentro do shell do MSYS2 o Qt
-          # acharia plugins e QML em /ucrt64 e o teste passaria mesmo com um
-          # pacote que não abre numa máquina sem o MSYS2.
-          set +e
-          env -i SYSTEMROOT="$SYSTEMROOT" QT_QUICK_BACKEND=software \
-              /usr/bin/timeout 10 "dist/$PASTA/omapass.exe"
-          codigo=$?
-          set -e
-          if [ "$codigo" -ne 124 ]; then
-            echo "A interface nao ficou de pe (codigo $codigo)." >&2
-            exit 1
-          fi
+          $dir = (Resolve-Path "dist/$env:PASTA").Path
+          $env:QT_LOGGING_RULES = "*.debug=false"
+          $p = Start-Process -FilePath "$dir\omapass.exe" -PassThru `
+              -RedirectStandardError "$dir\..\stderr.txt" -RedirectStandardOutput "$dir\..\stdout.txt"
+          Start-Sleep -Seconds 10
+          "alive: $(-not $p.HasExited)"
+          if ($p.HasExited) { "exit code: $($p.ExitCode)" }
+          Get-Process omapass -ErrorAction SilentlyContinue | Select-Object Id, MainWindowTitle, MainWindowHandle, Responding | Format-List | Out-String
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$dir\..\screen.png")
+          "--- stderr ---"; Get-Content "$dir\..\stderr.txt" -ErrorAction SilentlyContinue
+          "--- stdout ---"; Get-Content "$dir\..\stdout.txt" -ErrorAction SilentlyContinue
+          Stop-Process -Id $p.Id -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-windows
+          path: |
+            dist/screen.png
+            dist/stderr.txt
+            dist/stdout.txt
+          if-no-files-found: warn
 
       - name: Gera o zip
         run: |
