@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -29,6 +30,15 @@ struct EntryData {
     QString url;
     QString notes;
     QStringList extra;
+};
+
+// What the entry list shows next to a path without reading each entry. `type`
+// is "login" or "ssh"; username and url are empty where the backend cannot
+// give them cheaply.
+struct EntryMeta {
+    QString type = QStringLiteral("login");
+    QString username;
+    QString url;
 };
 
 // Result of one `keepassxc-cli` run.
@@ -102,6 +112,18 @@ public:
 
     // Lists entries and groups, tagging empty groups with the suffix above.
     virtual void list(QStringList *entries, QStringList *groups) const = 0;
+
+    // Type, login and URL of the entries, keyed by entry path, for the
+    // columns of the list. Only what the backend already holds: reading each
+    // entry would cost a process per row. Entries missing here are plain
+    // logins with nothing else to show.
+    virtual QHash<QString, EntryMeta> entryMeta() const { return {}; }
+
+    // For a backend that cannot list login and URL cheaply (KeePassXC: one
+    // process per entry): says so, and gives one entry's meta on request. The
+    // list shows the rest at once and fills these in as they arrive.
+    virtual bool loadsMetaLazily() const { return false; }
+    virtual bool fetchEntryMeta(const QString &, EntryMeta *) const { return false; }
 
     // An entry's display title. Under KeePassXC this can differ from the last
     // path segment (Title is its own attribute); under pass the title is

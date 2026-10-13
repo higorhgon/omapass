@@ -462,6 +462,34 @@ private slots:
         QCOMPARE(data.notes, QStringLiteral("n"));
     }
 
+    void filterIndexesMatchesEveryTermAnywhereInTheHaystack() {
+        const QStringList rows = {QStringLiteral("Deploy ssh ci@host https://git.example"),
+                                  QStringLiteral("Gmail senha pessoa https://mail.google.com")};
+        QCOMPARE(filterIndexes(rows, QStringLiteral("SSH git")), QList<int>({0}));
+        QCOMPARE(filterIndexes(rows, QStringLiteral("senha google")), QList<int>({1}));
+        QCOMPARE(filterIndexes(rows, QString()), QList<int>({0, 1}));
+        QVERIFY(filterIndexes(rows, QStringLiteral("zzz")).isEmpty());
+    }
+
+    void bitwardenDisplayNameDropsLeadingBlanks() {
+        QCOMPARE(bwDisplayName(QStringLiteral("  Deploy ")), QStringLiteral("Deploy"));
+        QCOMPARE(bwDisplayName(QString(QChar(0xFEFF)) + QStringLiteral("Deploy")), QStringLiteral("Deploy"));
+        QCOMPARE(bwDisplayName(QStringLiteral("a/b")), QStringLiteral("a") + QChar(0x2215) + QStringLiteral("b"));
+        QCOMPARE(bwDisplayName(QStringLiteral("   ")), QStringLiteral("(untitled)"));
+    }
+
+    void bitwardenSshKeyIsListedWithAFileReadyKey() {
+        const QJsonObject item = QJsonDocument::fromJson(
+            R"({"id":"s1","type":5,"name":"Deploy","notes":"n","folderId":null,"deletedDate":null,
+                "sshKey":{"privateKey":"-----BEGIN KEY-----\r\nabc\r\n-----END KEY-----"}})").object();
+        const EntryData data = bwEntryData(item);
+        QCOMPARE(data.password.toString(), QStringLiteral("-----BEGIN KEY-----\nabc\n-----END KEY-----\n"));
+        QCOMPARE(data.notes, QStringLiteral("n"));
+
+        const BwIndex index = buildBwIndex({{QStringLiteral("s1"), item}}, {});
+        QCOMPARE(index.entries, QStringList({QStringLiteral("Deploy")}));
+    }
+
     void bitwardenIndexMapsFoldersToGroups() {
         const QByteArray folders(bwFolders);
         const QByteArray items(bwItems);

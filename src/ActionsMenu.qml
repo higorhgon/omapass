@@ -8,6 +8,8 @@ Popup {
     id: root
 
     property var options: []
+    // Indexes of the options that open a new group, set apart by a line.
+    property var groupStarts: []
     property int selected: 0
     property real anchorX: -1
     property real anchorY: -1
@@ -56,8 +58,6 @@ Popup {
     background: Rectangle {
         color: theme.background
         radius: Math.round(6 * root.s)
-        border.width: Math.max(1, Math.round(root.s))
-        border.color: theme.title
     }
 
     contentItem: Column {
@@ -95,33 +95,47 @@ Popup {
         Repeater {
             model: root.options
 
-            Rectangle {
+            Column {
+                id: slot
                 required property int index
                 required property var modelData
+                readonly property bool startsGroup: root.groupStarts.indexOf(index) >= 0
 
-                width: root.availableWidth
-                height: Math.round(28 * root.s)
-                radius: Math.round(4 * root.s)
-                color: root.selected === index ? theme.selection : "transparent"
+                spacing: Math.round(2 * root.s)
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: root.itemMargin
-                    anchors.rightMargin: root.itemMargin
-                    text: modelData
-                    color: theme.base
-                    elide: Text.ElideRight
-                    font.pixelSize: root.fontSize
+                Rectangle {
+                    visible: slot.startsGroup
+                    width: root.availableWidth
+                    height: Math.max(1, Math.round(root.s))
+                    color: theme.annotation
+                    opacity: 0.4
                 }
 
-                HoverHandler {
-                    onHoveredChanged: if (hovered) root.selected = index
-                }
+                Rectangle {
+                    width: root.availableWidth
+                    height: Math.round(28 * root.s)
+                    radius: Math.round(4 * root.s)
+                    color: root.selected === slot.index ? theme.selection : "transparent"
 
-                TapHandler {
-                    onTapped: root.chosen(index)
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: root.itemMargin
+                        anchors.rightMargin: root.itemMargin
+                        text: slot.modelData
+                        color: theme.base
+                        elide: Text.ElideRight
+                        font.pixelSize: root.fontSize
+                    }
+
+                    HoverHandler {
+                        onHoveredChanged: if (hovered) root.selected = slot.index
+                    }
+
+                    TapHandler {
+                        onTapped: root.chosen(slot.index)
+                    }
                 }
             }
         }

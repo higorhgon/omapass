@@ -2,6 +2,8 @@
 
 #include <QElapsedTimer>
 #include <QFuture>
+#include <QFutureWatcher>
+#include <QThreadPool>
 #include <QObject>
 #include <QScopedPointer>
 #include <QStringList>
@@ -11,6 +13,7 @@
 
 #include "bitwardenlogin.h"
 #include "config.h"
+#include "entryrowsmodel.h"
 #include "generator.h"
 #include "history.h"
 #include "onepasswordlogin.h"
@@ -69,6 +72,10 @@ class AppController : public QObject {
     Q_PROPERTY(bool pinConfigured READ pinConfigured NOTIFY pinConfiguredChanged)
 
     Q_PROPERTY(QStringList entries READ entries NOTIFY entriesChanged)
+    // The same entries as a model, one map each (`modelData`) for the list's
+    // columns: path, name, group, type ("login", "ssh" or "group"),
+    // typeLabel, username and url.
+    Q_PROPERTY(QObject *entryRows READ entryRows CONSTANT)
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY entriesChanged)
     Q_PROPERTY(QStringList groups READ groups NOTIFY entriesChanged)
 
@@ -112,7 +119,10 @@ public:
     bool pinConfigured() const { return m_pinConfigured; }
 
     QStringList entries() const { return m_filteredEntries; }
+    QObject *entryRows() { return &m_rowsModel; }
     QString query() const { return m_query; }
+    // The path of the row at `index` in the shown list, empty out of range.
+    Q_INVOKABLE QString entryPathAt(int index) const { return m_rowsModel.pathAt(index); }
     void setQuery(const QString &query);
     QStringList groups() const { return m_groups; }
 
@@ -253,6 +263,9 @@ private:
     void checkAccountThenAsk(const DbRef &ref);
     void refreshEntries();
     void applyEntryFilter();
+    void rebuildRows();
+    void startMetaLoad();
+    void stopMetaLoad();
     void openVault(const DbRef &ref, const Secret &secret);
     void adoptVault(const DbRef &ref, Vault *vault);
     // The entry's fields for a copy, recording the use; says why not when
@@ -338,6 +351,25 @@ private:
 
     QStringList m_allEntries;
     QStringList m_filteredEntries;
+    QStringList m_entryHaystacks;     // what the search reads, parallel to m_allEntries
+    QVariantList m_allRows;           // parallel to m_allEntries
+    QList<int> m_shownRows;           // m_allEntries positions the filter kept
+    QHash<QString, int> m_rowOf;      // entry path → position in m_allEntries
+    EntryRowsModel m_rowsModel;
+
+    // Login and URL read one entry at a time for a backend that cannot list
+    // them: filled in the background and kept while the vault stays open.
+    struct LazyMeta {
+        QString path;
+        bool ok = false;
+        EntryMeta meta;
+    };
+    QHash<QString, EntryMeta> m_lazyMeta;     // what has arrived so far
+    QHash<QString, EntryMeta> m_listedMeta;   // what the backend listed at once
+    QFutureWatcher<LazyMeta> *m_metaWatcher = nullptr;
+    QThreadPool m_metaPool;
+    QTimer m_metaFlush;                       // batches arrivals into one repaint
+    QStringList m_metaArrived;                // paths that came in since the last repaint
     QStringList m_groups;
     QString m_query;
 

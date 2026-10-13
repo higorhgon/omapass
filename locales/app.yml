@@ -754,6 +754,30 @@ ui.footer_rename:
 ui.clipboard_clear_countdown:
   pt-BR: "%{msg} (limpo do clipboard em %{secs}s)"
   en: "%{msg} (cleared from clipboard in %{secs}s)"
+ui.type_login:
+  pt-BR: "senha"
+  en: "password"
+ui.type_ssh:
+  pt-BR: "ssh"
+  en: "ssh"
+ui.type_group:
+  pt-BR: "grupo"
+  en: "group"
+ui.column_type:
+  pt-BR: "Tipo"
+  en: "Type"
+ui.column_name:
+  pt-BR: "Nome"
+  en: "Name"
+ui.column_group:
+  pt-BR: "Grupo"
+  en: "Group"
+ui.column_login:
+  pt-BR: "Login"
+  en: "Login"
+ui.column_url:
+  pt-BR: "URL"
+  en: "URL"
 ui.search_title:
   pt-BR: " Pesquisar (/) "
   en: " Search (/) "
@@ -799,6 +823,9 @@ ui.context_copy_url:
 ui.context_open_url:
   pt-BR: "Abrir URL"
   en: "Open URL"
+ui.context_info:
+  pt-BR: "Informações"
+  en: "Information"
 ui.context_add_new:
   pt-BR: "Adicionar nova"
   en: "Add new"

@@ -29,6 +29,9 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Modal de ajuda com todos os atalhos (`Ctrl+?`)
 - Motor de frecency (frequência + recência) para ordenação inteligente
 - Cores vindas do tema do Omarchy, com sobreposição opcional por tema próprio em TOML
+- Lista de entradas em colunas — tipo (senha/ssh), nome, grupo, login e URL — e a busca
+  multi-termo olha todas elas (no pass e no KeePassXC, só tipo, nome e grupo: login e URL
+  exigiriam abrir cada entrada)
 - Atalhos de teclado: `j/k`, `gg/G`, `Ctrl+U/D`, `/` para buscar — os mesmos da versão TUI
 - Suporte a mouse: clique, duplo-clique e botão direito na lista; seleção de texto nos detalhes da entrada
 
@@ -206,8 +209,9 @@ Dá para ter várias contas ao mesmo tempo, inclusive em servidores diferentes.
   encerrada no servidor (pelo cofre web, ou com a troca da senha mestra), a sincronização
   avisa, e abrir a conta de novo leva ao login com o e-mail e o servidor preenchidos.
 - **Pastas viram grupos**: uma pasta `Trabalho/Email` é o grupo `Trabalho/Email`.
-  Só itens do tipo **login** aparecem — cartões, identidades, notas seguras e chaves
-  SSH ficam de fora. Itens com o mesmo nome na mesma pasta ganham o começo do id
+  Aparecem itens do tipo **login** e **chave SSH** — cartões, identidades e notas
+  seguras ficam de fora. Numa chave SSH, copiar a senha copia a chave privada, já pronta
+  (quebras de linha LF e newline final) para gravar num arquivo. Itens com o mesmo nome na mesma pasta ganham o começo do id
   entre colchetes (`Email [1a2b3c4d]`) para se distinguirem.
 - **Editar preserva o resto**: o formulário mexe em nome, pasta, usuário, senha,
   primeira URL e notas; TOTP, campos personalizados, as demais URLs, passkeys e anexos

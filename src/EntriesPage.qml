@@ -17,10 +17,7 @@ FocusScope {
     }
 
     function currentEntry() {
-        const entries = controller.entries;
-        if (pane.currentIndex < 0 || pane.currentIndex >= entries.length)
-            return "";
-        return entries[pane.currentIndex];
+        return controller.entryPathAt(pane.currentIndex);
     }
 
     function openInfo() {
@@ -102,7 +99,14 @@ FocusScope {
         acceptsKeys: page.mode === "list" && !page.menuOpen
 
         searchPlaceholder: i18n.t("ui.search_title")
-        model: controller.entries
+        model: controller.entryRows
+        columns: [
+            { "key": "typeLabel", "title": i18n.t("ui.column_type"), "weight": 1 },
+            { "key": "name", "title": i18n.t("ui.column_name"), "weight": 3 },
+            { "key": "group", "title": i18n.t("ui.column_group"), "weight": 2.5, "fit": true },
+            { "key": "username", "title": i18n.t("ui.column_login"), "weight": 2 },
+            { "key": "url", "title": i18n.t("ui.column_url"), "weight": 2.5 }
+        ]
         onQueryChanged: controller.query = query
 
         footerText: controller.hasMessage ? controller.message
@@ -147,21 +151,34 @@ FocusScope {
         parent: page
         // Built rather than fixed so the handler goes by the action it
         // picked, not by an index that shifts.
-        // pass entries have no login or URL of their own to offer.
-        readonly property var actions: controller.passBackend
-            ? ["copyPassword", "add", "edit", "delete", "generate"]
-            : ["copyPassword", "copyUsername", "copyUrl", "openUrl", "add", "edit", "delete", "generate"]
+        // pass entries have no login or URL of their own to offer. The first
+        // group acts on the selected entry; the second is not about it.
+        readonly property var groups: controller.passBackend
+            ? [["copyPassword", "edit", "delete", "info"], ["add", "generate"]]
+            : [["copyPassword", "copyUsername", "copyUrl", "openUrl", "edit", "delete", "info"],
+               ["add", "generate"]]
+        readonly property var actions: [].concat.apply([], groups)
         readonly property var labels: ({
             "copyPassword": i18n.t("ui.context_copy_password"),
             "copyUsername": i18n.t("ui.context_copy_username"),
             "copyUrl": i18n.t("ui.context_copy_url"),
             "openUrl": i18n.t("ui.context_open_url"),
+            "info": i18n.t("ui.context_info"),
             "add": i18n.t("ui.context_add_new"),
             "edit": i18n.t("ui.context_edit"),
             "delete": i18n.t("ui.context_delete"),
             "generate": i18n.t("generator.context_generate")
         })
         options: actions.map(function(action) { return labels[action]; })
+        groupStarts: {
+            const starts = [];
+            let at = 0;
+            for (let i = 0; i < groups.length - 1; ++i) {
+                at += groups[i].length;
+                starts.push(at);
+            }
+            return starts;
+        }
 
         onChosen: function(index) {
             close();
@@ -174,6 +191,8 @@ FocusScope {
                 page.withEntry(controller.copyUrl);
             else if (action === "openUrl")
                 page.withEntry(controller.openUrl);
+            else if (action === "info")
+                page.openInfo();
             else if (action === "add")
                 page.openAddForm();
             else if (action === "edit")

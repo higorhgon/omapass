@@ -15,6 +15,66 @@ FocusScope {
     property bool acceptsKeys: true
     // Bracketed tag drawn before a row's text, or "" for none.
     property var tagFor: function(item) { return ""; }
+    // Optional table layout: [{ "key": "name", "title": "Nome", "weight": 3 }…].
+    // Each row shows modelData[key] in the column; without columns a row is
+    // the single text line the database list uses.
+    property var columns: []
+    readonly property bool tabular: columns.length > 0
+    readonly property real columnSpacing: Math.round(12 * s)
+    readonly property real columnWeightTotal: {
+        let total = 0;
+        for (let i = 0; i < columns.length; ++i)
+            total += columns[i].weight;
+        return total;
+    }
+    // A column marked `"fit": true` takes the room its header and widest
+    // value need, never more than its weight would give it; the others share
+    // what is left. An empty group column shrinks to its title.
+    function longestIn(key) {
+        const longest = model ? model.longest : undefined;
+        if (longest !== undefined)
+            return String(longest[key] || "");
+        let result = "";
+        if (Array.isArray(model)) {
+            for (const row of model) {
+                const text = row && row[key] !== undefined && row[key] !== null ? String(row[key]) : "";
+                if (text.length > result.length)
+                    result = text;
+            }
+        }
+        return result;
+    }
+    function fitWidth(i, share) {
+        const column = columns[i];
+        const header = headerMetrics.advanceWidth(column.title) + headerMetrics.font.pixelSize;
+        const cell = cellMetrics.advanceWidth(longestIn(column.key)) + cellMetrics.font.pixelSize / 2;
+        return Math.min(share, Math.ceil(Math.max(header, cell)));
+    }
+    // Width of column `i` inside a row `rowWidth` wide (margins included).
+    function columnWidth(i, rowWidth) {
+        const room = rowWidth - Math.round(20 * s) - columnSpacing * (columns.length - 1);
+        let fixed = 0;
+        let flexWeight = 0;
+        for (let c = 0; c < columns.length; ++c) {
+            if (columns[c].fit)
+                fixed += fitWidth(c, room * columns[c].weight / columnWeightTotal);
+            else
+                flexWeight += columns[c].weight;
+        }
+        if (columns[i].fit)
+            return Math.max(0, fitWidth(i, room * columns[i].weight / columnWeightTotal));
+        return Math.max(0, (room - fixed) * columns[i].weight / flexWeight);
+    }
+
+    FontMetrics {
+        id: cellMetrics
+        font.pixelSize: Math.round(15 * pane.s)
+    }
+    FontMetrics {
+        id: headerMetrics
+        font.pixelSize: Math.round(13 * pane.s)
+        font.bold: true
+    }
 
     property alias query: searchInput.text
     property alias currentIndex: list.currentIndex
@@ -217,9 +277,37 @@ FocusScope {
                 }
             }
 
+            Row {
+                id: header
+                visible: pane.tabular
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Math.round(10 * pane.s)
+                height: pane.tabular ? pane.rowHeight : 0
+                spacing: pane.columnSpacing
+
+                Repeater {
+                    model: pane.columns
+                    Text {
+                        objectName: "columnHeader"
+                        width: pane.columnWidth(index, listArea.width) 
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.title
+                        color: theme.annotation
+                        elide: Text.ElideRight
+                        font.pixelSize: Math.round(13 * pane.s)
+                        font.bold: true
+                    }
+                }
+            }
+
             ListView {
                 id: list
-                anchors.fill: parent
+                anchors.top: header.bottom
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
                 model: pane.model
                 clip: true
                 keyNavigationEnabled: false
@@ -251,11 +339,38 @@ FocusScope {
                         : modelData.path !== undefined ? modelData.path : ""
                     readonly property string tag: pane.tagFor(modelData)
 
+                    function cell(key) {
+                        const value = typeof modelData === "object" ? modelData[key] : "";
+                        return value === undefined || value === null ? "" : String(value);
+                    }
+
                     HoverHandler {
                         id: hover
                     }
 
                     Row {
+                        visible: pane.tabular
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Math.round(10 * pane.s)
+                        spacing: pane.columnSpacing
+
+                        Repeater {
+                            model: pane.columns
+                            Text {
+                                objectName: "cell_" + modelData.key
+                                width: pane.columnWidth(index, row.width)
+                                text: row.cell(modelData.key)
+                                color: modelData.key === "name" ? theme.base : theme.guidance
+                                elide: Text.ElideRight
+                                font.pixelSize: Math.round(15 * pane.s)
+                            }
+                        }
+                    }
+
+                    Row {
+                        visible: !pane.tabular
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
