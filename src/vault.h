@@ -7,8 +7,8 @@
 
 #include "secret.h"
 
-// Abstraction over the supported password backends: KeePassXC (through
-// `keepassxc-cli`, see keepassvault.h), pass (through gpg, see passvault.h),
+// Abstraction over the supported password backends: KeePass databases (read
+// in-process, see keepassvault.h), pass (through gpg, see passvault.h),
 // Bitwarden (its server API, see bitwardenvault.h) and 1Password (through
 // `op`, see onepasswordvault.h). The rest of the app only ever talks to
 // Vault/DbRef, so no backend's command shapes leak into the interface.
@@ -40,19 +40,6 @@ struct EntryMeta {
     QString username;
     QString url;
 };
-
-// Result of one `keepassxc-cli` run.
-struct KpResult {
-    bool started = false;
-    bool success = false;
-    QString out;
-    QString err;
-};
-
-// Runs `keepassxc-cli` with the given arguments, writing each item of
-// `stdinLines` (database password, new password, confirmation…) as one line
-// on stdin.
-KpResult runKpcli(const QStringList &args, const QVector<Secret> &stdinLines);
 
 // Tags every group with no entries or subgroups below it, so it still shows
 // up in the list. Shared by backends whose listing does not mark empty
@@ -119,13 +106,13 @@ public:
     // logins with nothing else to show.
     virtual QHash<QString, EntryMeta> entryMeta() const { return {}; }
 
-    // For a backend that cannot list login and URL cheaply (KeePassXC: one
+    // For a backend that cannot list login and URL cheaply (1Password: one
     // process per entry): says so, and gives one entry's meta on request. The
     // list shows the rest at once and fills these in as they arrive.
     virtual bool loadsMetaLazily() const { return false; }
     virtual bool fetchEntryMeta(const QString &, EntryMeta *) const { return false; }
 
-    // An entry's display title. Under KeePassXC this can differ from the last
+    // An entry's display title. Under KeePass this can differ from the last
     // path segment (Title is its own attribute); under pass the title is
     // always the filename.
     virtual QString titleFor(const QString &entryPath, const QString &fallback) const = 0;

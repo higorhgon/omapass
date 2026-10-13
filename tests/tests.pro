@@ -8,6 +8,8 @@ packagesExist(botan-3) {
 } else {
     PKGCONFIG += botan-2
 }
+PKGCONFIG += zlib
+DEFINES += OMAPASS_SRC_ROOT=\\\"$$PWD/..\\\"
 DEFINES += OMAPASS_BW_FIXTURES=\\\"$$PWD/fixtures/bitwarden\\\"
 DEFINES += OMAPASS_OP_FIXTURES=\\\"$$PWD/fixtures/onepassword\\\"
 DEFINES += OMAPASS_FAKE_CLIS=\\\"$$PWD/fakes\\\"
@@ -28,6 +30,7 @@ SOURCES += \
     ../src/generator.cpp \
     ../src/history.cpp \
     ../src/i18n.cpp \
+    ../src/kdbx.cpp \
     ../src/kdbx2pass.cpp \
     ../src/keepassvault.cpp \
     ../src/onepasswordlogin.cpp \
@@ -51,6 +54,7 @@ HEADERS += \
     ../src/generator.h \
     ../src/history.h \
     ../src/i18n.h \
+    ../src/kdbx.h \
     ../src/kdbx2pass.h \
     ../src/keepassvault.h \
     ../src/onepasswordlogin.h \

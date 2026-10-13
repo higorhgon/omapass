@@ -1,6 +1,8 @@
 #include "kdbx2pass.h"
 
 #include "i18n.h"
+#include "kdbx.h"
+#include "keepassvault.h"
 #include "process.h"
 #include "secret.h"
 
@@ -14,12 +16,6 @@
 #endif
 
 namespace {
-
-// Root group names KeePassXC uses or generates (it varies by version and
-// locale — a pt-BR install calls the root group "Senhas"). Entries in these
-// go straight to the store's root instead of into a folder of that name.
-const QStringList rootGroupNames = {QString(), QStringLiteral("Principal"), QStringLiteral("Root"),
-                                    QStringLiteral("Senhas"), QStringLiteral("/")};
 
 QTextStream &stdOut() {
     static QTextStream stream(stdout);
@@ -68,85 +64,9 @@ QString runPassCommand(const QStringList &args, const QByteArray &stdinData) {
     return QString();
 }
 
-QString exportKdbxCsv(const QString &dbPath, const Secret &password, Secret *csv) {
-    QByteArray stdinData = password.bytes();
-    stdinData.append('\n');
-
-    const ProcResult result = runProcess(QStringLiteral("keepassxc-cli"),
-                                         {QStringLiteral("export"), QStringLiteral("--format"),
-                                          QStringLiteral("csv"), dbPath},
-                                         stdinData);
-    stdinData.fill('\0');
-
-    if (!result.started)
-        return I18n::t(QStringLiteral("keepass.spawn_error"), QStringLiteral("err"), result.err);
-    if (!result.success)
-        return result.err.trimmed();
-
-    *csv = Secret(result.out);
-    return QString();
-}
-
-QString cell(const QStringList &row, int index) {
-    return index >= 0 ? row.value(index) : QString();
-}
-
 }
 
 namespace Kdbx2Pass {
-
-// RFC4180 CSV: double quotes wrap fields containing commas or newlines, and
-// `""` inside a quoted field is a literal quote. Hand-written rather than
-// pulling in a dependency for one caller — KeePassXC's exported Notes is the
-// one field that routinely holds commas and line breaks, so it has to be
-// right.
-QVector<QStringList> parseCsv(const QString &content) {
-    QVector<QStringList> rows;
-    QStringList row;
-    QString field;
-    bool inQuotes = false;
-
-    for (int i = 0; i < content.size(); ++i) {
-        const QChar c = content.at(i);
-
-        if (inQuotes) {
-            if (c == QLatin1Char('"')) {
-                if (i + 1 < content.size() && content.at(i + 1) == QLatin1Char('"')) {
-                    field.append(QLatin1Char('"'));
-                    ++i;
-                } else {
-                    inQuotes = false;
-                }
-            } else {
-                field.append(c);
-            }
-            continue;
-        }
-
-        if (c == QLatin1Char('"')) {
-            inQuotes = true;
-        } else if (c == QLatin1Char(',')) {
-            row.append(field);
-            field.clear();
-        } else if (c == QLatin1Char('\r')) {
-            // Ignored: line endings are decided by the \n alone.
-        } else if (c == QLatin1Char('\n')) {
-            row.append(field);
-            field.clear();
-            rows.append(row);
-            row.clear();
-        } else {
-            field.append(c);
-        }
-    }
-
-    if (!field.isEmpty() || !row.isEmpty()) {
-        row.append(field);
-        rows.append(row);
-    }
-
-    return rows;
-}
 
 // Replaces anything outside [unicode letters/digits, `_-. `] with `_`,
 // mirroring the `re.sub(r'[^\w\-. ]', '_', title)` of the original script.
@@ -172,58 +92,37 @@ QString run(const QString &dbPath, const QStringList &recipients) {
     if (!error.isEmpty())
         return error;
 
-    // 2. Export the kdbx to CSV, asking for the master password once.
+    // 2. Open the database, asking for the master password once.
     const Secret password = promptPassword(
         I18n::t(QStringLiteral("kdbx2pass.master_password_prompt"), QStringLiteral("db"), dbPath));
 
-    Secret csv;
-    error = exportKdbxCsv(dbPath, password, &csv);
-    if (!error.isEmpty())
-        return error;
+    KdbxStatus status = KdbxStatus::Corrupt;
+    QString detail;
+    const std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(dbPath, password, &status, &detail);
+    if (!db)
+        return KeepassVault::openError(status, detail);
 
-    // 3. Parse and import each entry.
-    QVector<QStringList> rows = parseCsv(csv.toString());
-    csv.clear();
-    if (rows.isEmpty())
+    // 3. Import each entry; the recycle bin stays behind.
+    const auto entries = db->allEntries(false);
+    if (entries.isEmpty())
         return I18n::t(QStringLiteral("kdbx2pass.empty_csv"));
 
-    const QStringList header = rows.takeFirst();
-    const int groupColumn = header.indexOf(QStringLiteral("Group"));
-    const int titleColumn = header.indexOf(QStringLiteral("Title"));
-    const int usernameColumn = header.indexOf(QStringLiteral("Username"));
-    const int passwordColumn = header.indexOf(QStringLiteral("Password"));
-    const int urlColumn = header.indexOf(QStringLiteral("URL"));
-    const int notesColumn = header.indexOf(QStringLiteral("Notes"));
+    for (const auto &item : entries) {
+        const QString &path = item.first;
+        const KdbxEntry &entry = item.second;
 
-    for (QStringList &row : rows) {
-        QString rawGroup = cell(row, groupColumn);
-        while (rawGroup.startsWith(QLatin1Char('/')))
-            rawGroup.remove(0, 1);
-        while (rawGroup.endsWith(QLatin1Char('/')))
-            rawGroup.chop(1);
-        rawGroup.replace(QStringLiteral("/./"), QStringLiteral("/"));
+        const int slash = path.lastIndexOf(QLatin1Char('/'));
+        const QString group = slash < 0 ? QString() : path.left(slash);
 
-        QString title = cell(row, titleColumn).trimmed();
+        QString title = entry.title.trimmed();
         if (title.isEmpty())
             title = I18n::t(QStringLiteral("kdbx2pass.no_title"));
 
-        const QString username = cell(row, usernameColumn);
-        const Secret entryPassword(cell(row, passwordColumn));
-        // The plaintext copy inside `row` has been taken above; wipe it now
-        // so the password does not sit in unprotected memory for the rest of
-        // the import (`rows` only goes away at the end).
-        if (passwordColumn >= 0 && passwordColumn < row.size())
-            row[passwordColumn].fill(QLatin1Char('\0'));
+        const QString username = entry.username;
+        const Secret &entryPassword = entry.password;
+        const QString url = entry.url;
+        const QString notes = entry.notes;
 
-        const QString url = cell(row, urlColumn);
-        const QString notes = cell(row, notesColumn);
-
-        QStringList segments = rawGroup.isEmpty() ? QStringList()
-                                                  : rawGroup.split(QLatin1Char('/'));
-        if (!segments.isEmpty() && rootGroupNames.contains(segments.first()))
-            segments.removeFirst();
-
-        const QString group = segments.join(QLatin1Char('/'));
         const QString safeTitle = sanitizeTitle(title);
         const QString entryPath = group.isEmpty() ? safeTitle
                                                   : group + QLatin1Char('/') + safeTitle;
@@ -242,7 +141,7 @@ QString run(const QString &dbPath, const QStringList &recipients) {
                  << '\n';
         stdOut().flush();
 
-        error = runPassCommand({QStringLiteral("insert"), QStringLiteral("-m"),
+        const QString error = runPassCommand({QStringLiteral("insert"), QStringLiteral("-m"),
                                 QStringLiteral("-f"), entryPath},
                                content);
         content.fill('\0');

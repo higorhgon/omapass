@@ -9,6 +9,7 @@ packagesExist(botan-3) {
 } else {
     PKGCONFIG += botan-2
 }
+PKGCONFIG += zlib
 TARGET = omapass
 TEMPLATE = app
 
@@ -27,6 +28,7 @@ HEADERS += \
     src/generator.h \
     src/history.h \
     src/i18n.h \
+    src/kdbx.h \
     src/keepassvault.h \
     src/kdbx2pass.h \
     src/onepasswordlogin.h \
@@ -58,6 +60,7 @@ SOURCES += \
     src/generator.cpp \
     src/history.cpp \
     src/i18n.cpp \
+    src/kdbx.cpp \
     src/keepassvault.cpp \
     src/kdbx2pass.cpp \
     src/onepasswordlogin.cpp \
