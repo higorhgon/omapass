@@ -78,7 +78,8 @@ BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QStri
     QHash<QString, int> pathCount;
 
     for (const QJsonObject &item : items) {
-        if (item.value(QStringLiteral("type")).toInt() != 1)
+        const int type = item.value(QStringLiteral("type")).toInt();
+        if (type != 1 && type != 5)
             continue;
         const QJsonValue deleted = item.value(QStringLiteral("deletedDate"));
         if (!deleted.isNull() && !deleted.isUndefined())
@@ -113,6 +114,23 @@ BwIndex buildBwIndex(const QHash<QString, QJsonObject> &items, const QHash<QStri
 }
 
 EntryData bwEntryData(const QJsonObject &item) {
+    if (item.value(QStringLiteral("type")).toInt() == 5) {
+        // The private key is what a key file holds: LF line ends and a final
+        // newline, which ssh refuses to load without.
+        QString key = item.value(QStringLiteral("sshKey")).toObject()
+                          .value(QStringLiteral("privateKey")).toString();
+        key.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+        key.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+        key = key.trimmed();
+        if (!key.isEmpty())
+            key += QLatin1Char('\n');
+
+        EntryData data;
+        data.password = Secret(key);
+        data.notes = item.value(QStringLiteral("notes")).toString();
+        return data;
+    }
+
     const QJsonObject login = item.value(QStringLiteral("login")).toObject();
     const QJsonArray uris = login.value(QStringLiteral("uris")).toArray();
 

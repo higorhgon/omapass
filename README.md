@@ -206,8 +206,9 @@ Dá para ter várias contas ao mesmo tempo, inclusive em servidores diferentes.
   encerrada no servidor (pelo cofre web, ou com a troca da senha mestra), a sincronização
   avisa, e abrir a conta de novo leva ao login com o e-mail e o servidor preenchidos.
 - **Pastas viram grupos**: uma pasta `Trabalho/Email` é o grupo `Trabalho/Email`.
-  Só itens do tipo **login** aparecem — cartões, identidades, notas seguras e chaves
-  SSH ficam de fora. Itens com o mesmo nome na mesma pasta ganham o começo do id
+  Aparecem itens do tipo **login** e **chave SSH** — cartões, identidades e notas
+  seguras ficam de fora. Numa chave SSH, copiar a senha copia a chave privada, já pronta
+  (quebras de linha LF e newline final) para gravar num arquivo. Itens com o mesmo nome na mesma pasta ganham o começo do id
   entre colchetes (`Email [1a2b3c4d]`) para se distinguirem.
 - **Editar preserva o resto**: o formulário mexe em nome, pasta, usuário, senha,
   primeira URL e notas; TOTP, campos personalizados, as demais URLs, passkeys e anexos

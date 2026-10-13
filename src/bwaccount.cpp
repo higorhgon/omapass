@@ -301,7 +301,8 @@ std::optional<BwKey> BwAccount::cipherKey(const QJsonObject &cipher, const BwKey
 }
 
 std::optional<QJsonObject> BwAccount::decryptCipher(const QJsonObject &cipher, const BwKeys &keys) {
-    if (cipher.value(QStringLiteral("type")).toInt() != 1)
+    const int type = cipher.value(QStringLiteral("type")).toInt();
+    if (type != 1 && type != 5)
         return std::nullopt;
     const QJsonValue deleted = cipher.value(QStringLiteral("deletedDate"));
     if (!deleted.isNull() && !deleted.isUndefined())
@@ -315,7 +316,7 @@ std::optional<QJsonObject> BwAccount::decryptCipher(const QJsonObject &cipher, c
         QJsonObject item;
         item.insert(QStringLiteral("object"), QStringLiteral("item"));
         item.insert(QStringLiteral("id"), cipher.value(QStringLiteral("id")));
-        item.insert(QStringLiteral("type"), 1);
+        item.insert(QStringLiteral("type"), type);
         item.insert(QStringLiteral("organizationId"), cipher.value(QStringLiteral("organizationId")));
         item.insert(QStringLiteral("folderId"), cipher.value(QStringLiteral("folderId")));
         item.insert(QStringLiteral("collectionIds"), cipher.value(QStringLiteral("collectionIds")));
@@ -323,7 +324,15 @@ std::optional<QJsonObject> BwAccount::decryptCipher(const QJsonObject &cipher, c
         item.insert(QStringLiteral("deletedDate"), QJsonValue::Null);
         item.insert(QStringLiteral("name"), decryptField(cipher.value(QStringLiteral("name")), *key));
         item.insert(QStringLiteral("notes"), decryptField(cipher.value(QStringLiteral("notes")), *key));
-        item.insert(QStringLiteral("login"), decryptLogin(cipher, *key));
+        if (type == 5) {
+            const QJsonObject ssh = cipher.value(QStringLiteral("sshKey")).toObject();
+            item.insert(QStringLiteral("sshKey"),
+                        QJsonObject{{QStringLiteral("privateKey"), decryptField(ssh.value(QStringLiteral("privateKey")), *key)},
+                                    {QStringLiteral("publicKey"), decryptField(ssh.value(QStringLiteral("publicKey")), *key)},
+                                    {QStringLiteral("keyFingerprint"), decryptField(ssh.value(QStringLiteral("keyFingerprint")), *key)}});
+        } else {
+            item.insert(QStringLiteral("login"), decryptLogin(cipher, *key));
+        }
         return item;
     } catch (const Undecryptable &) {
         return std::nullopt;
@@ -370,6 +379,14 @@ QJsonObject BwAccount::cipherRequest(const QJsonObject &encrypted, const QString
     request.insert(QStringLiteral("notes"), encryptedField(data.notes, key));
     request.insert(QStringLiteral("folderId"), folderId.isEmpty() ? QJsonValue(QJsonValue::Null)
                                                                   : QJsonValue(folderId));
+
+    if (request.value(QStringLiteral("type")).toInt() == 5) {
+        // An SSH key has no login: the "password" is the private key.
+        QJsonObject ssh = request.value(QStringLiteral("sshKey")).toObject();
+        ssh.insert(QStringLiteral("privateKey"), encryptedField(data.password.toString(), key));
+        request.insert(QStringLiteral("sshKey"), ssh);
+        return request;
+    }
 
     QJsonObject login = request.value(QStringLiteral("login")).toObject();
     login.insert(QStringLiteral("username"), encryptedField(data.username, key));
