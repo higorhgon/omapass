@@ -70,6 +70,21 @@ jobs:
           # estejam todos no lugar.
           "dist/$PASTA/omapass.exe" --version
 
+      - name: Confere que a interface carrega
+        run: |
+          # Abre de verdade, com o renderizador por software (o runner não
+          # tem GPU): se o Main.qml não carregar o processo morre na hora; se
+          # carregar, ele segue vivo até o timeout (124) o encerrar.
+          export QT_QUICK_BACKEND=software
+          set +e
+          timeout 10 "dist/$PASTA/omapass.exe"
+          codigo=$?
+          set -e
+          if [ "$codigo" -ne 124 ]; then
+            echo "A interface nao ficou de pe (codigo $codigo)." >&2
+            exit 1
+          fi
+
       - name: Gera o zip
         run: |
           cd dist
