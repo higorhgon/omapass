@@ -76,34 +76,41 @@ jobs:
           # estejam todos no lugar.
           "dist/$PASTA/omapass.exe" --version
 
-      - name: Depuração - abre e fotografa
+      - name: Depuração - sem MSYS2, com e sem qt.conf
         shell: pwsh
         run: |
           $dir = (Resolve-Path "dist/$env:PASTA").Path
-          $env:QT_LOGGING_RULES = "*.debug=false"
-          $p = Start-Process -FilePath "$dir\omapass.exe" -PassThru `
-              -RedirectStandardError "$dir\..\stderr.txt" -RedirectStandardOutput "$dir\..\stdout.txt"
-          Start-Sleep -Seconds 10
-          "alive: $(-not $p.HasExited)"
-          if ($p.HasExited) { "exit code: $($p.ExitCode)" }
-          Get-Process omapass -ErrorAction SilentlyContinue | Select-Object Id, MainWindowTitle, MainWindowHandle, Responding | Format-List | Out-String
+          # Como numa máquina limpa: nada do MSYS2 por perto.
+          Rename-Item C:\msys64 C:\msys64_off
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("$dir\..\screen.png")
-          "--- stderr ---"; Get-Content "$dir\..\stderr.txt" -ErrorAction SilentlyContinue
-          "--- stdout ---"; Get-Content "$dir\..\stdout.txt" -ErrorAction SilentlyContinue
-          Stop-Process -Id $p.Id -ErrorAction SilentlyContinue
+          function Tentar($nome) {
+              $p = Start-Process -FilePath "$dir\omapass.exe" -PassThru
+              Start-Sleep -Seconds 10
+              "[$nome] vivo: $(-not $p.HasExited)"
+              if ($p.HasExited) { "[$nome] codigo de saida: $($p.ExitCode)" }
+              else {
+                  $p.Refresh()
+                  "[$nome] janela: '$($p.MainWindowTitle)' handle=$($p.MainWindowHandle)"
+              }
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp)
+              $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+              $bmp.Save("$dir\..\$nome.png")
+              Stop-Process -Id $p.Id -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 2
+          }
+          Move-Item "$dir\qt.conf" "$dir\..\qt.conf.bak"
+          Tentar "sem-qtconf"
+          Move-Item "$dir\..\qt.conf.bak" "$dir\qt.conf"
+          Tentar "com-qtconf"
 
       - uses: actions/upload-artifact@v4
         with:
           name: debug-windows
           path: |
-            dist/screen.png
-            dist/stderr.txt
-            dist/stdout.txt
+            dist/sem-qtconf.png
+            dist/com-qtconf.png
           if-no-files-found: warn
 
       - name: Gera o zip
