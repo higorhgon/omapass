@@ -18,7 +18,10 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QUrl>
+#include <QtConcurrent/QtConcurrentMap>
 #include <QtConcurrent/QtConcurrentRun>
+
+#include <utility>
 
 namespace {
 
@@ -214,6 +217,32 @@ AppController::AppController(const AppConfig &config, QObject *parent)
     qApp->installEventFilter(this);
 
     m_lockTimer.setInterval(lockCheckIntervalMs);
+    m_metaFlush.setSingleShot(true);
+    m_metaFlush.setInterval(150);
+    connect(&m_metaFlush, &QTimer::timeout, this, [this]() {
+        const QStringList arrived = std::exchange(m_metaArrived, QStringList());
+        if (!m_query.isEmpty()) {
+            // A login or URL may now match what is typed: the shown set can
+            // change, so it is worked out again.
+            rebuildRows();
+            return;
+        }
+        // Nothing is filtered out, so a row's place in the list is its place
+        // in the entries: only the cells change and the cursor stays.
+        for (const QString &path : arrived) {
+            const int index = m_rowOf.value(path, -1);
+            if (index < 0)
+                continue;
+            const EntryMeta meta = m_lazyMeta.value(path);
+            QVariantMap row = m_allRows.at(index).toMap();
+            row.insert(QStringLiteral("username"), meta.username);
+            row.insert(QStringLiteral("url"), meta.url);
+            m_allRows[index] = row;
+            m_entryHaystacks[index] = path + QLatin1Char(' ') + row.value(QStringLiteral("typeLabel")).toString()
+                                      + QLatin1Char(' ') + meta.username + QLatin1Char(' ') + meta.url;
+            m_rowsModel.replaceRow(index, row);
+        }
+    });
     connect(&m_lockTimer, &QTimer::timeout, this, [this]() {
         if (m_config.lockMinutes && m_lastActivity.hasExpired(qint64(*m_config.lockMinutes) * 60 * 1000))
             lock();
@@ -784,16 +813,131 @@ void AppController::adoptVault(const DbRef &ref, Vault *vault) {
 void AppController::refreshEntries() {
     m_allEntries.clear();
     m_groups.clear();
-    if (!m_vault.isNull())
+    m_listedMeta.clear();
+    if (!m_vault.isNull()) {
         m_vault->list(&m_allEntries, &m_groups);
+        m_listedMeta = m_vault->entryMeta();
+    } else {
+        stopMetaLoad();
+        m_lazyMeta.clear();
+    }
 
     m_history.sortItems(m_allEntries);
+    rebuildRows();
+    startMetaLoad();
+}
+
+// Rows and what the search reads for each, from the entries and whatever
+// meta is known by now.
+void AppController::rebuildRows() {
+    const QString emptySuffix = Vault::emptyGroupSuffix();
+
+    m_allRows.clear();
+    m_entryHaystacks.clear();
+    m_rowOf.clear();
+    for (const QString &path : std::as_const(m_allEntries)) {
+        QString type;
+        QString name;
+        QString group;
+        QString username;
+        QString url;
+
+        if (isEmptyGroup(path)) {
+            type = QStringLiteral("group");
+            group = groupNameOf(path);
+            name = emptySuffix.mid(1);
+        } else {
+            const EntryMeta entry = m_lazyMeta.contains(path) ? m_lazyMeta.value(path)
+                                                              : m_listedMeta.value(path);
+            type = entry.type;
+            group = parentGroup(path);
+            name = path.section(QLatin1Char('/'), -1);
+            username = entry.username;
+            url = entry.url;
+        }
+
+        const QString typeLabel = type == QLatin1String("ssh") ? I18n::t(QStringLiteral("ui.type_ssh"))
+                                : type == QLatin1String("login") ? I18n::t(QStringLiteral("ui.type_login"))
+                                                                  : I18n::t(QStringLiteral("ui.type_group"));
+        QVariantMap row;
+        row.insert(QStringLiteral("path"), path);
+        row.insert(QStringLiteral("name"), name);
+        row.insert(QStringLiteral("group"), group);
+        row.insert(QStringLiteral("type"), type);
+        row.insert(QStringLiteral("typeLabel"), typeLabel);
+        row.insert(QStringLiteral("username"), username);
+        row.insert(QStringLiteral("url"), url);
+
+        m_rowOf.insert(path, m_allRows.size());
+        m_allRows.append(row);
+        // The path carries name and group; the rest is what the columns add.
+        m_entryHaystacks.append(path + QLatin1Char(' ') + typeLabel + QLatin1Char(' ') + username
+                                + QLatin1Char(' ') + url);
+    }
     applyEntryFilter();
 }
 
 void AppController::applyEntryFilter() {
-    m_filteredEntries = filterItems(m_allEntries, m_query);
+    m_shownRows = filterIndexes(m_entryHaystacks, m_query);
+
+    QVariantList rows;
+    m_filteredEntries.clear();
+    for (int index : std::as_const(m_shownRows)) {
+        m_filteredEntries.append(m_allEntries.at(index));
+        rows.append(m_allRows.at(index));
+    }
+    m_rowsModel.setRows(rows);
     emit entriesChanged();
+}
+
+// Reads login and URL, a few entries at a time, for the entries a lazy
+// backend has not given yet. Not marked busy: the list works meanwhile.
+void AppController::startMetaLoad() {
+    stopMetaLoad();
+    if (m_vault.isNull() || !m_vault->loadsMetaLazily())
+        return;
+
+    QStringList missing;
+    for (const QString &path : std::as_const(m_allEntries)) {
+        if (!isEmptyGroup(path) && !m_lazyMeta.contains(path))
+            missing.append(path);
+    }
+    if (missing.isEmpty())
+        return;
+
+    if (m_metaPool.maxThreadCount() != 4)
+        m_metaPool.setMaxThreadCount(4);
+
+    // Closing the vault waits for the pool, so it outlives the workers.
+    const Vault *vault = m_vault.data();
+    m_metaWatcher = new QFutureWatcher<LazyMeta>(this);
+    connect(m_metaWatcher, &QFutureWatcher<LazyMeta>::resultReadyAt, this,
+            [this, watcher = m_metaWatcher](int index) {
+        const LazyMeta result = watcher->resultAt(index);
+        if (!result.ok)
+            return;
+        m_lazyMeta.insert(result.path, result.meta);
+        m_metaArrived.append(result.path);
+        if (!m_metaFlush.isActive())
+            m_metaFlush.start();
+    });
+    m_metaWatcher->setFuture(QtConcurrent::mapped(&m_metaPool, missing, [vault](const QString &path) {
+        LazyMeta result;
+        result.path = path;
+        result.ok = vault->fetchEntryMeta(path, &result.meta);
+        return result;
+    }));
+}
+
+void AppController::stopMetaLoad() {
+    if (!m_metaWatcher)
+        return;
+    // Cancelling stops what has not started; what is running ends by itself
+    // and its result is dropped with the watcher.
+    m_metaWatcher->disconnect(this);
+    m_metaWatcher->cancel();
+    m_metaWatcher->deleteLater();
+    m_metaWatcher = nullptr;
 }
 
 void AppController::setQuery(const QString &query) {
@@ -996,7 +1140,10 @@ void AppController::saveEntry(const QVariantMap &fields) {
                                : vault->addEntry(path, group, data, &result.error);
             return result;
         },
-        [this, isEdit, path](const TaskResult &result) {
+        [this, isEdit, path, originalPath](const TaskResult &result) {
+            // Whatever was read for these two is stale after a save.
+            m_lazyMeta.remove(path);
+            m_lazyMeta.remove(originalPath);
             if (result.ok) {
                 if (!isEdit)
                     m_history.recordUse(path);
@@ -1026,7 +1173,8 @@ void AppController::deleteEntry(const QString &entry) {
                                    : vault->removeEntry(entry, &result.error);
             return result;
         },
-        [this, emptyGroup](const TaskResult &result) {
+        [this, emptyGroup, entry](const TaskResult &result) {
+            m_lazyMeta.remove(entry);
             if (result.ok) {
                 showMessage(I18n::t(emptyGroup ? QStringLiteral("app.group_deleted")
                                                : QStringLiteral("app.entry_deleted")),
@@ -1425,6 +1573,10 @@ QString AppController::pinWeakWarning(const QString &pin) const {
 void AppController::closeVault() {
     if (m_vault.isNull())
         return;
+    stopMetaLoad();
+    m_metaPool.waitForDone();
+    m_lazyMeta.clear();
+    m_metaArrived.clear();
     m_vault->close();
     m_vault.reset();
 }

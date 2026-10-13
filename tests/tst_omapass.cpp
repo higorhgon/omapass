@@ -462,6 +462,15 @@ private slots:
         QCOMPARE(data.notes, QStringLiteral("n"));
     }
 
+    void filterIndexesMatchesEveryTermAnywhereInTheHaystack() {
+        const QStringList rows = {QStringLiteral("Deploy ssh ci@host https://git.example"),
+                                  QStringLiteral("Gmail senha pessoa https://mail.google.com")};
+        QCOMPARE(filterIndexes(rows, QStringLiteral("SSH git")), QList<int>({0}));
+        QCOMPARE(filterIndexes(rows, QStringLiteral("senha google")), QList<int>({1}));
+        QCOMPARE(filterIndexes(rows, QString()), QList<int>({0, 1}));
+        QVERIFY(filterIndexes(rows, QStringLiteral("zzz")).isEmpty());
+    }
+
     void bitwardenDisplayNameDropsLeadingBlanks() {
         QCOMPARE(bwDisplayName(QStringLiteral("  Deploy ")), QStringLiteral("Deploy"));
         QCOMPARE(bwDisplayName(QString(QChar(0xFEFF)) + QStringLiteral("Deploy")), QStringLiteral("Deploy"));

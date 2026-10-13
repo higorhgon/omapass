@@ -22,6 +22,7 @@ HEADERS += \
     src/bwcrypto.h \
     src/clipboard.h \
     src/config.h \
+    src/entryrowsmodel.h \
     src/filter.h \
     src/generator.h \
     src/history.h \
@@ -52,6 +53,7 @@ SOURCES += \
     src/bwcrypto.cpp \
     src/clipboard.cpp \
     src/config.cpp \
+    src/entryrowsmodel.cpp \
     src/filter.cpp \
     src/generator.cpp \
     src/history.cpp \

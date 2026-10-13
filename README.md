@@ -29,6 +29,9 @@ ativo do Omarchy e retintadas ao vivo quando o tema muda.
 - Modal de ajuda com todos os atalhos (`Ctrl+?`)
 - Motor de frecency (frequência + recência) para ordenação inteligente
 - Cores vindas do tema do Omarchy, com sobreposição opcional por tema próprio em TOML
+- Lista de entradas em colunas — tipo (senha/ssh), nome, grupo, login e URL — e a busca
+  multi-termo olha todas elas (no pass e no KeePassXC, só tipo, nome e grupo: login e URL
+  exigiriam abrir cada entrada)
 - Atalhos de teclado: `j/k`, `gg/G`, `Ctrl+U/D`, `/` para buscar — os mesmos da versão TUI
 - Suporte a mouse: clique, duplo-clique e botão direito na lista; seleção de texto nos detalhes da entrada
 

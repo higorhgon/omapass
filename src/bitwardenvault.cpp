@@ -371,6 +371,24 @@ void BitwardenVault::list(QStringList *entries, QStringList *groups) const {
     appendEmptyGroups(*groups, entries);
 }
 
+QHash<QString, EntryMeta> BitwardenVault::entryMeta() const {
+    QHash<QString, EntryMeta> meta;
+    const QMutexLocker locker(&m_mutex);
+    for (auto it = m_index.items.cbegin(); it != m_index.items.cend(); ++it) {
+        const QJsonObject item = m_items.value(it.value().id);
+        EntryMeta entry;
+        if (item.value(QStringLiteral("type")).toInt() == 5)
+            entry.type = QStringLiteral("ssh");
+        else {
+            const EntryData data = bwEntryData(item);
+            entry.username = data.username;
+            entry.url = data.url;
+        }
+        meta.insert(it.key(), entry);
+    }
+    return meta;
+}
+
 QString BitwardenVault::titleFor(const QString &entryPath, const QString &fallback) const {
     const QMutexLocker locker(&m_mutex);
     const QString name = m_index.items.value(entryPath).name;

@@ -36,6 +36,21 @@ void KeepassVault::list(QStringList *entries, QStringList *groups) const {
     }
 }
 
+bool KeepassVault::fetchEntryMeta(const QString &entryPath, EntryMeta *meta) const {
+    // One run for both: with several -a, the values come one per line, in
+    // the order asked, empty when the attribute is.
+    const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(), entryPath,
+                                      QStringLiteral("-a"), QStringLiteral("UserName"),
+                                      QStringLiteral("-a"), QStringLiteral("URL")},
+                                     {m_password});
+    if (!result.success)
+        return false;
+    const QStringList lines = result.out.split(QLatin1Char('\n'));
+    meta->username = lines.value(0).trimmed();
+    meta->url = lines.value(1).trimmed();
+    return true;
+}
+
 QString KeepassVault::titleFor(const QString &entryPath, const QString &fallback) const {
     const KpResult result = runKpcli({QStringLiteral("show"), QStringLiteral("-q"), path(), entryPath,
                                       QStringLiteral("-a"), QStringLiteral("Title")},

@@ -4,6 +4,7 @@
 #include "process.h"
 
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutexLocker>
@@ -501,6 +502,32 @@ void OnePasswordVault::list(QStringList *entries, QStringList *groups) const {
         *groups = m_index.groups;
     }
     appendEmptyGroups(*groups, entries);
+}
+
+QHash<QString, EntryMeta> OnePasswordVault::entryMeta() const {
+    QHash<QString, EntryMeta> meta;
+    const QMutexLocker locker(&m_mutex);
+    for (auto it = m_index.items.cbegin(); it != m_index.items.cend(); ++it) {
+        const QJsonObject item = m_items.value(it.value().id);
+        EntryMeta entry;
+        // A listing summary carries the login as additional_information; a
+        // whole item (already fetched) carries it in its fields.
+        if (item.contains(QStringLiteral("fields"))) {
+            const EntryData data = opEntryData(item);
+            entry.username = data.username;
+            entry.url = data.url;
+        } else {
+            entry.username = item.value(QStringLiteral("additional_information")).toString();
+            const QJsonArray urls = item.value(QStringLiteral("urls")).toArray();
+            for (const QJsonValue &value : urls) {
+                const QJsonObject url = value.toObject();
+                if (entry.url.isEmpty() || url.value(QStringLiteral("primary")).toBool())
+                    entry.url = url.value(QStringLiteral("href")).toString();
+            }
+        }
+        meta.insert(it.key(), entry);
+    }
+    return meta;
 }
 
 QString OnePasswordVault::titleFor(const QString &entryPath, const QString &fallback) const {

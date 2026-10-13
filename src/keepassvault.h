@@ -10,6 +10,8 @@ public:
         : Vault(VaultKind::Keepass, path), m_password(password) {}
 
     void list(QStringList *entries, QStringList *groups) const override;
+    bool loadsMetaLazily() const override { return true; }
+    bool fetchEntryMeta(const QString &entryPath, EntryMeta *meta) const override;
     QString titleFor(const QString &entryPath, const QString &fallback) const override;
     bool fetchPassword(const QString &entryPath, Secret *password, QString *error) const override;
     bool fetchEntry(const QString &entryPath, EntryData *data, QString *error) const override;

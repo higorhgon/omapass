@@ -17,10 +17,7 @@ FocusScope {
     }
 
     function currentEntry() {
-        const entries = controller.entries;
-        if (pane.currentIndex < 0 || pane.currentIndex >= entries.length)
-            return "";
-        return entries[pane.currentIndex];
+        return controller.entryPathAt(pane.currentIndex);
     }
 
     function openInfo() {
@@ -102,7 +99,14 @@ FocusScope {
         acceptsKeys: page.mode === "list" && !page.menuOpen
 
         searchPlaceholder: i18n.t("ui.search_title")
-        model: controller.entries
+        model: controller.entryRows
+        columns: [
+            { "key": "typeLabel", "title": i18n.t("ui.column_type"), "weight": 1 },
+            { "key": "name", "title": i18n.t("ui.column_name"), "weight": 3 },
+            { "key": "group", "title": i18n.t("ui.column_group"), "weight": 2.5, "fit": true },
+            { "key": "username", "title": i18n.t("ui.column_login"), "weight": 2 },
+            { "key": "url", "title": i18n.t("ui.column_url"), "weight": 2.5 }
+        ]
         onQueryChanged: controller.query = query
 
         footerText: controller.hasMessage ? controller.message
