@@ -136,9 +136,19 @@ em que ele estiver rodando.
 ### Windows (x64)
 
 O mesmo código compila para Windows com o MinGW do MSYS2 (UCRT64): Qt 6, Botan 3 e zlib. O
-workflow `windows.yml` faz isso a cada PR e gera um `omapass-<versão>-windows-x64.zip` — o
-executável, as DLLs do Qt/Botan/runtime, os módulos QML e as listas de palavras; é só
-descompactar e abrir `omapass.exe`. Para compilar à mão, num shell UCRT64 do MSYS2 com
+workflow `windows.yml` faz isso a cada PR e gera dois arquivos:
+
+- `omapass-<versão>-windows-x64-setup.exe` — o **instalador**. Pergunta a pasta (por padrão
+  `Arquivos de Programas\omapass`; dá para instalar só para o seu usuário, sem administrador) e
+  oferece, cada um como uma opção que pode ser desmarcada, o atalho no menu Iniciar e o atalho
+  na área de trabalho. Tem desinstalador e abre em português quando o Windows está em português.
+- `omapass-<versão>-windows-x64.zip` — a versão **portátil**: é só descompactar e abrir
+  `omapass.exe`, sem instalar nada.
+
+Os dois trazem o executável, as DLLs do Qt/Botan/runtime, os módulos QML e as listas de palavras.
+Não existe um `.exe` único com tudo dentro, como o AppImage: isso exigiria um Qt compilado
+estaticamente, e a alternativa (um executável que se extrai numa pasta temporária ao abrir) é mais
+lenta para iniciar e costuma ser barrada por antivírus — por isso o instalador. Para compilar à mão, num shell UCRT64 do MSYS2 com
 `mingw-w64-ucrt-x86_64-{gcc,make,pkgconf,qt6-base,qt6-declarative,qt6-tools,libbotan,zlib}`:
 
 ```bash
@@ -150,7 +160,8 @@ mingw32-make release
 No Windows funcionam os bancos KeePass (`.kdbx`) e as contas Bitwarden — os dois são falados
 pelo próprio omapass. O que depende de programas do Linux fica de fora: o `pass` e o `gpg`
 (se estiverem no PATH, funcionam), o PIN (`secret-tool`) e a trava de sessão do desktop. O
-claro/escuro vem do Qt; a escala do texto do desktop não é lida. A configuração fica em
+claro/escuro e o idioma vêm do Windows (o `config.toml` ainda manda); a escala do texto do
+desktop não é lida. A configuração fica em
 `%USERPROFILE%\.config\omapass`.
 
 ### Releases

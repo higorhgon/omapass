@@ -160,7 +160,11 @@ int main(int argc, char *argv[]) {
     app.setApplicationName(QStringLiteral("omapass"));
     app.setApplicationVersion(applicationVersion);
     app.setOrganizationName(QStringLiteral("omapass"));
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omapass")));
+    // The icon theme has it where omapass is installed as a package; the
+    // copy inside the binary is for where there is no theme (Windows, a
+    // portable build).
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omapass"),
+                                       QIcon(QStringLiteral(":/omapass.png"))));
 
     // Basic rather than Material: every control here is drawn against the
     // Omarchy palette, and Material's own chrome (filled text containers,

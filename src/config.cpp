@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLocale>
 #include <QTextStream>
 
 namespace {
@@ -274,9 +275,15 @@ AppConfig load() {
     if (!theme.isEmpty())
         config.themeName = theme;
 
-    config.language = resolveLanguage(raw.value(QStringLiteral("general.language")),
-                                      qEnvironmentVariable("LANG"),
-                                      qEnvironmentVariable("LC_ALL"));
+    // LANG and LC_ALL are the Unix way to say it; where neither is set (a
+    // Windows desktop, a GUI launcher) the system locale is what there is.
+    QString langEnv = qEnvironmentVariable("LANG");
+    const QString lcAllEnv = qEnvironmentVariable("LC_ALL");
+    if (langEnv.isEmpty() && lcAllEnv.isEmpty()) {
+        const QStringList ui = QLocale::system().uiLanguages();
+        langEnv = ui.isEmpty() ? QLocale::system().name() : ui.first();
+    }
+    config.language = resolveLanguage(raw.value(QStringLiteral("general.language")), langEnv, lcAllEnv);
 
     config.lockMinutes = parseLockMinutes(raw.value(QStringLiteral("general.lock_minutes")));
 

@@ -95,15 +95,29 @@ jobs:
             exit 1
           fi
 
-      - name: Gera o zip
+      - name: Gera o zip (portátil)
         run: |
           cd dist
           zip -qr "$PASTA.zip" "$PASTA"
           ls -la
 
+      # O instalador pergunta a pasta (Arquivos de Programas por padrão) e
+      # oferece os atalhos como opções. O Inno Setup vem do Chocolatey.
+      - name: Gera o instalador
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $versao = $env:PASTA -replace '^omapass-', '' -replace '-windows-x64$', ''
+          $fonte = (Resolve-Path "dist/$env:PASTA").Path
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" "/DSourceDir=$fonte" "/Odist" packaging/windows/omapass.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem dist | Format-Table Name, Length
+
       - uses: actions/upload-artifact@v4
         with:
           name: omapass-windows-x64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
           if-no-files-found: error
           retention-days: 7

@@ -86,4 +86,10 @@ SOURCES += \
 
 RESOURCES += src/resources.qrc
 
-win32: LIBS += -luser32
+win32 {
+    LIBS += -luser32
+    # The icon of omapass.exe itself (Explorer, taskbar, shortcuts).
+    RC_ICONS = icons/omapass.ico
+    QMAKE_TARGET_PRODUCT = omapass
+    QMAKE_TARGET_DESCRIPTION = omapass
+}
