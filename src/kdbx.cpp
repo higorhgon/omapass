@@ -1162,59 +1162,68 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
 
 std::unique_ptr<KdbxDatabase> KdbxDatabase::create(const Secret &password, const QString &name,
                                                    bool legacy) {
-    auto impl = std::make_unique<Impl>();
-    impl->major = legacy ? 3 : 4;
-    impl->minor = legacy ? 1 : 0;
-    impl->cipherId = cipherAes;
-    impl->kdfId = legacy ? kdfAes : kdfArgon2d;
-    impl->aesRounds = legacy ? 60000 : 0;
-    impl->kdfSalt = randomBytes(32);
-    impl->innerStreamId = legacy ? 2 : 3;
+    // The salt and every UUID come from the system generator, which throws
+    // when it fails: that is a database not created, not a crash.
+    const auto build = [&]() -> std::unique_ptr<KdbxDatabase> {
+        auto impl = std::make_unique<Impl>();
+        impl->major = legacy ? 3 : 4;
+        impl->minor = legacy ? 1 : 0;
+        impl->cipherId = cipherAes;
+        impl->kdfId = legacy ? kdfAes : kdfArgon2d;
+        impl->aesRounds = legacy ? 60000 : 0;
+        impl->kdfSalt = randomBytes(32);
+        impl->innerStreamId = legacy ? 2 : 3;
 
-    const Bytes composite = sha256(toArray(sha256(password.bytes())));
-    QString detail;
-    if (!impl->transform(composite, &detail))
+        const Bytes composite = sha256(toArray(sha256(password.bytes())));
+        QString detail;
+        if (!impl->transform(composite, &detail))
+            return nullptr;
+
+        const QString now = timeStamp(impl->binaryTimes());
+        impl->xml = std::make_unique<XNode>();
+        impl->xml->name = QStringLiteral("KeePassFile");
+        XNode *meta = impl->xml->add(QStringLiteral("Meta"));
+        meta->add(QStringLiteral("Generator"), QStringLiteral("omapass"));
+        meta->add(QStringLiteral("DatabaseName"), name);
+        meta->add(QStringLiteral("DatabaseNameChanged"), now);
+        meta->add(QStringLiteral("DatabaseDescription"));
+        meta->add(QStringLiteral("DatabaseDescriptionChanged"), now);
+        meta->add(QStringLiteral("DefaultUserName"));
+        meta->add(QStringLiteral("DefaultUserNameChanged"), now);
+        meta->add(QStringLiteral("MaintenanceHistoryDays"), QStringLiteral("365"));
+        meta->add(QStringLiteral("Color"));
+        meta->add(QStringLiteral("MasterKeyChanged"), now);
+        meta->add(QStringLiteral("MasterKeyChangeRec"), QStringLiteral("-1"));
+        meta->add(QStringLiteral("MasterKeyChangeForce"), QStringLiteral("-1"));
+        XNode *protection = meta->add(QStringLiteral("MemoryProtection"));
+        protection->add(QStringLiteral("ProtectTitle"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectUserName"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectPassword"), QStringLiteral("True"));
+        protection->add(QStringLiteral("ProtectURL"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectNotes"), QStringLiteral("False"));
+        meta->add(QStringLiteral("RecycleBinEnabled"), QStringLiteral("True"));
+        meta->add(QStringLiteral("RecycleBinUUID"), noUuid);
+        meta->add(QStringLiteral("RecycleBinChanged"), now);
+        meta->add(QStringLiteral("EntryTemplatesGroup"), noUuid);
+        meta->add(QStringLiteral("EntryTemplatesGroupChanged"), now);
+        meta->add(QStringLiteral("LastSelectedGroup"), noUuid);
+        meta->add(QStringLiteral("LastTopVisibleGroup"), noUuid);
+        meta->add(QStringLiteral("HistoryMaxItems"), QStringLiteral("10"));
+        meta->add(QStringLiteral("HistoryMaxSize"), QStringLiteral("6291456"));
+        meta->add(QStringLiteral("SettingsChanged"), now);
+        meta->add(QStringLiteral("CustomData"));
+
+        XNode *root = impl->xml->add(QStringLiteral("Root"));
+        root->children.push_back(impl->makeGroup(QStringLiteral("Root")));
+        root->add(QStringLiteral("DeletedObjects"));
+
+        return std::unique_ptr<KdbxDatabase>(new KdbxDatabase(std::move(impl)));
+    };
+    try {
+        return build();
+    } catch (const std::exception &) {
         return nullptr;
-
-    const QString now = timeStamp(impl->binaryTimes());
-    impl->xml = std::make_unique<XNode>();
-    impl->xml->name = QStringLiteral("KeePassFile");
-    XNode *meta = impl->xml->add(QStringLiteral("Meta"));
-    meta->add(QStringLiteral("Generator"), QStringLiteral("omapass"));
-    meta->add(QStringLiteral("DatabaseName"), name);
-    meta->add(QStringLiteral("DatabaseNameChanged"), now);
-    meta->add(QStringLiteral("DatabaseDescription"));
-    meta->add(QStringLiteral("DatabaseDescriptionChanged"), now);
-    meta->add(QStringLiteral("DefaultUserName"));
-    meta->add(QStringLiteral("DefaultUserNameChanged"), now);
-    meta->add(QStringLiteral("MaintenanceHistoryDays"), QStringLiteral("365"));
-    meta->add(QStringLiteral("Color"));
-    meta->add(QStringLiteral("MasterKeyChanged"), now);
-    meta->add(QStringLiteral("MasterKeyChangeRec"), QStringLiteral("-1"));
-    meta->add(QStringLiteral("MasterKeyChangeForce"), QStringLiteral("-1"));
-    XNode *protection = meta->add(QStringLiteral("MemoryProtection"));
-    protection->add(QStringLiteral("ProtectTitle"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectUserName"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectPassword"), QStringLiteral("True"));
-    protection->add(QStringLiteral("ProtectURL"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectNotes"), QStringLiteral("False"));
-    meta->add(QStringLiteral("RecycleBinEnabled"), QStringLiteral("True"));
-    meta->add(QStringLiteral("RecycleBinUUID"), noUuid);
-    meta->add(QStringLiteral("RecycleBinChanged"), now);
-    meta->add(QStringLiteral("EntryTemplatesGroup"), noUuid);
-    meta->add(QStringLiteral("EntryTemplatesGroupChanged"), now);
-    meta->add(QStringLiteral("LastSelectedGroup"), noUuid);
-    meta->add(QStringLiteral("LastTopVisibleGroup"), noUuid);
-    meta->add(QStringLiteral("HistoryMaxItems"), QStringLiteral("10"));
-    meta->add(QStringLiteral("HistoryMaxSize"), QStringLiteral("6291456"));
-    meta->add(QStringLiteral("SettingsChanged"), now);
-    meta->add(QStringLiteral("CustomData"));
-
-    XNode *root = impl->xml->add(QStringLiteral("Root"));
-    root->children.push_back(impl->makeGroup(QStringLiteral("Root")));
-    root->add(QStringLiteral("DeletedObjects"));
-
-    return std::unique_ptr<KdbxDatabase>(new KdbxDatabase(std::move(impl)));
+    }
 }
 
 QString KdbxDatabase::save(const QString &path) {

@@ -207,6 +207,12 @@ bool store(const QString &vaultPath, const QString &pin, const Secret &password,
     }
 
     const BwBytes saltBytes = BwCrypto::randomBytes(32);
+    // randomBytes comes back empty when the system generator fails; an
+    // empty salt would still derive a key, just a much weaker one.
+    if (saltBytes.size() != 32) {
+        *error = I18n::t(QStringLiteral("pin.store_error"));
+        return false;
+    }
     const QString salt = QString::fromLatin1(
         QByteArray(reinterpret_cast<const char *>(saltBytes.data()), qsizetype(saltBytes.size())).toBase64());
 

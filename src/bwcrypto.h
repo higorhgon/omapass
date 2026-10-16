@@ -71,7 +71,8 @@ std::optional<QString> decryptString(const QString &encString, const BwKey &key)
 // the vault's items and folders are written with, and omapass' own PIN store.
 std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key);
 
-// Random bytes from the system generator, for a salt or an IV.
+// Random bytes from the system generator, for a salt or an IV. Empty when
+// the generator fails — callers check the size before using it.
 BwBytes randomBytes(int size);
 
 // Decrypts an EncString holding another 64-byte key.
