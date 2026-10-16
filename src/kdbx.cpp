@@ -40,10 +40,14 @@ constexpr auto encryptDirection = Botan::ENCRYPTION;
 constexpr quint32 signature1 = 0x9AA2D903;
 constexpr quint32 signature2 = 0xB54BFB67;
 
-// Guards against a hostile file asking for the moon.
+// Guards against a hostile file asking for the moon. The KDF runs before the
+// password can be checked, so its cost is capped too: about half a minute
+// on a current CPU at worst, far above what KeePass and KeePassXC pick when
+// they benchmark for one second.
 constexpr qint64 maxPlainSize = 512LL * 1024 * 1024;
 constexpr quint64 maxArgonKiB = 4ULL * 1024 * 1024;
-constexpr quint64 maxKdfRounds = 4000000000ULL;
+constexpr quint64 maxArgonWorkKiB = 64ULL * 1024 * 1024;   // iterations × memory
+constexpr quint64 maxKdfRounds = 1000000000ULL;
 constexpr int blockSize = 1024 * 1024;
 
 const QByteArray cipherAes = QByteArray::fromHex("31c1f2e6bf714350be5805216afc5aff");
@@ -95,6 +99,17 @@ Bytes hmacSha256(const Bytes &key, const QByteArray &a, const QByteArray &b = QB
     mac->update(reinterpret_cast<const uint8_t *>(b.constData()), size_t(b.size()));
     mac->update(reinterpret_cast<const uint8_t *>(c.constData()), size_t(c.size()));
     return Bytes(mac->final());
+}
+
+// Equality that takes as long however early the inputs differ, for MACs and
+// for the KDBX 3 start bytes, which are what a wrong password fails on.
+bool sameBytes(const QByteArray &a, const QByteArray &b) {
+    if (a.size() != b.size())
+        return false;
+    volatile quint8 difference = 0;
+    for (qsizetype i = 0; i < a.size(); ++i)
+        difference |= quint8(a[i]) ^ quint8(b[i]);
+    return difference == 0;
 }
 
 QByteArray le32(quint32 value) {
@@ -535,7 +550,8 @@ bool KdbxDatabase::Impl::transform(const Bytes &composite, QString *detail) {
         if (kdfId == kdfArgon2d || kdfId == kdfArgon2id) {
             const quint64 kib = argonMemory / 1024;
             if (kdfSalt.size() < 8 || argonParallelism == 0 || argonParallelism > 255 || argonIterations == 0
-                || argonIterations > 1000000 || kib < 8 || kib > maxArgonKiB) {
+                || argonIterations > 1000000 || kib < 8 || kib > maxArgonKiB
+                || argonIterations * kib > maxArgonWorkKiB) {
                 *detail = QStringLiteral("Argon2 parameters");
                 return false;
             }
@@ -1046,7 +1062,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
             return fail(KdbxStatus::Corrupt, QStringLiteral("header hash"));
         const Bytes headerKey = sha512(le64(0xFFFFFFFFFFFFFFFFULL), toArray(hmacKeyBase));
         const Bytes headerMac = hmacSha256(Bytes(headerKey.begin(), headerKey.begin() + 64), headerBytes);
-        if (toArray(headerMac) != storedMac)
+        if (!sameBytes(toArray(headerMac), storedMac))
             return fail(KdbxStatus::WrongPassword);
 
         Bytes cipherText;
@@ -1062,7 +1078,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
             const Bytes blockKey = sha512(le64(index), toArray(hmacKeyBase));
             const Bytes expected = hmacSha256(Bytes(blockKey.begin(), blockKey.begin() + 64), le64(index),
                                               le32(size), block);
-            if (toArray(expected) != blockMac)
+            if (!sameBytes(toArray(expected), blockMac))
                 return fail(KdbxStatus::Corrupt, QStringLiteral("block mac"));
             if (size == 0)
                 break;
@@ -1106,7 +1122,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
         if (!applyCipher(impl->cipherId, masterKey, toBytes(iv), &payload, false))
             return fail(KdbxStatus::WrongPassword);
         QByteArray plain = toArray(payload);
-        if (plain.left(32) != streamStart)
+        if (!sameBytes(plain.left(32), streamStart))
             return fail(KdbxStatus::WrongPassword);
 
         QByteArray blocks;
@@ -1170,7 +1186,10 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::create(const Secret &password, const
         impl->minor = legacy ? 1 : 0;
         impl->cipherId = cipherAes;
         impl->kdfId = legacy ? kdfAes : kdfArgon2d;
-        impl->aesRounds = legacy ? 60000 : 0;
+        // KDBX 3 is only written for files that must stay readable by old
+        // clients; it gets AES-KDF, at a cost in line with today's machines
+        // rather than the 60 000 rounds KeePass used to default to.
+        impl->aesRounds = legacy ? 2000000 : 0;
         impl->kdfSalt = randomBytes(32);
         impl->innerStreamId = legacy ? 2 : 3;
 
