@@ -19,7 +19,17 @@ TARGET = tst_omapass
 INCLUDEPATH += ../src
 
 SOURCES += \
-    tst_omapass.cpp \
+    main.cpp \
+    tst_bitwarden.cpp \
+    tst_config.cpp \
+    tst_filter.cpp \
+    tst_generator.cpp \
+    tst_history.cpp \
+    tst_kdbx.cpp \
+    tst_onepassword.cpp \
+    tst_pass.cpp \
+    tst_pin.cpp \
+    tst_secret.cpp \
     ../src/bitwardenjson.cpp \
     ../src/bitwardenvault.cpp \
     ../src/bwcrypto.cpp \
@@ -44,6 +54,7 @@ SOURCES += \
     ../src/vault.cpp
 
 HEADERS += \
+    support.h \
     ../src/bitwardenjson.h \
     ../src/bitwardenvault.h \
     ../src/bwaccount.h \
