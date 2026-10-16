@@ -317,9 +317,82 @@ private slots:
                  BwAccount::Unlock::Ok);
         QHash<QString, QJsonObject> items;
         QHash<QString, QString> folders;
-        BwAccount::decryptVault(state, keys, &items, &folders);
+        int undecryptable = -1;
+        BwAccount::decryptVault(state, keys, &items, &folders, &undecryptable);
         QVERIFY(!items.contains(QStringLiteral("c2")));
         QCOMPARE(items.size(), bwFixture("expected.json").value("items").toArray().size() - 1);
+        // ...but it is counted, so the user hears about it.
+        QCOMPARE(undecryptable, 1);
+    }
+
+    void bitwardenCountsOnlyWhatShouldHaveOpened() {
+        // A secure note (not listed) and a login in the trash are left out on
+        // purpose; neither counts as lost.
+        BwAccountState state = bwStateFromFixture();
+        state.ciphers.append(QJsonObject{{"id", "nota"}, {"type", 2}, {"name", "7.bmV3"}});
+        state.ciphers.append(QJsonObject{{"id", "lixo"}, {"type", 1}, {"name", "7.bmV3"},
+                                         {"deletedDate", "2026-01-01T00:00:00Z"}});
+        BwKeys keys;
+        QCOMPARE(BwAccount::unlock(state, Secret(bwFixture("vectors.json").value("password").toString()), &keys),
+                 BwAccount::Unlock::Ok);
+        QHash<QString, QJsonObject> items;
+        QHash<QString, QString> folders;
+        int undecryptable = -1;
+        BwAccount::decryptVault(state, keys, &items, &folders, &undecryptable);
+        QCOMPARE(undecryptable, 0);
+
+        // A folder whose name does not open does count.
+        state.folders.append(QJsonObject{{"id", "pasta"}, {"name", "2.aXY=|ZGF0YQ==|bWFj"}});
+        BwAccount::decryptVault(state, keys, &items, &folders, &undecryptable);
+        QCOMPARE(undecryptable, 1);
+    }
+
+    void bitwardenKdfOutsideTheSafeRangeIsRefused() {
+        const auto kdf = [](int type, int iterations, int memory = 0, int parallelism = 0) {
+            BwKdf k;
+            k.type = type;
+            k.iterations = iterations;
+            k.memory = memory;
+            k.parallelism = parallelism;
+            return k;
+        };
+        // The edges the official clients accept are accepted.
+        QVERIFY(BwCrypto::kdfIsSafe(kdf(0, 5000)));
+        QVERIFY(BwCrypto::kdfIsSafe(kdf(0, 2000000)));
+        QVERIFY(BwCrypto::kdfIsSafe(kdf(1, 2, 16, 1)));
+        QVERIFY(BwCrypto::kdfIsSafe(kdf(1, 10, 1024, 16)));
+        // One step past them is not, nor is a KDF nobody knows.
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(0, 4999)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(0, 2000001)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(0, 1)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 1, 16, 1)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 11, 16, 1)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 3, 15, 1)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 3, 1025, 1)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 3, 64, 0)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(1, 3, 64, 17)));
+        QVERIFY(!BwCrypto::kdfIsSafe(kdf(9, 600000)));
+
+        // Nothing is derived from parameters that are refused...
+        QVERIFY(!BwCrypto::deriveKdfMaterial(Secret(QStringLiteral("x")), QStringLiteral("a@b.com"), kdf(0, 1)));
+
+        // ...and an account saved with them does not try.
+        BwAccountState weak = bwStateFromFixture();
+        weak.kdf = kdf(0, 1);
+        BwKeys keys;
+        QCOMPARE(BwAccount::unlock(weak, Secret(QStringLiteral("x")), &keys), BwAccount::Unlock::UnsafeKdf);
+    }
+
+    void bitwardenSyncDoesNotTakeAWeakerKdf() {
+        BwAccountState state;
+        state.kdf.type = 0;
+        state.kdf.iterations = 600000;
+        const QJsonObject sync = BwApi::camelized(QJsonDocument::fromJson(R"({
+            "Profile": {"Id": "u1"},
+            "UserDecryption": {"MasterPasswordUnlock": {"Kdf": {"KdfType": 0, "Iterations": 1}}}})").object());
+        BwAccount::applySync(&state, sync);
+        QCOMPARE(state.kdf.type, 0);
+        QCOMPARE(state.kdf.iterations, 600000);
     }
 
     void bitwardenEditKeepsWhatItDoesNotModel() {
