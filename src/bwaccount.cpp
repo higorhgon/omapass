@@ -194,6 +194,8 @@ void BwAccount::remove(const QString &path) {
 BwAccount::Unlock BwAccount::unlock(const BwAccountState &state, const Secret &password, BwKeys *keys) {
     if (state.salt.isEmpty() || !state.userKey.startsWith(QLatin1String("2.")))
         return Unlock::Unsupported;
+    if ((state.kdf.type == 0 || state.kdf.type == 1) && !BwCrypto::kdfIsSafe(state.kdf))
+        return Unlock::UnsafeKdf;
 
     const std::optional<BwKey> masterKey = BwCrypto::deriveMasterKey(password, state.salt, state.kdf);
     if (!masterKey)
@@ -255,10 +257,15 @@ void BwAccount::applySync(BwAccountState *state, const QJsonObject &sync) {
     if (!unlock.isEmpty()) {
         const QJsonObject kdf = unlock.value(QStringLiteral("kdf")).toObject();
         if (kdf.contains(QStringLiteral("kdfType"))) {
-            state->kdf.type = kdf.value(QStringLiteral("kdfType")).toInt();
-            state->kdf.iterations = kdf.value(QStringLiteral("iterations")).toInt();
-            state->kdf.memory = kdf.value(QStringLiteral("memory")).toInt();
-            state->kdf.parallelism = kdf.value(QStringLiteral("parallelism")).toInt();
+            BwKdf synced;
+            synced.type = kdf.value(QStringLiteral("kdfType")).toInt();
+            synced.iterations = kdf.value(QStringLiteral("iterations")).toInt();
+            synced.memory = kdf.value(QStringLiteral("memory")).toInt();
+            synced.parallelism = kdf.value(QStringLiteral("parallelism")).toInt();
+            // A server that turns the KDF down to nothing does not get it
+            // saved: the next unlock keeps the parameters that worked.
+            if (BwCrypto::kdfIsSafe(synced))
+                state->kdf = synced;
         }
         const QString salt = unlock.value(QStringLiteral("salt")).toString();
         if (!salt.isEmpty())

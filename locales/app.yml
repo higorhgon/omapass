@@ -367,6 +367,9 @@ bitwarden.session_expired:
 bitwarden.unsupported_account:
   pt-BR: "Esta conta usa uma forma de desbloqueio que o omapass não suporta (SSO sem senha mestra?)."
   en: "This account unlocks in a way omapass does not support (SSO without a master password?)."
+bitwarden.unsafe_kdf:
+  pt-BR: "O servidor pediu parâmetros de derivação de chave fora dos limites seguros; o omapass não enviou a senha."
+  en: "The server asked for key derivation parameters outside the safe range; omapass did not send the password."
 bitwarden.unsupported_two_step:
   pt-BR: "Nenhum método de verificação em duas etapas suportado (use aplicativo autenticador, e-mail ou YubiKey OTP)."
   en: "No supported two-step method (use an authenticator app, e-mail or YubiKey OTP)."

@@ -61,7 +61,7 @@ std::optional<BwAccountState> load(const QString &refPath);
 bool save(const BwAccountState &state, QString *error);
 void remove(const QString &refPath);
 
-enum class Unlock { Ok, WrongPassword, Unsupported };
+enum class Unlock { Ok, WrongPassword, Unsupported, UnsafeKdf };
 
 // Derives the master key from the password and opens the user key and the
 // organisation keys.

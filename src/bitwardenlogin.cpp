@@ -133,6 +133,11 @@ Step runAttempt(const QString &server, const QString &email, const Secret &passw
         const QString salt = json.value(QStringLiteral("salt")).toString();
         prior.salt = salt.isEmpty() ? email.trimmed().toLower() : salt;
 
+        // Checked before anything is derived or sent: the hash that goes out
+        // is only as hard to reverse as the KDF the server asked for.
+        if ((prior.kdf.type == 0 || prior.kdf.type == 1) && !BwCrypto::kdfIsSafe(prior.kdf))
+            return failedStep(I18n::t(QStringLiteral("bitwarden.unsafe_kdf")), BwLoginError::Other);
+
         const std::optional<BwBytes> material = BwCrypto::deriveKdfMaterial(password, prior.salt, prior.kdf);
         const std::optional<BwKey> masterKey = material ? BwCrypto::stretchMasterKey(*material) : std::nullopt;
         if (!masterKey)

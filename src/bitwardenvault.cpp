@@ -148,6 +148,9 @@ BitwardenVault *BitwardenVault::unlock(const QString &refPath, const Secret &pas
     case BwAccount::Unlock::WrongPassword:
         *error = I18n::t(QStringLiteral("backend.wrong_password"));
         return nullptr;
+    case BwAccount::Unlock::UnsafeKdf:
+        *error = I18n::t(QStringLiteral("bitwarden.unsafe_kdf"));
+        return nullptr;
     case BwAccount::Unlock::Unsupported:
         break;
     }

@@ -63,8 +63,22 @@ int encStringType(const QString &encString, QString *body) {
 
 namespace BwCrypto {
 
+bool kdfIsSafe(const BwKdf &kdf) {
+    // The minimums the clients still accept at prelogin, for accounts made
+    // before the defaults went up; the maximums are the ones they let a user
+    // pick.
+    if (kdf.type == 0)
+        return kdf.iterations >= 5000 && kdf.iterations <= 2000000;
+    if (kdf.type == 1) {
+        return kdf.iterations >= 2 && kdf.iterations <= 10
+            && kdf.memory >= 16 && kdf.memory <= 1024
+            && kdf.parallelism >= 1 && kdf.parallelism <= 16;
+    }
+    return false;
+}
+
 std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &salt, const BwKdf &kdf) {
-    if (kdf.iterations <= 0)
+    if (!kdfIsSafe(kdf))
         return std::nullopt;
 
     const QByteArray saltBytes = salt.toUtf8();
@@ -82,8 +96,6 @@ std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &
         }
 
         if (kdf.type == 1) {
-            if (kdf.memory <= 0 || kdf.parallelism <= 0)
-                return std::nullopt;
             // Argon2 wants at least 16 bytes of salt, so Bitwarden salts it
             // with the SHA-256 of the e-mail instead of the e-mail itself.
             const auto sha256 = Botan::HashFunction::create_or_throw("SHA-256");
