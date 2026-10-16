@@ -1464,6 +1464,12 @@ QString KdbxDatabase::editEntry(const QString &oldPath, const QString &group, co
     if (!entry)
         return I18n::t(QStringLiteral("keepass.entry_not_found"), QStringLiteral("entry"), oldPath);
 
+    // Found before anything changes, so a destination that cannot be had
+    // leaves the entry exactly as it was.
+    XNode *destination = d->ensureGroup(group);
+    if (!destination)
+        return I18n::t(QStringLiteral("keepass.corrupt"));
+
     // The state before the edit goes to the entry's history, as KeePass does.
     const KdbxEntry before = Impl::read(*entry);
     const bool changed = before.title != data.title || before.username != data.username
@@ -1494,9 +1500,6 @@ QString KdbxDatabase::editEntry(const QString &oldPath, const QString &group, co
     if (changed)
         d->touch(*entry, QStringLiteral("LastModificationTime"));
 
-    XNode *destination = d->ensureGroup(group);
-    if (!destination)
-        return I18n::t(QStringLiteral("keepass.corrupt"));
     if (destination != parent) {
         std::unique_ptr<XNode> moved = parent->detach(entry);
         destination->children.push_back(std::move(moved));
