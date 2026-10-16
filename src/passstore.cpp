@@ -162,12 +162,18 @@ bool PassStore::show(const QString &entry, const Secret &passphrase, PassEntryDa
     QByteArray stdinData = passphrase.bytes();
     stdinData.append('\n');
 
+    // gpg's messages are matched below to tell a wrong passphrase from the
+    // rest, so they have to come out in English whatever the system speaks.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    env.insert(QStringLiteral("LANGUAGE"), QStringLiteral("C"));
+
     const ProcResult result = runProcess(QStringLiteral("gpg"),
                                          {QStringLiteral("--batch"), QStringLiteral("--no-tty"),
                                           QStringLiteral("--pinentry-mode"), QStringLiteral("loopback"),
                                           QStringLiteral("--passphrase-fd"), QStringLiteral("0"),
                                           QStringLiteral("-d"), QStringLiteral("--"), filePath},
-                                         stdinData);
+                                         stdinData, env);
     stdinData.fill('\0');
 
     if (!result.started) {
