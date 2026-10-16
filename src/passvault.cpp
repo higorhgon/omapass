@@ -1,8 +1,19 @@
 #include "passvault.h"
 
+#include "i18n.h"
 #include "passstore.h"
 
 namespace {
+
+// The password is the first line of the file, so a line break in it would
+// turn the rest into notes.
+bool singleLine(const EntryData &data, QString *error) {
+    if (!data.password.bytes().contains('\n') && !data.password.bytes().contains('\r'))
+        return true;
+    if (error)
+        *error = I18n::t(QStringLiteral("pass.multiline_password"));
+    return false;
+}
 
 PassEntryData toPassData(const EntryData &data) {
     PassEntryData pd;
@@ -51,11 +62,15 @@ bool PassVault::fetchEntry(const QString &entryPath, EntryData *data, QString *e
 
 bool PassVault::addEntry(const QString &entryPath, const QString & /*group*/, const EntryData &data,
                          QString *error) const {
+    if (!singleLine(data, error))
+        return false;
     return PassStore(path()).insert(entryPath, toPassData(data), error);
 }
 
 bool PassVault::editEntry(const QString &oldPath, const QString &newPath, const QString & /*group*/,
                           const EntryData &data, QString *error) const {
+    if (!singleLine(data, error))
+        return false;
     const PassStore store(path());
     if (!store.insert(oldPath, toPassData(data), error))
         return false;

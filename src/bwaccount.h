@@ -61,7 +61,7 @@ std::optional<BwAccountState> load(const QString &refPath);
 bool save(const BwAccountState &state, QString *error);
 void remove(const QString &refPath);
 
-enum class Unlock { Ok, WrongPassword, Unsupported };
+enum class Unlock { Ok, WrongPassword, Unsupported, UnsafeKdf };
 
 // Derives the master key from the password and opens the user key and the
 // organisation keys.
@@ -101,8 +101,10 @@ QJsonObject cipherRequest(const QJsonObject &encrypted, const QString &previousP
 // The body of a folder create or rename.
 QJsonObject folderRequest(const QString &name, const BwKey &user);
 
-// Everything at once: id → item, id → folder name.
+// Everything at once: id → item, id → folder name. `undecryptable`, when
+// given, counts the logins, SSH keys and folders that should have opened and
+// did not — left out of the maps, but not something to hide from the user.
 void decryptVault(const BwAccountState &state, const BwKeys &keys, QHash<QString, QJsonObject> *items,
-                  QHash<QString, QString> *folders);
+                  QHash<QString, QString> *folders, int *undecryptable = nullptr);
 
 }

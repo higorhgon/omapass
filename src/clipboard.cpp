@@ -3,6 +3,7 @@
 #include "process.h"
 
 #include <QClipboard>
+#include <QHash>
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QStandardPaths>
@@ -38,6 +39,18 @@ bool useWlCopy() {
     return wanted;
 }
 
+// The passwords whose timers have not fired yet, by copy number, so quitting
+// can clear them too: the timer dies with the process, and a clipboard
+// served by `wl-copy` does not.
+QHash<quint64, Secret> &pending() {
+    static QHash<quint64, Secret> secrets;
+    return secrets;
+}
+
+// Bumped on every scheduled clear. Only the latest copy's timer may clear
+// the clipboard — an earlier one would cut the newer copy's countdown short.
+quint64 latestCopy = 0;
+
 void clearClipboard() {
     if (useWlCopy()) {
         // `--clear` tells the compositor to drop the selection outright.
@@ -51,9 +64,93 @@ void clearClipboard() {
         clipboard->clear();
 }
 
+// Whether the clipboard still holds this password. Anything the user copied
+// since is theirs, and the timer leaves it alone.
+bool stillHolds(const Secret &password) {
+    if (useWlCopy()) {
+        if (QStandardPaths::findExecutable(QStringLiteral("wl-paste")).isEmpty())
+            return true;   // no way to look: clearing is the safe side
+
+        // Only an offer marked sensitive can be ours, which spares reading
+        // whatever else is there.
+        const ProcResult types = runProcess(QStringLiteral("wl-paste"), {QStringLiteral("--list-types")},
+                                            QByteArray(), QProcessEnvironment(), 5000);
+        if (!types.success || !types.out.split(QLatin1Char('\n')).contains(sensitiveHint))
+            return false;
+
+        ProcResult current = runProcess(QStringLiteral("wl-paste"),
+                                        {QStringLiteral("--no-newline"), QStringLiteral("--type"),
+                                         QStringLiteral("text/plain")},
+                                        QByteArray(), QProcessEnvironment(), 5000);
+        const bool same = current.success && current.out == password.toString();
+        current.out.fill(QChar(0));
+        return same;
+    }
+
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return false;
+    QString current = clipboard->text();
+    const bool same = current == password.toString();
+    current.fill(QChar(0));
+    return same;
+}
+
+// Fallback for wl-clipboard < 2.2.1, or a clipboard manager that ignores the
+// sensitive hint: deletes the password from cliphist's persisted history.
+// The entries are found by id, never by handing the password to cliphist —
+// an argument would put it in every process listing, and `delete-query`
+// would take along any other entry that merely contains it.
+void deleteFromHistory(const Secret &password) {
+    if (QStandardPaths::findExecutable(QStringLiteral("cliphist")).isEmpty())
+        return;
+
+    ProcResult listed = runProcess(QStringLiteral("cliphist"), {QStringLiteral("list")});
+    if (!listed.success)
+        return;
+
+    QString secret = password.toString();
+    QByteArray doomed;
+    const QStringList lines = listed.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString &line : lines) {
+        const int tab = line.indexOf(QLatin1Char('\t'));
+        if (tab <= 0 || !Clipboard::previewMayBe(line.mid(tab + 1), secret))
+            continue;
+
+        // The preview only narrows it down; the entry itself settles it.
+        ProcResult decoded = runProcess(QStringLiteral("cliphist"), {QStringLiteral("decode")},
+                                        line.toUtf8());
+        const bool same = decoded.success && decoded.out == secret;
+        decoded.out.fill(QChar(0));
+        if (same)
+            doomed += line.toUtf8() + '\n';
+    }
+    listed.out.fill(QChar(0));
+    secret.fill(QChar(0));
+
+    if (!doomed.isEmpty())
+        runProcess(QStringLiteral("cliphist"), {QStringLiteral("delete")}, doomed);
+    doomed.fill('\0');
+}
+
 }
 
 namespace Clipboard {
+
+bool previewMayBe(const QString &preview, const QString &secret) {
+    // cliphist shows whitespace collapsed, and a long entry cut short with
+    // an ellipsis after `-preview-width` (100) characters.
+    const QString flat = secret.simplified();
+    if (flat.isEmpty())
+        return false;
+    if (preview == flat)
+        return true;
+
+    const QString ellipsis = QStringLiteral("\u2026");
+    if (!preview.endsWith(ellipsis) || preview.size() <= ellipsis.size())
+        return false;
+    return flat.startsWith(preview.chopped(ellipsis.size()));
+}
 
 bool copy(const QString &text) {
     if (useWlCopy()) {
@@ -81,19 +178,33 @@ bool copy(const QString &text) {
 }
 
 void scheduleClear(const Secret &password) {
-    const Secret copyOfPassword = password;
-    QTimer::singleShot(clearSecs * 1000, [copyOfPassword]() {
-        clearClipboard();
-        if (!useWlCopy())
-            return;
-
-        // Fallback for wl-clipboard < 2.2.1, or a clipboard manager that
-        // ignores the sensitive hint: try to delete the entry from the
-        // persisted history. A no-op (and harmless) when cliphist is absent
-        // or the hint already kept the value from being stored.
-        runProcess(QStringLiteral("cliphist"),
-                   {QStringLiteral("delete-query"), copyOfPassword.toString()});
+    const quint64 copy = ++latestCopy;
+    pending().insert(copy, password);
+    QTimer::singleShot(clearSecs * 1000, [copy]() {
+        const Secret password = pending().take(copy);
+        if (password.isEmpty())
+            return;   // already handled on the way out
+        if (copy == latestCopy && stillHolds(password))
+            clearClipboard();
+        // A superseded copy still went into the history.
+        if (useWlCopy())
+            deleteFromHistory(password);
     });
+}
+
+void clearPending() {
+    if (pending().isEmpty())
+        return;
+    const QHash<quint64, Secret> secrets = pending();
+    pending().clear();
+
+    const Secret latest = secrets.value(latestCopy);
+    if (!latest.isEmpty() && stillHolds(latest))
+        clearClipboard();
+    if (useWlCopy()) {
+        for (const Secret &password : secrets)
+            deleteFromHistory(password);
+    }
 }
 
 }

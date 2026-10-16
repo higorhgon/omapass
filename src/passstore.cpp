@@ -17,7 +17,8 @@ QProcessEnvironment storeEnvironment(const QString &root) {
 }
 
 // Single entry point for every `pass` invocation, so failures are reported
-// the same way everywhere.
+// the same way everywhere. Callers put a `--` before any name that came from
+// the user, so an entry called "-r" is a name and not an option.
 bool runPass(const QString &root, const QStringList &args, const QByteArray &stdinData,
              QString *error) {
     const ProcResult result = runProcess(QStringLiteral("pass"), args, stdinData,
@@ -112,7 +113,7 @@ bool PassStore::initStore(const QString &root, const QString &gpgId, QString *er
 
     // `pass init` writes the .gpg-id and re-encrypts whatever is already
     // there — harmless on a store we just created empty.
-    return runPass(root, {QStringLiteral("init"), gpgId}, QByteArray(), error);
+    return runPass(root, {QStringLiteral("init"), QStringLiteral("--"), gpgId}, QByteArray(), error);
 }
 
 void PassStore::list(QStringList *entries, QStringList *groups) const {
@@ -123,16 +124,17 @@ void PassStore::list(QStringList *entries, QStringList *groups) const {
 
 bool PassStore::insert(const QString &entry, const PassEntryData &data, QString *error) const {
     return runPass(m_root,
-                   {QStringLiteral("insert"), QStringLiteral("-m"), QStringLiteral("-f"), entry},
+                   {QStringLiteral("insert"), QStringLiteral("-m"), QStringLiteral("-f"), QStringLiteral("--"),
+                    entry},
                    buildPassEntryContent(data), error);
 }
 
 bool PassStore::move(const QString &from, const QString &to, QString *error) const {
-    return runPass(m_root, {QStringLiteral("mv"), QStringLiteral("-f"), from, to}, QByteArray(), error);
+    return runPass(m_root, {QStringLiteral("mv"), QStringLiteral("-f"), QStringLiteral("--"), from, to}, QByteArray(), error);
 }
 
 bool PassStore::remove(const QString &entry, QString *error) const {
-    return runPass(m_root, {QStringLiteral("rm"), QStringLiteral("-f"), entry}, QByteArray(), error);
+    return runPass(m_root, {QStringLiteral("rm"), QStringLiteral("-f"), QStringLiteral("--"), entry}, QByteArray(), error);
 }
 
 // Uses `pass rm -r` rather than removing the directory ourselves: it clears
@@ -141,7 +143,7 @@ bool PassStore::remove(const QString &entry, QString *error) const {
 // visible entries and subgroups.
 bool PassStore::removeGroup(const QString &group, QString *error) const {
     return runPass(m_root,
-                   {QStringLiteral("rm"), QStringLiteral("-r"), QStringLiteral("-f"), group},
+                   {QStringLiteral("rm"), QStringLiteral("-r"), QStringLiteral("-f"), QStringLiteral("--"), group},
                    QByteArray(), error);
 }
 
@@ -160,12 +162,18 @@ bool PassStore::show(const QString &entry, const Secret &passphrase, PassEntryDa
     QByteArray stdinData = passphrase.bytes();
     stdinData.append('\n');
 
+    // gpg's messages are matched below to tell a wrong passphrase from the
+    // rest, so they have to come out in English whatever the system speaks.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    env.insert(QStringLiteral("LANGUAGE"), QStringLiteral("C"));
+
     const ProcResult result = runProcess(QStringLiteral("gpg"),
                                          {QStringLiteral("--batch"), QStringLiteral("--no-tty"),
                                           QStringLiteral("--pinentry-mode"), QStringLiteral("loopback"),
                                           QStringLiteral("--passphrase-fd"), QStringLiteral("0"),
-                                          QStringLiteral("-d"), filePath},
-                                         stdinData);
+                                          QStringLiteral("-d"), QStringLiteral("--"), filePath},
+                                         stdinData, env);
     stdinData.fill('\0');
 
     if (!result.started) {
@@ -217,6 +225,11 @@ PassEntryData parsePassEntry(const QString &content) {
 
     data.password = Secret(lines.first());
 
+    // Only the first username and url line fill the fields; a repeated one,
+    // and every blank line between notes, stays in `extra` so writing the
+    // entry back does not lose it.
+    bool haveUsername = false;
+    bool haveUrl = false;
     for (int i = 1; i < lines.size(); ++i) {
         const QString &line = lines.at(i);
         const QString lower = line.toLower();
@@ -225,17 +238,29 @@ PassEntryData parsePassEntry(const QString &content) {
             return line.mid(prefixLength).trimmed();
         };
 
+        int usernamePrefix = 0;
         if (lower.startsWith(QStringLiteral("username:")))
-            data.username = valueAfter(9);
+            usernamePrefix = 9;
         else if (lower.startsWith(QStringLiteral("user:")))
-            data.username = valueAfter(5);
+            usernamePrefix = 5;
         else if (lower.startsWith(QStringLiteral("login:")))
-            data.username = valueAfter(6);
-        else if (lower.startsWith(QStringLiteral("url:")))
+            usernamePrefix = 6;
+
+        if (usernamePrefix > 0 && !haveUsername) {
+            data.username = valueAfter(usernamePrefix);
+            haveUsername = true;
+        } else if (lower.startsWith(QStringLiteral("url:")) && !haveUrl) {
             data.url = valueAfter(4);
-        else if (!line.trimmed().isEmpty())
+            haveUrl = true;
+        } else {
             data.extra.append(line);
+        }
     }
+
+    // The newline that ends the file, and any blank lines before it, are
+    // not part of the notes.
+    while (!data.extra.isEmpty() && data.extra.last().trimmed().isEmpty())
+        data.extra.removeLast();
 
     return data;
 }

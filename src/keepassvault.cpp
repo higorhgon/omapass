@@ -70,6 +70,16 @@ bool KeepassVault::refresh(QString *error) const {
     return true;
 }
 
+// Reads memory back from the file, throwing away whatever an operation did
+// before it failed, so that the next successful one does not save it.
+void KeepassVault::rollback() const {
+    KdbxStatus status = KdbxStatus::Corrupt;
+    if (std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(path(), m_password, &status)) {
+        m_db = std::move(db);
+        stamp();
+    }
+}
+
 // Writes the in-memory database. When that fails the file is left as it was,
 // and memory is read back from it so the two do not drift.
 bool KeepassVault::commit(QString *error) const {
@@ -79,10 +89,17 @@ bool KeepassVault::commit(QString *error) const {
         return true;
     }
     *error = failure;
+    rollback();
+    return false;
+}
 
-    KdbxStatus status = KdbxStatus::Corrupt;
-    if (std::unique_ptr<KdbxDatabase> db = KdbxDatabase::open(path(), m_password, &status))
-        m_db = std::move(db);
+// The outcome of an operation on the in-memory database: saved when it
+// worked, rolled back when it did not.
+bool KeepassVault::finish(const QString &failure, QString *error) const {
+    if (failure.isEmpty())
+        return commit(error);
+    *error = failure;
+    rollback();
     return false;
 }
 
@@ -162,12 +179,7 @@ bool KeepassVault::addEntry(const QString &entryPath, const QString &group, cons
     entry.url = data.url;
     entry.notes = data.notes;
 
-    const QString failure = m_db->addEntry(group, entry);
-    if (!failure.isEmpty()) {
-        *error = failure;
-        return false;
-    }
-    return commit(error);
+    return finish(m_db->addEntry(group, entry), error);
 }
 
 bool KeepassVault::editEntry(const QString &oldPath, const QString &newPath, const QString &group,
@@ -183,46 +195,26 @@ bool KeepassVault::editEntry(const QString &oldPath, const QString &newPath, con
     entry.url = data.url;
     entry.notes = data.notes;
 
-    const QString failure = m_db->editEntry(oldPath, group, entry);
-    if (!failure.isEmpty()) {
-        *error = failure;
-        return false;
-    }
-    return commit(error);
+    return finish(m_db->editEntry(oldPath, group, entry), error);
 }
 
 bool KeepassVault::removeEntry(const QString &entryPath, QString *error) const {
     const QMutexLocker locker(&m_mutex);
     if (!refresh(error))
         return false;
-    const QString failure = m_db->removeEntry(entryPath);
-    if (!failure.isEmpty()) {
-        *error = failure;
-        return false;
-    }
-    return commit(error);
+    return finish(m_db->removeEntry(entryPath), error);
 }
 
 bool KeepassVault::renameGroup(const QString &oldGroup, const QString &newName, QString *error) const {
     const QMutexLocker locker(&m_mutex);
     if (!refresh(error))
         return false;
-    const QString failure = m_db->renameGroup(oldGroup, newName);
-    if (!failure.isEmpty()) {
-        *error = failure;
-        return false;
-    }
-    return commit(error);
+    return finish(m_db->renameGroup(oldGroup, newName), error);
 }
 
 bool KeepassVault::removeGroup(const QString &group, QString *error) const {
     const QMutexLocker locker(&m_mutex);
     if (!refresh(error))
         return false;
-    const QString failure = m_db->removeGroup(group);
-    if (!failure.isEmpty()) {
-        *error = failure;
-        return false;
-    }
-    return commit(error);
+    return finish(m_db->removeGroup(group), error);
 }

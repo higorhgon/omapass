@@ -40,10 +40,14 @@ constexpr auto encryptDirection = Botan::ENCRYPTION;
 constexpr quint32 signature1 = 0x9AA2D903;
 constexpr quint32 signature2 = 0xB54BFB67;
 
-// Guards against a hostile file asking for the moon.
+// Guards against a hostile file asking for the moon. The KDF runs before the
+// password can be checked, so its cost is capped too: about half a minute
+// on a current CPU at worst, far above what KeePass and KeePassXC pick when
+// they benchmark for one second.
 constexpr qint64 maxPlainSize = 512LL * 1024 * 1024;
 constexpr quint64 maxArgonKiB = 4ULL * 1024 * 1024;
-constexpr quint64 maxKdfRounds = 4000000000ULL;
+constexpr quint64 maxArgonWorkKiB = 64ULL * 1024 * 1024;   // iterations × memory
+constexpr quint64 maxKdfRounds = 1000000000ULL;
 constexpr int blockSize = 1024 * 1024;
 
 const QByteArray cipherAes = QByteArray::fromHex("31c1f2e6bf714350be5805216afc5aff");
@@ -95,6 +99,17 @@ Bytes hmacSha256(const Bytes &key, const QByteArray &a, const QByteArray &b = QB
     mac->update(reinterpret_cast<const uint8_t *>(b.constData()), size_t(b.size()));
     mac->update(reinterpret_cast<const uint8_t *>(c.constData()), size_t(c.size()));
     return Bytes(mac->final());
+}
+
+// Equality that takes as long however early the inputs differ, for MACs and
+// for the KDBX 3 start bytes, which are what a wrong password fails on.
+bool sameBytes(const QByteArray &a, const QByteArray &b) {
+    if (a.size() != b.size())
+        return false;
+    volatile quint8 difference = 0;
+    for (qsizetype i = 0; i < a.size(); ++i)
+        difference |= quint8(a[i]) ^ quint8(b[i]);
+    return difference == 0;
 }
 
 QByteArray le32(quint32 value) {
@@ -535,7 +550,8 @@ bool KdbxDatabase::Impl::transform(const Bytes &composite, QString *detail) {
         if (kdfId == kdfArgon2d || kdfId == kdfArgon2id) {
             const quint64 kib = argonMemory / 1024;
             if (kdfSalt.size() < 8 || argonParallelism == 0 || argonParallelism > 255 || argonIterations == 0
-                || argonIterations > 1000000 || kib < 8 || kib > maxArgonKiB) {
+                || argonIterations > 1000000 || kib < 8 || kib > maxArgonKiB
+                || argonIterations * kib > maxArgonWorkKiB) {
                 *detail = QStringLiteral("Argon2 parameters");
                 return false;
             }
@@ -1046,7 +1062,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
             return fail(KdbxStatus::Corrupt, QStringLiteral("header hash"));
         const Bytes headerKey = sha512(le64(0xFFFFFFFFFFFFFFFFULL), toArray(hmacKeyBase));
         const Bytes headerMac = hmacSha256(Bytes(headerKey.begin(), headerKey.begin() + 64), headerBytes);
-        if (toArray(headerMac) != storedMac)
+        if (!sameBytes(toArray(headerMac), storedMac))
             return fail(KdbxStatus::WrongPassword);
 
         Bytes cipherText;
@@ -1062,7 +1078,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
             const Bytes blockKey = sha512(le64(index), toArray(hmacKeyBase));
             const Bytes expected = hmacSha256(Bytes(blockKey.begin(), blockKey.begin() + 64), le64(index),
                                               le32(size), block);
-            if (toArray(expected) != blockMac)
+            if (!sameBytes(toArray(expected), blockMac))
                 return fail(KdbxStatus::Corrupt, QStringLiteral("block mac"));
             if (size == 0)
                 break;
@@ -1106,7 +1122,7 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
         if (!applyCipher(impl->cipherId, masterKey, toBytes(iv), &payload, false))
             return fail(KdbxStatus::WrongPassword);
         QByteArray plain = toArray(payload);
-        if (plain.left(32) != streamStart)
+        if (!sameBytes(plain.left(32), streamStart))
             return fail(KdbxStatus::WrongPassword);
 
         QByteArray blocks;
@@ -1162,59 +1178,71 @@ std::unique_ptr<KdbxDatabase> KdbxDatabase::open(const QString &path, const Secr
 
 std::unique_ptr<KdbxDatabase> KdbxDatabase::create(const Secret &password, const QString &name,
                                                    bool legacy) {
-    auto impl = std::make_unique<Impl>();
-    impl->major = legacy ? 3 : 4;
-    impl->minor = legacy ? 1 : 0;
-    impl->cipherId = cipherAes;
-    impl->kdfId = legacy ? kdfAes : kdfArgon2d;
-    impl->aesRounds = legacy ? 60000 : 0;
-    impl->kdfSalt = randomBytes(32);
-    impl->innerStreamId = legacy ? 2 : 3;
+    // The salt and every UUID come from the system generator, which throws
+    // when it fails: that is a database not created, not a crash.
+    const auto build = [&]() -> std::unique_ptr<KdbxDatabase> {
+        auto impl = std::make_unique<Impl>();
+        impl->major = legacy ? 3 : 4;
+        impl->minor = legacy ? 1 : 0;
+        impl->cipherId = cipherAes;
+        impl->kdfId = legacy ? kdfAes : kdfArgon2d;
+        // KDBX 3 is only written for files that must stay readable by old
+        // clients; it gets AES-KDF, at a cost in line with today's machines
+        // rather than the 60 000 rounds KeePass used to default to.
+        impl->aesRounds = legacy ? 2000000 : 0;
+        impl->kdfSalt = randomBytes(32);
+        impl->innerStreamId = legacy ? 2 : 3;
 
-    const Bytes composite = sha256(toArray(sha256(password.bytes())));
-    QString detail;
-    if (!impl->transform(composite, &detail))
+        const Bytes composite = sha256(toArray(sha256(password.bytes())));
+        QString detail;
+        if (!impl->transform(composite, &detail))
+            return nullptr;
+
+        const QString now = timeStamp(impl->binaryTimes());
+        impl->xml = std::make_unique<XNode>();
+        impl->xml->name = QStringLiteral("KeePassFile");
+        XNode *meta = impl->xml->add(QStringLiteral("Meta"));
+        meta->add(QStringLiteral("Generator"), QStringLiteral("omapass"));
+        meta->add(QStringLiteral("DatabaseName"), name);
+        meta->add(QStringLiteral("DatabaseNameChanged"), now);
+        meta->add(QStringLiteral("DatabaseDescription"));
+        meta->add(QStringLiteral("DatabaseDescriptionChanged"), now);
+        meta->add(QStringLiteral("DefaultUserName"));
+        meta->add(QStringLiteral("DefaultUserNameChanged"), now);
+        meta->add(QStringLiteral("MaintenanceHistoryDays"), QStringLiteral("365"));
+        meta->add(QStringLiteral("Color"));
+        meta->add(QStringLiteral("MasterKeyChanged"), now);
+        meta->add(QStringLiteral("MasterKeyChangeRec"), QStringLiteral("-1"));
+        meta->add(QStringLiteral("MasterKeyChangeForce"), QStringLiteral("-1"));
+        XNode *protection = meta->add(QStringLiteral("MemoryProtection"));
+        protection->add(QStringLiteral("ProtectTitle"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectUserName"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectPassword"), QStringLiteral("True"));
+        protection->add(QStringLiteral("ProtectURL"), QStringLiteral("False"));
+        protection->add(QStringLiteral("ProtectNotes"), QStringLiteral("False"));
+        meta->add(QStringLiteral("RecycleBinEnabled"), QStringLiteral("True"));
+        meta->add(QStringLiteral("RecycleBinUUID"), noUuid);
+        meta->add(QStringLiteral("RecycleBinChanged"), now);
+        meta->add(QStringLiteral("EntryTemplatesGroup"), noUuid);
+        meta->add(QStringLiteral("EntryTemplatesGroupChanged"), now);
+        meta->add(QStringLiteral("LastSelectedGroup"), noUuid);
+        meta->add(QStringLiteral("LastTopVisibleGroup"), noUuid);
+        meta->add(QStringLiteral("HistoryMaxItems"), QStringLiteral("10"));
+        meta->add(QStringLiteral("HistoryMaxSize"), QStringLiteral("6291456"));
+        meta->add(QStringLiteral("SettingsChanged"), now);
+        meta->add(QStringLiteral("CustomData"));
+
+        XNode *root = impl->xml->add(QStringLiteral("Root"));
+        root->children.push_back(impl->makeGroup(QStringLiteral("Root")));
+        root->add(QStringLiteral("DeletedObjects"));
+
+        return std::unique_ptr<KdbxDatabase>(new KdbxDatabase(std::move(impl)));
+    };
+    try {
+        return build();
+    } catch (const std::exception &) {
         return nullptr;
-
-    const QString now = timeStamp(impl->binaryTimes());
-    impl->xml = std::make_unique<XNode>();
-    impl->xml->name = QStringLiteral("KeePassFile");
-    XNode *meta = impl->xml->add(QStringLiteral("Meta"));
-    meta->add(QStringLiteral("Generator"), QStringLiteral("omapass"));
-    meta->add(QStringLiteral("DatabaseName"), name);
-    meta->add(QStringLiteral("DatabaseNameChanged"), now);
-    meta->add(QStringLiteral("DatabaseDescription"));
-    meta->add(QStringLiteral("DatabaseDescriptionChanged"), now);
-    meta->add(QStringLiteral("DefaultUserName"));
-    meta->add(QStringLiteral("DefaultUserNameChanged"), now);
-    meta->add(QStringLiteral("MaintenanceHistoryDays"), QStringLiteral("365"));
-    meta->add(QStringLiteral("Color"));
-    meta->add(QStringLiteral("MasterKeyChanged"), now);
-    meta->add(QStringLiteral("MasterKeyChangeRec"), QStringLiteral("-1"));
-    meta->add(QStringLiteral("MasterKeyChangeForce"), QStringLiteral("-1"));
-    XNode *protection = meta->add(QStringLiteral("MemoryProtection"));
-    protection->add(QStringLiteral("ProtectTitle"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectUserName"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectPassword"), QStringLiteral("True"));
-    protection->add(QStringLiteral("ProtectURL"), QStringLiteral("False"));
-    protection->add(QStringLiteral("ProtectNotes"), QStringLiteral("False"));
-    meta->add(QStringLiteral("RecycleBinEnabled"), QStringLiteral("True"));
-    meta->add(QStringLiteral("RecycleBinUUID"), noUuid);
-    meta->add(QStringLiteral("RecycleBinChanged"), now);
-    meta->add(QStringLiteral("EntryTemplatesGroup"), noUuid);
-    meta->add(QStringLiteral("EntryTemplatesGroupChanged"), now);
-    meta->add(QStringLiteral("LastSelectedGroup"), noUuid);
-    meta->add(QStringLiteral("LastTopVisibleGroup"), noUuid);
-    meta->add(QStringLiteral("HistoryMaxItems"), QStringLiteral("10"));
-    meta->add(QStringLiteral("HistoryMaxSize"), QStringLiteral("6291456"));
-    meta->add(QStringLiteral("SettingsChanged"), now);
-    meta->add(QStringLiteral("CustomData"));
-
-    XNode *root = impl->xml->add(QStringLiteral("Root"));
-    root->children.push_back(impl->makeGroup(QStringLiteral("Root")));
-    root->add(QStringLiteral("DeletedObjects"));
-
-    return std::unique_ptr<KdbxDatabase>(new KdbxDatabase(std::move(impl)));
+    }
 }
 
 QString KdbxDatabase::save(const QString &path) {
@@ -1436,6 +1464,12 @@ QString KdbxDatabase::editEntry(const QString &oldPath, const QString &group, co
     if (!entry)
         return I18n::t(QStringLiteral("keepass.entry_not_found"), QStringLiteral("entry"), oldPath);
 
+    // Found before anything changes, so a destination that cannot be had
+    // leaves the entry exactly as it was.
+    XNode *destination = d->ensureGroup(group);
+    if (!destination)
+        return I18n::t(QStringLiteral("keepass.corrupt"));
+
     // The state before the edit goes to the entry's history, as KeePass does.
     const KdbxEntry before = Impl::read(*entry);
     const bool changed = before.title != data.title || before.username != data.username
@@ -1466,9 +1500,6 @@ QString KdbxDatabase::editEntry(const QString &oldPath, const QString &group, co
     if (changed)
         d->touch(*entry, QStringLiteral("LastModificationTime"));
 
-    XNode *destination = d->ensureGroup(group);
-    if (!destination)
-        return I18n::t(QStringLiteral("keepass.corrupt"));
     if (destination != parent) {
         std::unique_ptr<XNode> moved = parent->detach(entry);
         destination->children.push_back(std::move(moved));

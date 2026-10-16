@@ -35,8 +35,16 @@ struct BwKdf {
 
 namespace BwCrypto {
 
+// Whether a KDF is one omapass knows (0 PBKDF2-SHA256, 1 Argon2id) with
+// parameters inside the range the official clients accept. The parameters
+// come from the server, so a hostile one could otherwise ask for a single
+// iteration — making the hash sent at login cheap to brute-force — or for
+// so much work that the application never returns.
+bool kdfIsSafe(const BwKdf &kdf);
+
 // The 32-byte master key before stretching, exactly what the SDK's
-// derive_kdf_material returns. Empty for an unknown KDF or bad parameters.
+// derive_kdf_material returns. Empty for an unknown KDF or parameters that
+// kdfIsSafe() refuses.
 std::optional<BwBytes> deriveKdfMaterial(const Secret &password, const QString &salt, const BwKdf &kdf);
 
 // derive_kdf_material followed by the HKDF-Expand "enc"/"mac" stretch.
@@ -63,7 +71,8 @@ std::optional<QString> decryptString(const QString &encString, const BwKey &key)
 // the vault's items and folders are written with, and omapass' own PIN store.
 std::optional<QString> encrypt(const QByteArray &plaintext, const BwKey &key);
 
-// Random bytes from the system generator, for a salt or an IV.
+// Random bytes from the system generator, for a salt or an IV. Empty when
+// the generator fails — callers check the size before using it.
 BwBytes randomBytes(int size);
 
 // Decrypts an EncString holding another 64-byte key.

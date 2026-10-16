@@ -148,6 +148,9 @@ BitwardenVault *BitwardenVault::unlock(const QString &refPath, const Secret &pas
     case BwAccount::Unlock::WrongPassword:
         *error = I18n::t(QStringLiteral("backend.wrong_password"));
         return nullptr;
+    case BwAccount::Unlock::UnsafeKdf:
+        *error = I18n::t(QStringLiteral("bitwarden.unsafe_kdf"));
+        return nullptr;
     case BwAccount::Unlock::Unsupported:
         break;
     }
@@ -276,8 +279,20 @@ bool BitwardenVault::sync(QString *error) {
 }
 
 void BitwardenVault::rebuild() const {
-    BwAccount::decryptVault(m_state, m_keys, &m_items, &m_folders);
+    BwAccount::decryptVault(m_state, m_keys, &m_items, &m_folders, &m_undecryptable);
     m_index = buildBwIndex(m_items, m_folders);
+}
+
+QString BitwardenVault::warning() const {
+    int undecryptable = 0;
+    {
+        const QMutexLocker locker(&m_mutex);
+        undecryptable = m_undecryptable;
+    }
+    if (undecryptable == 0)
+        return QString();
+    return I18n::t(QStringLiteral("bitwarden.undecryptable"), QStringLiteral("count"),
+                   QString::number(undecryptable));
 }
 
 void BitwardenVault::persist() const {

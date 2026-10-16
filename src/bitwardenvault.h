@@ -73,6 +73,7 @@ public:
     bool renameGroup(const QString &oldGroup, const QString &newName, QString *error) const override;
     bool removeGroup(const QString &group, QString *error) const override;
     void close() override;
+    QString warning() const override;
 
 private:
     BitwardenVault(const BwAccountState &state, const BwKeys &keys);
@@ -108,4 +109,5 @@ private:
     mutable QHash<QString, QJsonObject> m_items;  // id → decrypted item
     mutable QHash<QString, QString> m_folders;    // id → name
     mutable BwIndex m_index;
+    mutable int m_undecryptable = 0;              // left out by the last rebuild
 };

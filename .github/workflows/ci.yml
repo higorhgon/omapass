@@ -17,7 +17,8 @@ jobs:
           pacman -Syu --noconfirm --needed \
             base-devel git \
             qt6-base qt6-declarative qt6-tools \
-            botan zlib
+            botan zlib \
+            pass
 
       - uses: actions/checkout@v4
 
@@ -44,7 +45,8 @@ jobs:
             qml6-module-qttest qml6-module-qtquick qml6-module-qtquick-controls \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-workerscript \
-            libgl-dev libbotan-2-dev zlib1g-dev libxkbcommon-dev
+            libgl-dev libbotan-2-dev zlib1g-dev libxkbcommon-dev \
+            pass
 
       - name: Testa
         run: ./bin/test

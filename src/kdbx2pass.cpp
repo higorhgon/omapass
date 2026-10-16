@@ -88,7 +88,7 @@ QString run(const QString &dbPath, const QStringList &recipients) {
         return I18n::t(QStringLiteral("cli.kdbx2pass_usage"));
 
     // 1. Point the password store at the right recipients.
-    QString error = runPassCommand(QStringList{QStringLiteral("init")} + recipients, QByteArray());
+    QString error = runPassCommand(QStringList{QStringLiteral("init"), QStringLiteral("--")} + recipients, QByteArray());
     if (!error.isEmpty())
         return error;
 
@@ -142,7 +142,7 @@ QString run(const QString &dbPath, const QStringList &recipients) {
         stdOut().flush();
 
         const QString error = runPassCommand({QStringLiteral("insert"), QStringLiteral("-m"),
-                                QStringLiteral("-f"), entryPath},
+                                QStringLiteral("-f"), QStringLiteral("--"), entryPath},
                                content);
         content.fill('\0');
         if (!error.isEmpty())

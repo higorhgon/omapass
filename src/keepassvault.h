@@ -43,6 +43,8 @@ private:
     // Called with the mutex held.
     bool refresh(QString *error) const;
     bool commit(QString *error) const;
+    bool finish(const QString &failure, QString *error) const;
+    void rollback() const;
     void stamp() const;
 
     Secret m_password;

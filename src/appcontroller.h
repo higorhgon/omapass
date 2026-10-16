@@ -262,6 +262,7 @@ private:
     // password is asked for, off this thread.
     void checkAccountThenAsk(const DbRef &ref);
     void refreshEntries();
+    void showVaultWarning();
     void applyEntryFilter();
     void rebuildRows();
     void startMetaLoad();

@@ -1,4 +1,4 @@
-QT += core testlib network concurrent
+QT += core gui testlib network concurrent
 CONFIG += testcase c++20 link_pkgconfig
 # Botan 3 where the distribution has it (Arch), Botan 2 where it does not
 # (Ubuntu 24.04 LTS ships 2.19). Everything omapass asks of Botan exists in
@@ -19,12 +19,25 @@ TARGET = tst_omapass
 INCLUDEPATH += ../src
 
 SOURCES += \
-    tst_omapass.cpp \
+    main.cpp \
+    tst_bitwarden.cpp \
+    tst_clipboard.cpp \
+    tst_config.cpp \
+    tst_filter.cpp \
+    tst_generator.cpp \
+    tst_history.cpp \
+    tst_kdbx.cpp \
+    tst_onepassword.cpp \
+    tst_pass.cpp \
+    tst_pin.cpp \
+    tst_secret.cpp \
+    tst_sessionlock.cpp \
     ../src/bitwardenjson.cpp \
     ../src/bitwardenvault.cpp \
     ../src/bwcrypto.cpp \
     ../src/bwaccount.cpp \
     ../src/bwapi.cpp \
+    ../src/clipboard.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/generator.cpp \
@@ -41,13 +54,16 @@ SOURCES += \
     ../src/pin.cpp \
     ../src/process.cpp \
     ../src/secret.cpp \
+    ../src/sessionlock.cpp \
     ../src/vault.cpp
 
 HEADERS += \
+    support.h \
     ../src/bitwardenjson.h \
     ../src/bitwardenvault.h \
     ../src/bwaccount.h \
     ../src/bwapi.h \
+    ../src/clipboard.h \
     ../src/bwcrypto.h \
     ../src/config.h \
     ../src/filter.h \
@@ -65,6 +81,7 @@ HEADERS += \
     ../src/pin.h \
     ../src/process.h \
     ../src/secret.h \
+    ../src/sessionlock.h \
     ../src/vault.h
 
 RESOURCES += ../src/resources.qrc

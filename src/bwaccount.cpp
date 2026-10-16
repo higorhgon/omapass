@@ -150,7 +150,8 @@ std::optional<BwAccountState> BwAccount::load(const QString &path) {
 bool BwAccount::save(const BwAccountState &state, QString *error) {
     QDir dir;
     if (!dir.mkpath(directory())) {
-        *error = QStringLiteral("cannot create %1").arg(directory());
+        if (error)
+            *error = QStringLiteral("cannot create %1").arg(directory());
         return false;
     }
     QFile::setPermissions(directory(), QFileDevice::ReadOwner | QFileDevice::WriteOwner
@@ -175,13 +176,15 @@ bool BwAccount::save(const BwAccountState &state, QString *error) {
     // leaves half a vault behind.
     QSaveFile file(fileFor(refPath(state.email, state.server)));
     if (!file.open(QIODevice::WriteOnly)) {
-        *error = file.errorString();
+        if (error)
+            *error = file.errorString();
         return false;
     }
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
     if (!file.commit()) {
-        *error = file.errorString();
+        if (error)
+            *error = file.errorString();
         return false;
     }
     return true;
@@ -194,6 +197,8 @@ void BwAccount::remove(const QString &path) {
 BwAccount::Unlock BwAccount::unlock(const BwAccountState &state, const Secret &password, BwKeys *keys) {
     if (state.salt.isEmpty() || !state.userKey.startsWith(QLatin1String("2.")))
         return Unlock::Unsupported;
+    if ((state.kdf.type == 0 || state.kdf.type == 1) && !BwCrypto::kdfIsSafe(state.kdf))
+        return Unlock::UnsafeKdf;
 
     const std::optional<BwKey> masterKey = BwCrypto::deriveMasterKey(password, state.salt, state.kdf);
     if (!masterKey)
@@ -255,10 +260,15 @@ void BwAccount::applySync(BwAccountState *state, const QJsonObject &sync) {
     if (!unlock.isEmpty()) {
         const QJsonObject kdf = unlock.value(QStringLiteral("kdf")).toObject();
         if (kdf.contains(QStringLiteral("kdfType"))) {
-            state->kdf.type = kdf.value(QStringLiteral("kdfType")).toInt();
-            state->kdf.iterations = kdf.value(QStringLiteral("iterations")).toInt();
-            state->kdf.memory = kdf.value(QStringLiteral("memory")).toInt();
-            state->kdf.parallelism = kdf.value(QStringLiteral("parallelism")).toInt();
+            BwKdf synced;
+            synced.type = kdf.value(QStringLiteral("kdfType")).toInt();
+            synced.iterations = kdf.value(QStringLiteral("iterations")).toInt();
+            synced.memory = kdf.value(QStringLiteral("memory")).toInt();
+            synced.parallelism = kdf.value(QStringLiteral("parallelism")).toInt();
+            // A server that turns the KDF down to nothing does not get it
+            // saved: the next unlock keeps the parameters that worked.
+            if (BwCrypto::kdfIsSafe(synced))
+                state->kdf = synced;
         }
         const QString salt = unlock.value(QStringLiteral("salt")).toString();
         if (!salt.isEmpty())
@@ -435,21 +445,38 @@ QJsonObject BwAccount::folderRequest(const QString &name, const BwKey &user) {
 }
 
 void BwAccount::decryptVault(const BwAccountState &state, const BwKeys &keys,
-                             QHash<QString, QJsonObject> *items, QHash<QString, QString> *folders) {
+                             QHash<QString, QJsonObject> *items, QHash<QString, QString> *folders,
+                             int *undecryptable) {
     items->clear();
     folders->clear();
+    int failed = 0;
 
     for (const QJsonValue &value : state.folders) {
         const QJsonObject folder = value.toObject();
         const QString id = folder.value(QStringLiteral("id")).toString();
+        if (id.isEmpty())
+            continue;
         const QString name = decryptFolder(folder, keys.user);
-        if (!id.isEmpty() && !name.isEmpty())
+        if (name.isEmpty())
+            ++failed;
+        else
             folders->insert(id, name);
     }
 
     for (const QJsonValue &value : state.ciphers) {
         const QJsonObject cipher = value.toObject();
-        if (const std::optional<QJsonObject> item = decryptCipher(cipher, keys))
+        if (const std::optional<QJsonObject> item = decryptCipher(cipher, keys)) {
             items->insert(item->value(QStringLiteral("id")).toString(), *item);
+            continue;
+        }
+        // Other kinds and the trash are left out on purpose; only a login or
+        // an SSH key that should be listed counts as lost.
+        const int type = cipher.value(QStringLiteral("type")).toInt();
+        const QJsonValue deleted = cipher.value(QStringLiteral("deletedDate"));
+        if ((type == 1 || type == 5) && (deleted.isNull() || deleted.isUndefined()))
+            ++failed;
     }
+
+    if (undecryptable)
+        *undecryptable = failed;
 }

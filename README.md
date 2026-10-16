@@ -285,6 +285,14 @@ O PIN vale entre sessões e depois de reiniciar a máquina. Ele é removido quan
 com `Ctrl+I`, erra 5 vezes seguidas, sai da conta (`Ctrl+X`), ou quando a senha guardada deixa
 de abrir o banco — por exemplo depois de trocar a senha mestra, quando o omapass pede a nova.
 
+O limite de 5 erros vale **só pela interface do omapass**. Quem consegue ler o chaveiro (um
+programa rodando na sua sessão, com o chaveiro destravado) leva o dado cifrado e testa PINs
+offline, sem contador nenhum — e o próprio contador fica no `omapass.conf`, que o seu usuário
+edita. O que segura esse ataque são as 600.000 iterações de PBKDF2, uns 90 ms por tentativa:
+seis dígitos caem em cerca de um dia num único núcleo, e bem mais rápido numa GPU. Por isso o
+aviso de PIN fraco é um piso, não uma garantia; para algo mais forte, use letras e símbolos
+(veja [Segurança](#segurança)).
+
 Quem já usava o PIN só do Bitwarden não precisa refazer nada: o PIN guardado é movido para a
 chave nova na primeira vez que o banco é aberto.
 
