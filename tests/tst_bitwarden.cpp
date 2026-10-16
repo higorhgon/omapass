@@ -8,6 +8,51 @@
 #include "bwcrypto.h"
 #include "i18n.h"
 
+#include <QTcpServer>
+#include <QTcpSocket>
+
+namespace {
+
+// An HTTP server on localhost that answers every request with one canned
+// response and keeps what it was sent. BwApi waits in a nested event loop on
+// this same thread, which is what serves the socket meanwhile.
+struct FakeHttpServer {
+    QTcpServer server;
+    QByteArray response;
+    QByteArray lastRequest;
+
+    explicit FakeHttpServer(int status, const QByteArray &body) {
+        response = "HTTP/1.1 " + QByteArray::number(status) + " Status\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Content-Length: " + QByteArray::number(body.size()) + "\r\n"
+                   "Connection: close\r\n\r\n" + body;
+        server.listen(QHostAddress::LocalHost);
+        QObject::connect(&server, &QTcpServer::newConnection, &server, [this]() {
+            QTcpSocket *socket = server.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [this, socket]() {
+                lastRequest += socket->readAll();
+                const qsizetype headerEnd = lastRequest.indexOf("\r\n\r\n");
+                if (headerEnd < 0)
+                    return;
+                qsizetype length = 0;
+                for (const QByteArray &line : lastRequest.left(headerEnd).split('\n')) {
+                    if (line.toLower().startsWith("content-length:"))
+                        length = line.mid(15).trimmed().toLongLong();
+                }
+                if (lastRequest.size() < headerEnd + 4 + length)
+                    return;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        });
+    }
+
+    QString url() const { return QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()); }
+};
+
+}
+
 class TestBitwarden : public QObject {
     Q_OBJECT
 
@@ -381,6 +426,63 @@ private slots:
         weak.kdf = kdf(0, 1);
         BwKeys keys;
         QCOMPARE(BwAccount::unlock(weak, Secret(QStringLiteral("x")), &keys), BwAccount::Unlock::UnsafeKdf);
+    }
+
+    void bitwardenApiCallSendsTheTokenAndReadsCamelCase() {
+        FakeHttpServer server(200, R"({"Id": "u1", "Profile": {"Name": "Fulano"}})");
+        QVERIFY(server.server.isListening());
+
+        const BwResponse response =
+            BwApi::call(server.url(), "GET", QStringLiteral("/sync"), Secret(QStringLiteral("o-token")));
+        QVERIFY2(response.ok(), qPrintable(response.networkError));
+        QCOMPARE(response.json.value("id").toString(), QStringLiteral("u1"));
+        QCOMPARE(response.json.value("profile").toObject().value("name").toString(), QStringLiteral("Fulano"));
+
+        QVERIFY(server.lastRequest.startsWith("GET /api/sync "));
+        QVERIFY(server.lastRequest.contains("Authorization: Bearer o-token\r\n"));
+        QVERIFY(server.lastRequest.contains("Device-Type: 25\r\n"));
+        QVERIFY(server.lastRequest.contains("Cache-Control: no-store\r\n"));
+    }
+
+    void bitwardenApiTokenSendsAnEncodedForm() {
+        FakeHttpServer server(200, R"({"access_token": "a"})");
+        const BwApi::Form form{{QStringLiteral("grant_type"), QStringLiteral("password")},
+                               {QStringLiteral("username"), QStringLiteral("a@b.com")},
+                               {QStringLiteral("password"), QStringLiteral("a+b&c=d")}};
+        const BwResponse response = BwApi::token(server.url(), form);
+        QVERIFY2(response.ok(), qPrintable(response.networkError));
+
+        QVERIFY(server.lastRequest.startsWith("POST /identity/connect/token "));
+        const QByteArray body = server.lastRequest.mid(server.lastRequest.indexOf("\r\n\r\n") + 4);
+        const QList<QByteArray> fields = body.split('&');
+        QVERIFY(fields.contains("grant_type=password"));
+        QVERIFY(fields.contains("username=a%40b.com"));
+        // A '+' or '&' in the hash must not change what the server reads.
+        QVERIFY(fields.contains("password=a%2Bb%26c%3Dd"));
+        QVERIFY(fields.contains("client_id=cli"));
+        QVERIFY(fields.contains("deviceIdentifier=" + BwApi::deviceIdentifier().toLatin1()));
+    }
+
+    void bitwardenApiErrorsCarryTheServerMessage() {
+        FakeHttpServer server(400, R"({"error": "invalid_grant", "ErrorModel": {"Message": "Senha errada."}})");
+        const BwResponse response = BwApi::token(server.url(), {});
+        QVERIFY(!response.ok());
+        QCOMPARE(response.failure, BwResponse::Failure::Http);
+        QCOMPARE(response.status, 400);
+        QCOMPARE(response.message(), QStringLiteral("Senha errada."));
+    }
+
+    void bitwardenApiWithNobodyListeningIsUnreachable() {
+        quint16 port = 0;
+        {
+            QTcpServer closed;
+            QVERIFY(closed.listen(QHostAddress::LocalHost));
+            port = closed.serverPort();
+        }
+        const BwResponse response =
+            BwApi::call(QStringLiteral("http://127.0.0.1:%1").arg(port), "GET", QStringLiteral("/sync"), Secret());
+        QCOMPARE(response.failure, BwResponse::Failure::Unreachable);
+        QCOMPARE(response.status, 0);
     }
 
     void bitwardenSyncDoesNotTakeAWeakerKdf() {
