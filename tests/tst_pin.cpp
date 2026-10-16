@@ -3,12 +3,123 @@
 #include "support.h"
 
 #include "pin.h"
-#include "bwcrypto.h"
+#include "process.h"
+
+#include <QSettings>
 
 class TestPin : public QObject {
     Q_OBJECT
 
 private slots:
+    void pinStoresAndRecoversThePassword() {
+        FakeSecretTool keyring;
+        const QString vault = QStringLiteral("/home/user/cofre.kdbx");
+        QVERIFY(Pin::isAvailable());
+        QVERIFY(!Pin::hasPin(vault));
+
+        QString error;
+        QVERIFY2(Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("senha-mestra")), &error),
+                 qPrintable(error));
+        QVERIFY(Pin::hasPin(vault));
+
+        Secret password;
+        QCOMPARE(Pin::recover(vault, QStringLiteral("482916"), &password), Pin::Result::Ok);
+        QCOMPARE(password.toString(), QStringLiteral("senha-mestra"));
+
+        // A wrong PIN fails the MAC and leaves nothing behind.
+        Secret untouched;
+        QCOMPARE(Pin::recover(vault, QStringLiteral("482917"), &untouched), Pin::Result::WrongPin);
+        QVERIFY(untouched.isEmpty());
+
+        // Neither the PIN nor the password went through argv.
+        const QString arguments = keyring.arguments();
+        QVERIFY(!arguments.isEmpty());
+        QVERIFY(!arguments.contains(QStringLiteral("482916")));
+        QVERIFY(!arguments.contains(QStringLiteral("senha-mestra")));
+    }
+
+    void pinIsDeletedAfterTooManyWrongTries() {
+        FakeSecretTool keyring;
+        const QString vault = QStringLiteral("/home/user/cofre.kdbx");
+        QString error;
+        QVERIFY2(Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("x")), &error),
+                 qPrintable(error));
+
+        for (int attempt = 1; attempt < Pin::maxAttempts; ++attempt) {
+            QCOMPARE(Pin::registerFailure(vault), Pin::maxAttempts - attempt);
+            QCOMPARE(Pin::failedAttempts(vault), attempt);
+            QVERIFY(Pin::hasPin(vault));
+        }
+        QCOMPARE(Pin::registerFailure(vault), 0);
+        QVERIFY(!Pin::hasPin(vault));
+        QCOMPARE(Pin::failedAttempts(vault), 0);
+
+        Secret password;
+        QCOMPARE(Pin::recover(vault, QStringLiteral("482916"), &password), Pin::Result::Missing);
+    }
+
+    void pinStoredAgainStartsTheCountOver() {
+        FakeSecretTool keyring;
+        const QString vault = QStringLiteral("/home/user/cofre.kdbx");
+        QString error;
+        QVERIFY(Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("x")), &error));
+        Pin::registerFailure(vault);
+        Pin::registerFailure(vault);
+        QCOMPARE(Pin::failedAttempts(vault), 2);
+
+        QVERIFY(Pin::store(vault, QStringLiteral("739105"), Secret(QStringLiteral("x")), &error));
+        QCOMPARE(Pin::failedAttempts(vault), 0);
+        Pin::clear(vault);
+        QVERIFY(!Pin::hasPin(vault));
+    }
+
+    void pinWithoutAKeyringIsUnavailable() {
+        const QTemporaryDir empty;
+        const PathOverride path(QFile::encodeName(empty.path()));
+        QVERIFY(!Pin::isAvailable());
+
+        const QString vault = QStringLiteral("/home/user/cofre.kdbx");
+        QVERIFY(!Pin::hasPin(vault));
+        QString error;
+        QVERIFY(!Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("x")), &error));
+        QVERIFY(!error.isEmpty());
+        // Called without somewhere to put the reason, it still just fails.
+        QVERIFY(!Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("x")), nullptr));
+
+        Secret password;
+        QCOMPARE(Pin::recover(vault, QStringLiteral("482916"), &password), Pin::Result::Unavailable);
+    }
+
+    void pinFromBeforePerDatabaseIsMovedOver() {
+        FakeSecretTool keyring;
+        const QString vault = QStringLiteral("bitwarden:pessoa@exemplo.com");
+        QString error;
+        QVERIFY(Pin::store(vault, QStringLiteral("482916"), Secret(QStringLiteral("senha")), &error));
+
+        // Put the blob where the single-account version kept it.
+        const QStringList current = {QStringLiteral("service"), QStringLiteral("omapass"),
+                                     QStringLiteral("account"), Pin::accountAttribute(vault)};
+        const QStringList legacy = {QStringLiteral("service"), QStringLiteral("omapass"),
+                                    QStringLiteral("account"), QStringLiteral("bitwarden-pin:pessoa@exemplo.com")};
+        const ProcResult blob = runProcess(QStringLiteral("secret-tool"), QStringList{QStringLiteral("lookup")} + current);
+        QVERIFY(blob.success);
+        runProcess(QStringLiteral("secret-tool"), QStringList{QStringLiteral("clear")} + current);
+        QVERIFY(runProcess(QStringLiteral("secret-tool"),
+                           QStringList{QStringLiteral("store"), QStringLiteral("--label"), QStringLiteral("x")} + legacy,
+                           blob.out.toUtf8()).success);
+        QSettings().setValue(QStringLiteral("bitwarden/pinAttempts"), 2);
+
+        Secret password;
+        QCOMPARE(Pin::recover(vault, QStringLiteral("482916"), &password), Pin::Result::Ok);
+        QCOMPARE(password.toString(), QStringLiteral("senha"));
+        QVERIFY(!runProcess(QStringLiteral("secret-tool"), QStringList{QStringLiteral("lookup")} + legacy).success);
+        QVERIFY(runProcess(QStringLiteral("secret-tool"), QStringList{QStringLiteral("lookup")} + current).success);
+        QCOMPARE(Pin::failedAttempts(vault), 2);
+        QVERIFY(!QSettings().contains(QStringLiteral("bitwarden/pinAttempts")));
+
+        Pin::clear(vault);
+    }
+
     void pinBlobRoundTrips() {
         const Pin::Blob blob{QStringLiteral("c2FsdA=="), 600000,
                                QStringLiteral("2.aXY=|Y3Q=|bWFj")};

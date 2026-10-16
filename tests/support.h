@@ -154,6 +154,41 @@ struct FakeOp {
     bool signedIn() const { return QFile::exists(sessionFile()); }
 };
 
+// The fake `secret-tool` (tests/fakes/secret-tool) ahead of any real one,
+// keeping its "keyring" in a directory of the test's own.
+struct FakeSecretTool {
+    QTemporaryDir directory;
+    QByteArray originalPath;
+
+    FakeSecretTool() {
+        originalPath = qgetenv("PATH");
+        qputenv("PATH", QByteArray(OMAPASS_FAKE_CLIS ":") + originalPath);
+        qputenv("SECRET_TOOL_FAKE_DIR", QFile::encodeName(directory.path()));
+    }
+
+    ~FakeSecretTool() {
+        qputenv("PATH", originalPath);
+        qunsetenv("SECRET_TOOL_FAKE_DIR");
+    }
+
+    // Every command line the fake was run with, one per line.
+    QString arguments() const {
+        QFile file(directory.filePath(QStringLiteral("argv.log")));
+        return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    }
+};
+
+// PATH replaced for the lifetime of the object, for the cases where a
+// program has to be missing.
+struct PathOverride {
+    QByteArray originalPath;
+
+    explicit PathOverride(const QByteArray &path) : originalPath(qgetenv("PATH")) {
+        qputenv("PATH", path);
+    }
+    ~PathOverride() { qputenv("PATH", originalPath); }
+};
+
 inline QByteArray opFixture(const char *name) {
     QFile file(QStringLiteral(OMAPASS_OP_FIXTURES "/") + QLatin1String(name));
     if (!file.open(QIODevice::ReadOnly))
