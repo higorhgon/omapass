@@ -4,12 +4,139 @@
 
 #include "kdbx.h"
 #include "kdbx2pass.h"
+#include "keepassvault.h"
 #include "process.h"
+
+#include <QElapsedTimer>
+
+#include <memory>
+
+namespace {
+
+// A small KDBX 4 database written to `path`, opened with "senha".
+QByteArray writeSample(const QString &path) {
+    auto db = KdbxDatabase::create(Secret(QStringLiteral("senha")), QStringLiteral("Amostra"));
+    if (!db)
+        return QByteArray();
+    KdbxEntry entry;
+    entry.title = QStringLiteral("Gmail");
+    entry.username = QStringLiteral("ana");
+    entry.password = Secret(QStringLiteral("antiga"));
+    entry.notes = QString(4000, QLatin1Char('n'));   // enough for a real block
+    if (!db->addEntry(QStringLiteral("Email"), entry).isEmpty() || !db->save(path).isEmpty())
+        return QByteArray();
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+bool writeBytes(const QString &path, const QByteArray &bytes) {
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(bytes) == bytes.size();
+}
+
+}
 
 class TestKdbx : public QObject {
     Q_OBJECT
 
 private slots:
+    void kdbxTruncatedFilesAreRefusedNotCrashedOn() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("t.kdbx"));
+        const QByteArray original = writeSample(path);
+        QVERIFY(!original.isEmpty());
+
+        for (const qsizetype size : {qsizetype(0), qsizetype(4), qsizetype(12), qsizetype(100),
+                                     original.size() / 2, original.size() - 1}) {
+            QVERIFY(writeBytes(path, original.left(size)));
+            KdbxStatus status = KdbxStatus::Ok;
+            QVERIFY2(!KdbxDatabase::open(path, Secret(QStringLiteral("senha")), &status),
+                     qPrintable(QStringLiteral("opened at %1 bytes").arg(size)));
+            QVERIFY(status != KdbxStatus::Ok);
+        }
+    }
+
+    void kdbxTamperedPayloadIsCorruptNotAWrongPassword() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("t.kdbx"));
+        QByteArray bytes = writeSample(path);
+        QVERIFY(!bytes.isEmpty());
+
+        // A bit flipped in the encrypted data, past the header: the right
+        // password still opens the header, and the block MAC catches it.
+        bytes[bytes.size() - 40] = char(bytes[bytes.size() - 40] ^ 0x01);
+        QVERIFY(writeBytes(path, bytes));
+        KdbxStatus status = KdbxStatus::Ok;
+        QVERIFY(!KdbxDatabase::open(path, Secret(QStringLiteral("senha")), &status));
+        QCOMPARE(status, KdbxStatus::Corrupt);
+    }
+
+    void kdbxArgon2AboveTheCostCapIsRefusedBeforeDeriving() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("t.kdbx"));
+        QByteArray bytes = writeSample(path);
+        QVERIFY(!bytes.isEmpty());
+
+        // The "I" (iterations) entry of the KDF parameters: type 0x05
+        // (UInt64), a one-byte name, eight bytes of value.
+        const QByteArray marker = QByteArray::fromHex("0501000000") + "I" + QByteArray::fromHex("08000000");
+        const qsizetype at = bytes.indexOf(marker);
+        QVERIFY(at > 0);
+        const quint64 iterations = 100000;   // × 64 MiB: hours of Argon2
+        for (int i = 0; i < 8; ++i)
+            bytes[at + marker.size() + i] = char((iterations >> (8 * i)) & 0xFF);
+        QVERIFY(writeBytes(path, bytes));
+
+        QElapsedTimer timer;
+        timer.start();
+        KdbxStatus status = KdbxStatus::Ok;
+        QString detail;
+        QVERIFY(!KdbxDatabase::open(path, Secret(QStringLiteral("senha")), &status, &detail));
+        QCOMPARE(status, KdbxStatus::Unsupported);
+        QCOMPARE(detail, QStringLiteral("Argon2 parameters"));
+        QVERIFY(timer.elapsed() < 5000);
+    }
+
+    void kdbxFailedSaveLeavesMemoryAsTheFileIs() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("t.kdbx"));
+        QVERIFY(!writeSample(path).isEmpty());
+
+        QString error;
+        const std::unique_ptr<KeepassVault> vault(KeepassVault::unlock(path, Secret(QStringLiteral("senha")), &error));
+        QVERIFY2(vault, qPrintable(error));
+
+        // A directory nobody can write to: QSaveFile cannot even start.
+        QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        if (QFileInfo(dir.path()).isWritable()) {
+            QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            QSKIP("running with permissions that ignore the directory mode");
+        }
+        EntryData changed;
+        changed.username = QStringLiteral("ana");
+        changed.password = Secret(QStringLiteral("nova"));
+        QVERIFY(!vault->editEntry(QStringLiteral("Email/Gmail"), QStringLiteral("Email/Gmail"),
+                                  QStringLiteral("Email"), changed, &error));
+        QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+
+        // The edit that did not reach the file is not in memory either...
+        EntryData data;
+        QVERIFY(vault->fetchEntry(QStringLiteral("Email/Gmail"), &data, &error));
+        QCOMPARE(data.password.toString(), QStringLiteral("antiga"));
+
+        // ...so the next save that works does not carry it along.
+        EntryData other;
+        other.password = Secret(QStringLiteral("x"));
+        QVERIFY2(vault->addEntry(QStringLiteral("Email/Outro"), QStringLiteral("Email"), other, &error),
+                 qPrintable(error));
+        KdbxStatus status = KdbxStatus::Corrupt;
+        const auto reread = KdbxDatabase::open(path, Secret(QStringLiteral("senha")), &status);
+        QVERIFY(reread);
+        KdbxEntry entry;
+        QVERIFY(reread->entry(QStringLiteral("Email/Gmail"), &entry));
+        QCOMPARE(entry.password.toString(), QStringLiteral("antiga"));
+    }
+
     void kdbxRoundTripsEntriesGroupsAndHistory() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
