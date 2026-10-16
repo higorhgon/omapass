@@ -18,7 +18,8 @@ bool copy(const QString &text);
 bool previewMayBe(const QString &preview, const QString &secret);
 
 // Wipes the clipboard once `clearSecs` have passed, on the event loop rather
-// than a thread.
+// than a thread — unless something else was copied meanwhile, or the same
+// password again, which restarts the countdown.
 void scheduleClear(const Secret &password);
 
 // Clears now what scheduleClear is still waiting on, if anything. Called on

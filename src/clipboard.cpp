@@ -3,6 +3,7 @@
 #include "process.h"
 
 #include <QClipboard>
+#include <QHash>
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QStandardPaths>
@@ -38,13 +39,17 @@ bool useWlCopy() {
     return wanted;
 }
 
-// The password the timer is waiting to clear, so quitting can clear it too:
-// the timer dies with the process, and a clipboard served by `wl-copy` does
-// not.
-Secret &pending() {
-    static Secret secret;
-    return secret;
+// The passwords whose timers have not fired yet, by copy number, so quitting
+// can clear them too: the timer dies with the process, and a clipboard
+// served by `wl-copy` does not.
+QHash<quint64, Secret> &pending() {
+    static QHash<quint64, Secret> secrets;
+    return secrets;
 }
+
+// Bumped on every scheduled clear. Only the latest copy's timer may clear
+// the clipboard — an earlier one would cut the newer copy's countdown short.
+quint64 latestCopy = 0;
 
 void clearClipboard() {
     if (useWlCopy()) {
@@ -57,6 +62,38 @@ void clearClipboard() {
 
     if (QClipboard *clipboard = QGuiApplication::clipboard())
         clipboard->clear();
+}
+
+// Whether the clipboard still holds this password. Anything the user copied
+// since is theirs, and the timer leaves it alone.
+bool stillHolds(const Secret &password) {
+    if (useWlCopy()) {
+        if (QStandardPaths::findExecutable(QStringLiteral("wl-paste")).isEmpty())
+            return true;   // no way to look: clearing is the safe side
+
+        // Only an offer marked sensitive can be ours, which spares reading
+        // whatever else is there.
+        const ProcResult types = runProcess(QStringLiteral("wl-paste"), {QStringLiteral("--list-types")},
+                                            QByteArray(), QProcessEnvironment(), 5000);
+        if (!types.success || !types.out.split(QLatin1Char('\n')).contains(sensitiveHint))
+            return false;
+
+        ProcResult current = runProcess(QStringLiteral("wl-paste"),
+                                        {QStringLiteral("--no-newline"), QStringLiteral("--type"),
+                                         QStringLiteral("text/plain")},
+                                        QByteArray(), QProcessEnvironment(), 5000);
+        const bool same = current.success && current.out == password.toString();
+        current.out.fill(QChar(0));
+        return same;
+    }
+
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return false;
+    QString current = clipboard->text();
+    const bool same = current == password.toString();
+    current.fill(QChar(0));
+    return same;
 }
 
 // Fallback for wl-clipboard < 2.2.1, or a clipboard manager that ignores the
@@ -141,23 +178,33 @@ bool copy(const QString &text) {
 }
 
 void scheduleClear(const Secret &password) {
-    pending() = password;
-    const Secret copyOfPassword = password;
-    QTimer::singleShot(clearSecs * 1000, [copyOfPassword]() {
-        clearClipboard();
+    const quint64 copy = ++latestCopy;
+    pending().insert(copy, password);
+    QTimer::singleShot(clearSecs * 1000, [copy]() {
+        const Secret password = pending().take(copy);
+        if (password.isEmpty())
+            return;   // already handled on the way out
+        if (copy == latestCopy && stillHolds(password))
+            clearClipboard();
+        // A superseded copy still went into the history.
         if (useWlCopy())
-            deleteFromHistory(copyOfPassword);
-        pending().clear();
+            deleteFromHistory(password);
     });
 }
 
 void clearPending() {
     if (pending().isEmpty())
         return;
-    clearClipboard();
-    if (useWlCopy())
-        deleteFromHistory(pending());
+    const QHash<quint64, Secret> secrets = pending();
     pending().clear();
+
+    const Secret latest = secrets.value(latestCopy);
+    if (!latest.isEmpty() && stillHolds(latest))
+        clearClipboard();
+    if (useWlCopy()) {
+        for (const Secret &password : secrets)
+            deleteFromHistory(password);
+    }
 }
 
 }
