@@ -329,6 +329,9 @@ pass.gpg_wait_error:
 pass.gpg_loopback_not_configured:
   pt-BR: "GPG não configurado para loopback.\nAdicione 'allow-loopback-pinentry' em ~/.gnupg/gpg-agent.conf\ne recarregue: gpg-connect-agent reloadagent /bye"
   en: "GPG is not configured for loopback.\nAdd 'allow-loopback-pinentry' to ~/.gnupg/gpg-agent.conf\nand reload: gpg-connect-agent reloadagent /bye"
+pass.multiline_password:
+  pt-BR: "No pass a senha é a primeira linha do arquivo; ela não pode ter quebra de linha."
+  en: "In pass the password is the first line of the file; it cannot contain a line break."
 pass.wrong_gpg_password:
   pt-BR: "Senha GPG incorreta!"
   en: "Wrong GPG password!"

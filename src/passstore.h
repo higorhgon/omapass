@@ -17,6 +17,8 @@
 // The conventional pass entry layout: line 1 is the password, the lines after
 // it are "key: value" metadata. Lines we do not model are kept verbatim in
 // `extra` so another tool's data (an OTP seed, say) survives an edit here.
+// An entry of the store: the password on the first line, then `username:`
+// and `url:` lines, then anything else, kept verbatim in `extra`.
 struct PassEntryData {
     Secret password;
     QString username;

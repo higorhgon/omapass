@@ -219,6 +219,11 @@ PassEntryData parsePassEntry(const QString &content) {
 
     data.password = Secret(lines.first());
 
+    // Only the first username and url line fill the fields; a repeated one,
+    // and every blank line between notes, stays in `extra` so writing the
+    // entry back does not lose it.
+    bool haveUsername = false;
+    bool haveUrl = false;
     for (int i = 1; i < lines.size(); ++i) {
         const QString &line = lines.at(i);
         const QString lower = line.toLower();
@@ -227,17 +232,29 @@ PassEntryData parsePassEntry(const QString &content) {
             return line.mid(prefixLength).trimmed();
         };
 
+        int usernamePrefix = 0;
         if (lower.startsWith(QStringLiteral("username:")))
-            data.username = valueAfter(9);
+            usernamePrefix = 9;
         else if (lower.startsWith(QStringLiteral("user:")))
-            data.username = valueAfter(5);
+            usernamePrefix = 5;
         else if (lower.startsWith(QStringLiteral("login:")))
-            data.username = valueAfter(6);
-        else if (lower.startsWith(QStringLiteral("url:")))
+            usernamePrefix = 6;
+
+        if (usernamePrefix > 0 && !haveUsername) {
+            data.username = valueAfter(usernamePrefix);
+            haveUsername = true;
+        } else if (lower.startsWith(QStringLiteral("url:")) && !haveUrl) {
             data.url = valueAfter(4);
-        else if (!line.trimmed().isEmpty())
+            haveUrl = true;
+        } else {
             data.extra.append(line);
+        }
     }
+
+    // The newline that ends the file, and any blank lines before it, are
+    // not part of the notes.
+    while (!data.extra.isEmpty() && data.extra.last().trimmed().isEmpty())
+        data.extra.removeLast();
 
     return data;
 }
