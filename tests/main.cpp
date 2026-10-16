@@ -15,6 +15,18 @@ QList<std::pair<QByteArray, TestFactory>> &testRegistry() {
 }
 
 int main(int argc, char **argv) {
+    // Settings, saved accounts and anything else written under the user's
+    // directories go to a throwaway home of the run's own, never to the real
+    // one: the PIN tests count failures in QSettings, and the Bitwarden ones
+    // save accounts. Set before anything has asked QStandardPaths.
+    QTemporaryDir home;
+    if (!home.isValid())
+        qFatal("cannot create a temporary home for the tests");
+    for (const char *variable : {"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"})
+        qputenv(variable, QFile::encodeName(home.filePath(QString::fromLatin1(variable))));
+    QCoreApplication::setOrganizationName(QStringLiteral("omapass-tests"));
+    QCoreApplication::setApplicationName(QStringLiteral("omapass-tests"));
+
 #ifdef QT_GUI_LIB
     QGuiApplication app(argc, argv);
 #else

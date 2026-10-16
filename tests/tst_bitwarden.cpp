@@ -435,7 +435,6 @@ private slots:
     }
 
     void bitwardenAccountIsSavedPerServer() {
-        QStandardPaths::setTestModeEnabled(true);
         QDir(BwAccount::directory()).removeRecursively();
 
         QCOMPARE(BwAccount::refPath(QStringLiteral("a@b.com"), QString()), QStringLiteral("bitwarden:a@b.com"));
@@ -470,7 +469,6 @@ private slots:
         BwAccount::remove(path);
         QVERIFY(BwAccount::refPaths().isEmpty());
         QDir(BwAccount::directory()).removeRecursively();
-        QStandardPaths::setTestModeEnabled(false);
     }
 };
 
