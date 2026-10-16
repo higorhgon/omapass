@@ -1,4 +1,4 @@
-QT += core testlib network concurrent
+QT += core gui testlib network concurrent
 CONFIG += testcase c++20 link_pkgconfig
 # Botan 3 where the distribution has it (Arch), Botan 2 where it does not
 # (Ubuntu 24.04 LTS ships 2.19). Everything omapass asks of Botan exists in
@@ -21,6 +21,7 @@ INCLUDEPATH += ../src
 SOURCES += \
     main.cpp \
     tst_bitwarden.cpp \
+    tst_clipboard.cpp \
     tst_config.cpp \
     tst_filter.cpp \
     tst_generator.cpp \
@@ -35,6 +36,7 @@ SOURCES += \
     ../src/bwcrypto.cpp \
     ../src/bwaccount.cpp \
     ../src/bwapi.cpp \
+    ../src/clipboard.cpp \
     ../src/config.cpp \
     ../src/filter.cpp \
     ../src/generator.cpp \
@@ -59,6 +61,7 @@ HEADERS += \
     ../src/bitwardenvault.h \
     ../src/bwaccount.h \
     ../src/bwapi.h \
+    ../src/clipboard.h \
     ../src/bwcrypto.h \
     ../src/config.h \
     ../src/filter.h \
