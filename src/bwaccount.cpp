@@ -150,7 +150,8 @@ std::optional<BwAccountState> BwAccount::load(const QString &path) {
 bool BwAccount::save(const BwAccountState &state, QString *error) {
     QDir dir;
     if (!dir.mkpath(directory())) {
-        *error = QStringLiteral("cannot create %1").arg(directory());
+        if (error)
+            *error = QStringLiteral("cannot create %1").arg(directory());
         return false;
     }
     QFile::setPermissions(directory(), QFileDevice::ReadOwner | QFileDevice::WriteOwner
@@ -175,13 +176,15 @@ bool BwAccount::save(const BwAccountState &state, QString *error) {
     // leaves half a vault behind.
     QSaveFile file(fileFor(refPath(state.email, state.server)));
     if (!file.open(QIODevice::WriteOnly)) {
-        *error = file.errorString();
+        if (error)
+            *error = file.errorString();
         return false;
     }
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
     if (!file.commit()) {
-        *error = file.errorString();
+        if (error)
+            *error = file.errorString();
         return false;
     }
     return true;

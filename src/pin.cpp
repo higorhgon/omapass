@@ -202,7 +202,8 @@ bool hasPin(const QString &vaultPath) {
 
 bool store(const QString &vaultPath, const QString &pin, const Secret &password, QString *error) {
     if (!isAvailable()) {
-        *error = I18n::t(QStringLiteral("pin.no_keyring"));
+        if (error)
+            *error = I18n::t(QStringLiteral("pin.no_keyring"));
         return false;
     }
 
@@ -210,7 +211,8 @@ bool store(const QString &vaultPath, const QString &pin, const Secret &password,
     // randomBytes comes back empty when the system generator fails; an
     // empty salt would still derive a key, just a much weaker one.
     if (saltBytes.size() != 32) {
-        *error = I18n::t(QStringLiteral("pin.store_error"));
+        if (error)
+            *error = I18n::t(QStringLiteral("pin.store_error"));
         return false;
     }
     const QString salt = QString::fromLatin1(
@@ -220,7 +222,8 @@ bool store(const QString &vaultPath, const QString &pin, const Secret &password,
     const std::optional<QString> encrypted =
         key ? BwCrypto::encrypt(password.bytes(), *key) : std::nullopt;
     if (!encrypted) {
-        *error = I18n::t(QStringLiteral("pin.store_error"));
+        if (error)
+            *error = I18n::t(QStringLiteral("pin.store_error"));
         return false;
     }
 
