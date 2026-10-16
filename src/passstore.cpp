@@ -17,7 +17,8 @@ QProcessEnvironment storeEnvironment(const QString &root) {
 }
 
 // Single entry point for every `pass` invocation, so failures are reported
-// the same way everywhere.
+// the same way everywhere. Callers put a `--` before any name that came from
+// the user, so an entry called "-r" is a name and not an option.
 bool runPass(const QString &root, const QStringList &args, const QByteArray &stdinData,
              QString *error) {
     const ProcResult result = runProcess(QStringLiteral("pass"), args, stdinData,
@@ -112,7 +113,7 @@ bool PassStore::initStore(const QString &root, const QString &gpgId, QString *er
 
     // `pass init` writes the .gpg-id and re-encrypts whatever is already
     // there — harmless on a store we just created empty.
-    return runPass(root, {QStringLiteral("init"), gpgId}, QByteArray(), error);
+    return runPass(root, {QStringLiteral("init"), QStringLiteral("--"), gpgId}, QByteArray(), error);
 }
 
 void PassStore::list(QStringList *entries, QStringList *groups) const {
@@ -123,16 +124,17 @@ void PassStore::list(QStringList *entries, QStringList *groups) const {
 
 bool PassStore::insert(const QString &entry, const PassEntryData &data, QString *error) const {
     return runPass(m_root,
-                   {QStringLiteral("insert"), QStringLiteral("-m"), QStringLiteral("-f"), entry},
+                   {QStringLiteral("insert"), QStringLiteral("-m"), QStringLiteral("-f"), QStringLiteral("--"),
+                    entry},
                    buildPassEntryContent(data), error);
 }
 
 bool PassStore::move(const QString &from, const QString &to, QString *error) const {
-    return runPass(m_root, {QStringLiteral("mv"), QStringLiteral("-f"), from, to}, QByteArray(), error);
+    return runPass(m_root, {QStringLiteral("mv"), QStringLiteral("-f"), QStringLiteral("--"), from, to}, QByteArray(), error);
 }
 
 bool PassStore::remove(const QString &entry, QString *error) const {
-    return runPass(m_root, {QStringLiteral("rm"), QStringLiteral("-f"), entry}, QByteArray(), error);
+    return runPass(m_root, {QStringLiteral("rm"), QStringLiteral("-f"), QStringLiteral("--"), entry}, QByteArray(), error);
 }
 
 // Uses `pass rm -r` rather than removing the directory ourselves: it clears
@@ -141,7 +143,7 @@ bool PassStore::remove(const QString &entry, QString *error) const {
 // visible entries and subgroups.
 bool PassStore::removeGroup(const QString &group, QString *error) const {
     return runPass(m_root,
-                   {QStringLiteral("rm"), QStringLiteral("-r"), QStringLiteral("-f"), group},
+                   {QStringLiteral("rm"), QStringLiteral("-r"), QStringLiteral("-f"), QStringLiteral("--"), group},
                    QByteArray(), error);
 }
 
@@ -164,7 +166,7 @@ bool PassStore::show(const QString &entry, const Secret &passphrase, PassEntryDa
                                          {QStringLiteral("--batch"), QStringLiteral("--no-tty"),
                                           QStringLiteral("--pinentry-mode"), QStringLiteral("loopback"),
                                           QStringLiteral("--passphrase-fd"), QStringLiteral("0"),
-                                          QStringLiteral("-d"), filePath},
+                                          QStringLiteral("-d"), QStringLiteral("--"), filePath},
                                          stdinData);
     stdinData.fill('\0');
 
