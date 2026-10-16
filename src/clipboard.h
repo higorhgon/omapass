@@ -21,4 +21,8 @@ bool previewMayBe(const QString &preview, const QString &secret);
 // than a thread.
 void scheduleClear(const Secret &password);
 
+// Clears now what scheduleClear is still waiting on, if anything. Called on
+// the way out, since the timer does not outlive the application.
+void clearPending();
+
 }

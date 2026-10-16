@@ -38,6 +38,14 @@ bool useWlCopy() {
     return wanted;
 }
 
+// The password the timer is waiting to clear, so quitting can clear it too:
+// the timer dies with the process, and a clipboard served by `wl-copy` does
+// not.
+Secret &pending() {
+    static Secret secret;
+    return secret;
+}
+
 void clearClipboard() {
     if (useWlCopy()) {
         // `--clear` tells the compositor to drop the selection outright.
@@ -133,12 +141,23 @@ bool copy(const QString &text) {
 }
 
 void scheduleClear(const Secret &password) {
+    pending() = password;
     const Secret copyOfPassword = password;
     QTimer::singleShot(clearSecs * 1000, [copyOfPassword]() {
         clearClipboard();
         if (useWlCopy())
             deleteFromHistory(copyOfPassword);
+        pending().clear();
     });
+}
+
+void clearPending() {
+    if (pending().isEmpty())
+        return;
+    clearClipboard();
+    if (useWlCopy())
+        deleteFromHistory(pending());
+    pending().clear();
 }
 
 }

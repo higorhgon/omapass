@@ -13,6 +13,7 @@
 #include <QUrl>
 
 #include "appcontroller.h"
+#include "clipboard.h"
 #include "config.h"
 #include "generator.h"
 #include "i18n.h"
@@ -211,6 +212,10 @@ int main(int argc, char *argv[]) {
     // softer response for a machine nobody else can reach.
     SessionLockWatcher sessionLock(&app);
     QObject::connect(&sessionLock, &SessionLockWatcher::locked, &app, &QGuiApplication::quit);
+
+    // A password still waiting on its countdown goes with omapass, however
+    // it ends — the session lock above included.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, []() { Clipboard::clearPending(); });
 
     AppController controller(config);
     Strings strings;
