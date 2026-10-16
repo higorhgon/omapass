@@ -373,6 +373,9 @@ bitwarden.unsupported_account:
 bitwarden.unsafe_kdf:
   pt-BR: "O servidor pediu parâmetros de derivação de chave fora dos limites seguros; o omapass não enviou a senha."
   en: "The server asked for key derivation parameters outside the safe range; omapass did not send the password."
+bitwarden.undecryptable:
+  pt-BR: "%{count} item(ns) do Bitwarden não puderam ser decifrados e não aparecem na lista."
+  en: "%{count} Bitwarden item(s) could not be decrypted and are not listed."
 bitwarden.unsupported_two_step:
   pt-BR: "Nenhum método de verificação em duas etapas suportado (use aplicativo autenticador, e-mail ou YubiKey OTP)."
   en: "No supported two-step method (use an authenticator app, e-mail or YubiKey OTP)."

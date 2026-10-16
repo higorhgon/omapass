@@ -445,21 +445,38 @@ QJsonObject BwAccount::folderRequest(const QString &name, const BwKey &user) {
 }
 
 void BwAccount::decryptVault(const BwAccountState &state, const BwKeys &keys,
-                             QHash<QString, QJsonObject> *items, QHash<QString, QString> *folders) {
+                             QHash<QString, QJsonObject> *items, QHash<QString, QString> *folders,
+                             int *undecryptable) {
     items->clear();
     folders->clear();
+    int failed = 0;
 
     for (const QJsonValue &value : state.folders) {
         const QJsonObject folder = value.toObject();
         const QString id = folder.value(QStringLiteral("id")).toString();
+        if (id.isEmpty())
+            continue;
         const QString name = decryptFolder(folder, keys.user);
-        if (!id.isEmpty() && !name.isEmpty())
+        if (name.isEmpty())
+            ++failed;
+        else
             folders->insert(id, name);
     }
 
     for (const QJsonValue &value : state.ciphers) {
         const QJsonObject cipher = value.toObject();
-        if (const std::optional<QJsonObject> item = decryptCipher(cipher, keys))
+        if (const std::optional<QJsonObject> item = decryptCipher(cipher, keys)) {
             items->insert(item->value(QStringLiteral("id")).toString(), *item);
+            continue;
+        }
+        // Other kinds and the trash are left out on purpose; only a login or
+        // an SSH key that should be listed counts as lost.
+        const int type = cipher.value(QStringLiteral("type")).toInt();
+        const QJsonValue deleted = cipher.value(QStringLiteral("deletedDate"));
+        if ((type == 1 || type == 5) && (deleted.isNull() || deleted.isUndefined()))
+            ++failed;
     }
+
+    if (undecryptable)
+        *undecryptable = failed;
 }

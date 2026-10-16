@@ -137,6 +137,10 @@ public:
                              QString *error) const = 0;
     virtual bool removeGroup(const QString &group, QString *error) const = 0;
 
+    // Something the user should hear about what was opened — entries that
+    // could not be read, say — or empty when all is well.
+    virtual QString warning() const { return {}; }
+
     // Releases whatever the backend holds outside this process when the vault
     // is locked. Nothing to do for the file-based backends.
     virtual void close() {}

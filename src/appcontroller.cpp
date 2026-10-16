@@ -330,9 +330,10 @@ void AppController::startBackgroundSync() {
         setSyncing(false);
 
         // Locking waits for the sync, so the vault is still the one synced.
-        if (result.ok)
+        if (result.ok) {
             refreshEntries();
-        else
+            showVaultWarning();
+        } else
             showMessage(I18n::t(QStringLiteral("bitwarden.sync_error"), QStringLiteral("err"), result.error),
                         true);
     });
@@ -803,11 +804,20 @@ void AppController::adoptVault(const DbRef &ref, Vault *vault) {
 
     m_stage = QStringLiteral("entries");
     emit stageChanged();
+    showVaultWarning();
 
     // Opening read omapass' own copy; what changed on the server since the
     // last sync arrives a moment later.
     if (vault->kind() == VaultKind::Bitwarden)
         startBackgroundSync();
+}
+
+void AppController::showVaultWarning() {
+    if (m_vault.isNull())
+        return;
+    const QString warning = m_vault->warning();
+    if (!warning.isEmpty())
+        showMessage(warning, true);
 }
 
 void AppController::refreshEntries() {
