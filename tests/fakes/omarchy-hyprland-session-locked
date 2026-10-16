@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in for Omarchy's lock probe: exits with SESSION_LOCKED_FAKE_EXIT,
+# 0 meaning "locked", 1 "unlocked" (the default) and 2 "cannot tell".
+exit "${SESSION_LOCKED_FAKE_EXIT:-1}"
