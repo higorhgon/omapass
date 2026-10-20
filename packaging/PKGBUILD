@@ -45,6 +45,13 @@ check() {
 }
 
 package() {
+    # As bibliotecas do Qt tem simbolos versionados: o binario so roda com o
+    # Qt com que foi compilado ou mais novo, entao o pacote exige essa versao
+    local _qt
+    _qt=$(qmake6 -query QT_VERSION | cut -d. -f1,2)
+    depends=("${depends[@]/#qt6-base/qt6-base>=$_qt}")
+    depends=("${depends[@]/#qt6-declarative/qt6-declarative>=$_qt}")
+
     cd "$srcdir/$pkgname"
     make DESTDIR="$pkgdir" PREFIX=/usr install
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
