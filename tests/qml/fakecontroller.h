@@ -90,11 +90,11 @@ class FakeController : public QObject {
     Q_PROPERTY(QVariantList openDatabases READ openDatabases CONSTANT)
     Q_PROPERTY(QString vaultLabel READ vaultLabel CONSTANT)
     Q_PROPERTY(bool passBackend MEMBER m_passBackend CONSTANT)
-    Q_PROPERTY(bool bitwardenBackend MEMBER m_bitwardenBackend CONSTANT)
+    Q_PROPERTY(bool bitwardenBackend MEMBER m_bitwardenBackend NOTIFY backendChanged)
     Q_PROPERTY(bool onePasswordBackend MEMBER m_onePasswordBackend CONSTANT)
     Q_PROPERTY(QStringList groups MEMBER m_groups)
     Q_PROPERTY(QVariantList bitwardenCollections MEMBER m_bitwardenCollections CONSTANT)
-    Q_PROPERTY(QVariantList bitwardenOrganizations MEMBER m_bitwardenOrganizations CONSTANT)
+    Q_PROPERTY(QVariantList bitwardenOrganizations MEMBER m_bitwardenOrganizations NOTIFY backendChanged)
     Q_PROPERTY(bool pinConfigured MEMBER m_pinConfigured CONSTANT)
     Q_PROPERTY(bool syncing MEMBER m_syncing CONSTANT)
 
@@ -272,6 +272,7 @@ signals:
     void databasePickerRequested();
     void queryChanged();
     void sidebarChanged();
+    void backendChanged();
     void copied();
     void scanningChanged();
     void databasesChanged();

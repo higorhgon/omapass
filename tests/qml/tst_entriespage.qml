@@ -29,6 +29,22 @@ TestCase {
         compare(component.status, Component.Ready, component.errorString());
     }
 
+    function test_bitwarden_shows_collections_only_with_an_organization() {
+        const component = Qt.createComponent("qrc:/EntriesPage.qml");
+        const page = createTemporaryObject(component, testCase, {width: 320, height: 160});
+        const pane = findChild(page, "entriesPane");
+        try {
+            controller.bitwardenBackend = true;
+            controller.bitwardenOrganizations = [];
+            compare(pane.columns[2].key, "group");
+            controller.bitwardenOrganizations = [{ "id": "org-1", "name": "Equipe" }];
+            compare(pane.columns[2].key, "collections");
+        } finally {
+            controller.bitwardenBackend = false;
+            controller.bitwardenOrganizations = [];
+        }
+    }
+
     function test_context_menu_matches_the_selected_entry() {
         const component = Qt.createComponent("qrc:/EntriesPage.qml");
         const page = createTemporaryObject(component, testCase, {width: 320, height: 160});

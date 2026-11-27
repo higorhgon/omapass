@@ -456,7 +456,9 @@ FocusScope {
         columns: [
             { "key": "typeLabel", "title": i18n.t("ui.column_type"), "weight": 1 },
             { "key": "name", "title": i18n.t("ui.column_name"), "weight": 3 },
-            controller.bitwardenBackend
+            // Collections belong to organizations: with none, Bitwarden only
+            // has folders, which are the groups.
+            controller.bitwardenBackend && controller.bitwardenOrganizations.length > 0
                 ? { "key": "collections", "title": i18n.t("ui.column_collection"), "weight": 2.5, "fit": true }
                 : { "key": "group", "title": i18n.t("ui.column_group"), "weight": 2.5, "fit": true },
             { "key": "username", "title": i18n.t("ui.column_login"), "weight": 2 },
