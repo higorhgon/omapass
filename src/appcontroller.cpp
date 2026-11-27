@@ -2119,6 +2119,13 @@ void AppController::openAddress(const QString &address) {
         showMessage(I18n::t(QStringLiteral("app.open_url_error"), QStringLiteral("url"), address), true);
         return;
     }
+    // An entry's URL can come from a shared vault or an imported file; handing
+    // file://, smb:// or a custom handler to the OS would run whatever it opens.
+    const QString scheme = url.scheme().toLower();
+    if (scheme != QLatin1String("http") && scheme != QLatin1String("https")) {
+        showMessage(I18n::t(QStringLiteral("app.open_url_scheme"), QStringLiteral("url"), address), true);
+        return;
+    }
     if (QDesktopServices::openUrl(url))
         showMessage(I18n::t(QStringLiteral("app.opening_url"), QStringLiteral("url"), url.toString()), false);
     else

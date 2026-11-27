@@ -303,6 +303,9 @@ app.copied_url:
 app.opening_url:
   pt-BR: "Abrindo %{url}"
   en: "Opening %{url}"
+app.open_url_scheme:
+  pt-BR: "Só endereços http e https são abertos: %{url}"
+  en: "Only http and https addresses are opened: %{url}"
 app.open_url_error:
   pt-BR: "Não foi possível abrir %{url}"
   en: "Could not open %{url}"
