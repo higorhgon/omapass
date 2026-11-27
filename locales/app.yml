@@ -1754,6 +1754,12 @@ update.invalid_response:
 update.checksum_failed:
   pt-BR: "A verificação SHA-256 do arquivo baixado falhou. Atualização cancelada."
   en: "SHA-256 verification of the downloaded file failed. Update cancelled."
+update.signature_failed:
+  pt-BR: "A assinatura da release não confere. Atualização cancelada."
+  en: "The release signature does not match. Update cancelled."
+update.unsigned:
+  pt-BR: "Esta release não tem SHA256SUMS assinado. Baixe pela página de releases."
+  en: "This release has no signed SHA256SUMS. Download it from the releases page."
 update.not_writable:
   pt-BR: "Sem permissão para substituir o arquivo do aplicativo neste diretório."
   en: "No permission to replace the application file in this directory."

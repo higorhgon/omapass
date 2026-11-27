@@ -2,6 +2,8 @@
 
 #include "updater.h"
 
+#include <botan/sodium.h>
+
 class TestUpdater : public QObject {
     Q_OBJECT
 
@@ -52,6 +54,44 @@ private slots:
         QCOMPARE(Updater::parseSha256ForFile(sums, QStringLiteral("omapass-1.5.0-macos-x64.dmg")),
                  QStringLiteral("fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"));
         QVERIFY(Updater::parseSha256ForFile(sums, QStringLiteral("missing.exe")).isEmpty());
+    }
+
+    void verifiesChecksumsSignature() {
+        QByteArray pk(32, '\0');
+        QByteArray sk(64, '\0');
+        Botan::Sodium::crypto_sign_ed25519_keypair(reinterpret_cast<uint8_t *>(pk.data()),
+                                                   reinterpret_cast<uint8_t *>(sk.data()));
+        const QByteArray sums = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  omapass.AppImage\n";
+        QByteArray sig(64, '\0');
+        unsigned long long sigLen = 0;
+        Botan::Sodium::crypto_sign_ed25519_detached(reinterpret_cast<uint8_t *>(sig.data()), &sigLen,
+                                                    reinterpret_cast<const uint8_t *>(sums.constData()),
+                                                    size_t(sums.size()),
+                                                    reinterpret_cast<const uint8_t *>(sk.constData()));
+
+        QVERIFY(Updater::verifyChecksumsSignature(sums, sig, pk));
+
+        QByteArray tampered = sums;
+        tampered[0] = 'f';
+        QVERIFY(!Updater::verifyChecksumsSignature(tampered, sig, pk));
+        QVERIFY(!Updater::verifyChecksumsSignature(sums, sig.left(63), pk));
+        QVERIFY(!Updater::verifyChecksumsSignature(sums, {}, pk));
+        // Signed by a key that is not the release one.
+        QVERIFY(!Updater::verifyChecksumsSignature(sums, sig));
+    }
+
+    void picksSignatureAsset() {
+        const QByteArray payload =
+            "{\"tag_name\": \"v1.6.0\", \"assets\": ["
+            "{\"name\": \"omapass-1.6.0-x86_64.AppImage\", \"browser_download_url\": \"https://example.com/a\"},"
+            "{\"name\": \"SHA256SUMS\", \"browser_download_url\": \"https://example.com/s\"},"
+            "{\"name\": \"SHA256SUMS.sig\", \"browser_download_url\": \"https://example.com/s.sig\"}"
+            "]}";
+        Updater::ReleaseInfo info;
+        QString error;
+        QVERIFY(Updater::parseLatestRelease(payload, Updater::Platform::AppImage, &info, &error));
+        QCOMPARE(info.checksumsAsset.name, QStringLiteral("SHA256SUMS"));
+        QCOMPARE(info.signatureAsset.name, QStringLiteral("SHA256SUMS.sig"));
     }
 
     void replacesAppImageAtomicallyAndSetsExecBit() {

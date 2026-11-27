@@ -17,10 +17,19 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
+#include <botan/sodium.h>
+
 namespace {
 
 const auto latestReleaseEndpoint = QStringLiteral("https://api.github.com/repos/higorhgon/omapass/releases/latest");
 const auto defaultReleasesPage = QStringLiteral("https://github.com/higorhgon/omapass/releases/latest");
+
+// Public half of the Ed25519 key that signs SHA256SUMS in the release
+// workflow (secret OMAPASS_UPDATE_SIGNING_KEY). The checksums come from the
+// same release as the package, so only this signature ties them to us.
+const auto releasePublicKeyHex = QByteArrayLiteral("0dcb718251b4eafa9bf820c86cf0c5565df27b3f6fd8f178aa140f7fa603d056");
+const auto checksumsName = QStringLiteral("SHA256SUMS");
+const auto signatureName = QStringLiteral("SHA256SUMS.sig");
 
 QString stripVersionPrefix(QString version) {
     version = version.trimmed();
@@ -152,8 +161,12 @@ bool Updater::parseLatestRelease(const QByteArray &json, Platform platform,
         if (name.isEmpty() || !downloadUrl.isValid())
             continue;
 
-        if (name == QLatin1String("SHA256SUMS")) {
+        if (name == checksumsName) {
             parsed.checksumsAsset = {name, downloadUrl};
+            continue;
+        }
+        if (name == signatureName) {
+            parsed.signatureAsset = {name, downloadUrl};
             continue;
         }
         if (assetMatchesPlatform(name, platform) && !parsed.packageAsset.url.isValid()) {
@@ -184,6 +197,19 @@ QString Updater::parseSha256ForFile(const QByteArray &sumsData, const QString &f
             return match.captured(1).toLower();
     }
     return {};
+}
+
+bool Updater::verifyChecksumsSignature(const QByteArray &sumsData, const QByteArray &signature,
+                                       const QByteArray &publicKey) {
+    const QByteArray key = publicKey.isEmpty() ? QByteArray::fromHex(releasePublicKeyHex) : publicKey;
+    if (key.size() != int(Botan::Sodium::crypto_sign_ed25519_PUBLICKEYBYTES)
+        || signature.size() != int(Botan::Sodium::crypto_sign_ed25519_BYTES) || sumsData.isEmpty())
+        return false;
+    return Botan::Sodium::crypto_sign_ed25519_verify_detached(
+               reinterpret_cast<const uint8_t *>(signature.constData()),
+               reinterpret_cast<const uint8_t *>(sumsData.constData()), size_t(sumsData.size()),
+               reinterpret_cast<const uint8_t *>(key.constData()))
+           == 0;
 }
 
 bool Updater::replaceAppImage(const QString &targetPath, const QString &newFilePath, QString *error) {
@@ -267,6 +293,7 @@ void Updater::checkForUpdates(bool manual) {
         m_releaseUrl = info.htmlUrl;
         m_packageAsset = info.packageAsset;
         m_checksumsAsset = info.checksumsAsset;
+        m_signatureAsset = info.signatureAsset;
         m_updateAvailable = compareVersions(info.version, currentVersion()) > 0
                             && m_packageAsset.url.isValid();
 
@@ -291,19 +318,56 @@ void Updater::installUpdate() {
     setStatus(I18n::t(QStringLiteral("update.downloading"), QStringLiteral("percent"), QStringLiteral("0")),
               false);
 
-    if (m_checksumsAsset.url.isValid()) {
-        QNetworkReply *reply = m_network.get(makeRequest(m_checksumsAsset.url, false));
-        m_activeReply = reply;
-        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-            const bool ok = reply->error() == QNetworkReply::NoError;
-            const QByteArray data = reply->readAll();
-            reply->deleteLater();
-            const QString expected = ok ? parseSha256ForFile(data, m_packageAsset.name) : QString();
-            startPackageDownload(expected);
-        });
-    } else {
-        startPackageDownload({});
+    // Without signed checksums there is nothing to trust the package by, so
+    // the update stops instead of installing it unverified.
+    if (!m_checksumsAsset.url.isValid() || !m_signatureAsset.url.isValid()) {
+        failInstall(I18n::t(QStringLiteral("update.unsigned")));
+        return;
     }
+
+    QNetworkReply *reply = m_network.get(makeRequest(m_checksumsAsset.url, false));
+    m_activeReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QNetworkReply::NetworkError netErr = reply->error();
+        const QString errStr = reply->errorString();
+        const QByteArray data = reply->readAll();
+        reply->deleteLater();
+        if (netErr != QNetworkReply::NoError) {
+            failInstall(I18n::t(QStringLiteral("update.download_failed"), QStringLiteral("err"), errStr));
+            return;
+        }
+        fetchSignature(data);
+    });
+}
+
+void Updater::fetchSignature(const QByteArray &sumsData) {
+    QNetworkReply *reply = m_network.get(makeRequest(m_signatureAsset.url, false));
+    m_activeReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, sumsData]() {
+        const QNetworkReply::NetworkError netErr = reply->error();
+        const QString errStr = reply->errorString();
+        const QByteArray signature = reply->readAll();
+        reply->deleteLater();
+        if (netErr != QNetworkReply::NoError) {
+            failInstall(I18n::t(QStringLiteral("update.download_failed"), QStringLiteral("err"), errStr));
+            return;
+        }
+        if (!verifyChecksumsSignature(sumsData, signature)) {
+            failInstall(I18n::t(QStringLiteral("update.signature_failed")));
+            return;
+        }
+        const QString expected = parseSha256ForFile(sumsData, m_packageAsset.name);
+        if (expected.isEmpty()) {
+            failInstall(I18n::t(QStringLiteral("update.checksum_failed")));
+            return;
+        }
+        startPackageDownload(expected);
+    });
+}
+
+void Updater::failInstall(const QString &message) {
+    m_downloading = false;
+    setStatus(message, true);
 }
 
 void Updater::startPackageDownload(const QString &expectedSha256) {
@@ -316,11 +380,11 @@ void Updater::startPackageDownload(const QString &expectedSha256) {
         const QString dir = downloads.isEmpty()
             ? QStandardPaths::writableLocation(QStandardPaths::TempLocation) : downloads;
         QDir().mkpath(dir);
-        destPath = QDir(dir).filePath(m_packageAsset.name);
+        destPath = QDir(dir).filePath(QFileInfo(m_packageAsset.name).fileName());
     } else {
         const QString temp = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
         QDir().mkpath(temp);
-        destPath = QDir(temp).filePath(m_packageAsset.name);
+        destPath = QDir(temp).filePath(QFileInfo(m_packageAsset.name).fileName());
     }
 
     auto *outFile = new QFile(destPath, this);
@@ -370,14 +434,10 @@ void Updater::startPackageDownload(const QString &expectedSha256) {
 }
 
 void Updater::finishInstall(const QString &downloadedPath, const QString &expectedSha256) {
-    if (!expectedSha256.isEmpty()) {
-        const QString actual = sha256OfFile(downloadedPath);
-        if (actual != expectedSha256) {
-            QFile::remove(downloadedPath);
-            m_downloading = false;
-            setStatus(I18n::t(QStringLiteral("update.checksum_failed")), true);
-            return;
-        }
+    if (expectedSha256.isEmpty() || sha256OfFile(downloadedPath) != expectedSha256) {
+        QFile::remove(downloadedPath);
+        failInstall(I18n::t(QStringLiteral("update.checksum_failed")));
+        return;
     }
 
     const Platform platform = currentPlatform();

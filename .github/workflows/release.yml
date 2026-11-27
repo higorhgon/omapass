@@ -2,7 +2,7 @@ name: Release
 
 # Disparado manualmente para publicar uma versão.
 # Gera o AppImage, os pacotes do Windows e o DMG do macOS Intel em paralelo.
-# Publica os arquivos e o SHA256SUMS quando os três builds passarem.
+# Publica os arquivos, o SHA256SUMS e a assinatura dele quando os três builds passarem.
 on:
   workflow_dispatch:
     inputs:
@@ -51,6 +51,24 @@ jobs:
           ls -la
           sha256sum omapass-* > SHA256SUMS
           cat SHA256SUMS
+
+      # O app só instala uma atualização se o SHA256SUMS estiver assinado com
+      # esta chave Ed25519; a pública correspondente está em src/updater.cpp.
+      # A chave fica só no secret e num arquivo temporário apagado em seguida.
+      - name: Assina o SHA256SUMS
+        env:
+          CHAVE: ${{ secrets.OMAPASS_UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$CHAVE" ]; then
+            echo "::error::secret OMAPASS_UPDATE_SIGNING_KEY ausente"
+            exit 1
+          fi
+          cd dist
+          chave="$RUNNER_TEMP/chave.pem"
+          trap 'rm -f "$chave"' EXIT
+          (umask 077; printf '%s\n' "$CHAVE" > "$chave")
+          openssl pkeyutl -sign -rawin -inkey "$chave" -in SHA256SUMS -out SHA256SUMS.sig
+          test "$(stat -c %s SHA256SUMS.sig)" -eq 64
 
       # `gh` já vem no runner, então nada de terceiros para publicar. Uma
       # release que já exista é reaproveitada, com os arquivos substituídos:

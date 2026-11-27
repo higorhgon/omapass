@@ -43,6 +43,7 @@ public:
         QUrl htmlUrl;
         ReleaseAsset packageAsset;
         ReleaseAsset checksumsAsset;
+        ReleaseAsset signatureAsset;
     };
 
     explicit Updater(QObject *parent = nullptr);
@@ -53,6 +54,10 @@ public:
     static bool parseLatestRelease(const QByteArray &json, Platform platform,
                                    ReleaseInfo *info, QString *error);
     static QString parseSha256ForFile(const QByteArray &sumsData, const QString &fileName);
+    // Ed25519 signature (64 raw bytes) of SHA256SUMS, checked against the
+    // release public key compiled into the app unless another one is given.
+    static bool verifyChecksumsSignature(const QByteArray &sumsData, const QByteArray &signature,
+                                         const QByteArray &publicKey = {});
     static bool replaceAppImage(const QString &targetPath, const QString &newFilePath,
                                 QString *error);
 
@@ -76,6 +81,8 @@ signals:
 
 private:
     void setStatus(const QString &text, bool isError);
+    void fetchSignature(const QByteArray &sumsData);
+    void failInstall(const QString &message);
     void startPackageDownload(const QString &expectedSha256);
     void finishInstall(const QString &downloadedPath, const QString &expectedSha256);
 
@@ -91,6 +98,7 @@ private:
     QUrl m_releaseUrl;
     ReleaseAsset m_packageAsset;
     ReleaseAsset m_checksumsAsset;
+    ReleaseAsset m_signatureAsset;
     QString m_statusText;
     bool m_statusIsError = false;
 };
