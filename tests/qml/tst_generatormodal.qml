@@ -157,4 +157,47 @@ TestCase {
         compare(controller.copiedSecrets, before, "sem copiar");
         modal.fillMode = false;
     }
+
+    // Ctrl+C copies the password wherever the keyboard is in the sheet,
+    // and leaves it open.
+    function test_ctrl_c_copies_the_password() {
+        open();
+        acceptedSpy.clear();
+        const before = controller.copiedSecrets;
+        keyClick(Qt.Key_C, Qt.ControlModifier);
+        compare(controller.copiedSecrets, before + 1, "Ctrl+C sem campo focado");
+        verify(modal.opened);
+        verify(modal.copied);
+
+        keyClick(Qt.Key_Tab);
+        tryVerify(function() { return focused() === modal.tabOrder[1]; }, 3000);
+        keyClick(Qt.Key_C, Qt.ControlModifier);
+        compare(controller.copiedSecrets, before + 2, "Ctrl+C num campo sem seleção");
+        compare(acceptedSpy.count, 0);
+    }
+
+    // Text selected in a field is what Ctrl+C copies there, as anywhere.
+    function test_ctrl_c_leaves_selected_text_alone() {
+        open();
+        const before = controller.copiedSecrets;
+        keyClick(Qt.Key_Tab);
+        tryVerify(function() { return focused() === modal.tabOrder[1]; }, 3000);
+        modal.tabOrder[1].field.selectAll();
+        verify(modal.tabOrder[1].field.selectedText.length > 0);
+        keyClick(Qt.Key_C, Qt.ControlModifier);
+        compare(controller.copiedSecrets, before, "a seleção do campo vence");
+    }
+
+    // From the entry form Ctrl+C copies too, without handing it over.
+    function test_ctrl_c_copies_in_fill_mode() {
+        modal.fillMode = true;
+        open();
+        acceptedSpy.clear();
+        const before = controller.copiedSecrets;
+        keyClick(Qt.Key_C, Qt.ControlModifier);
+        compare(controller.copiedSecrets, before + 1);
+        compare(acceptedSpy.count, 0);
+        verify(modal.opened);
+        modal.fillMode = false;
+    }
 }
