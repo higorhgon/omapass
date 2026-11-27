@@ -15,7 +15,12 @@ Item {
     // The value is a secret (a password, a code): in the monospace family,
     // where l, 1 and I differ once it is revealed.
     property bool monospace: false
+    // Ctrl+C with nothing selected is handed to the sheet (copyRequested)
+    // instead of copying nothing: the field takes the key before any
+    // Shortcut sees it.
+    property bool copyWhenNothingSelected: false
 
+    signal copyRequested()
     signal submitted()
     signal cancelled()
     signal nextRequested()
@@ -62,6 +67,12 @@ Item {
         }
 
         Keys.onPressed: function(event) {
+            if (root.copyWhenNothingSelected && input.selectedText.length === 0
+                && event.matches(StandardKey.Copy)) {
+                root.copyRequested();
+                event.accepted = true;
+                return;
+            }
             if (event.modifiers & Qt.ControlModifier) {
                 // Readline-style navigation for the suggestion dropdowns:
                 // this is a text field, so j/k cannot navigate here.

@@ -48,6 +48,13 @@ Modal {
             root.accepted(root.password);
             return;
         }
+        root.copyPassword();
+    }
+
+    // Ctrl+C, in either mode: copies and leaves the sheet as it is.
+    function copyPassword() {
+        if (root.password.length === 0)
+            return;
         controller.copySecret(root.password);
         root.copied = true;
     }
@@ -124,6 +131,10 @@ Modal {
                 item.checkedChanged.connect(root.regenerate);
             else
                 item.textChanged.connect(root.regenerate);
+            if (item.copyRequested) {
+                item.copyWhenNothingSelected = true;
+                item.copyRequested.connect(root.copyPassword);
+            }
             item.submitted.connect(root.submit);
             item.cancelled.connect(root.takeKeyboard);
             item.nextRequested.connect(function() { root.focusNext(item); });
@@ -147,6 +158,16 @@ Modal {
         sequences: ["Ctrl+R"]
         enabled: root.visible
         onActivated: root.regenerate()
+    }
+
+    // Ctrl+C copies the password from anywhere in the sheet. A field takes
+    // the key before a Shortcut sees it, so the fields hand it over through
+    // copyRequested, except when text in them is selected: then Ctrl+C
+    // copies that text, as anywhere else.
+    Shortcut {
+        sequences: [StandardKey.Copy]
+        enabled: root.visible
+        onActivated: root.copyPassword()
     }
 
     // A password or a passphrase, as two tabs over the options for each.

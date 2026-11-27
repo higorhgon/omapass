@@ -63,6 +63,9 @@ TestCase {
         compare(page.mode, "list");
         keyClick(Qt.Key_G, Qt.ControlModifier);
         compare(page.mode, "generate");
+        // Ctrl+C quits from this screen's list, but in the generator it
+        // copies the password: the window has to know the quit is off.
+        verify(window.editingText, "Ctrl+C não fecha o app com o gerador aberto");
         page.mode = "list";
     }
 

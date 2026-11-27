@@ -1046,6 +1046,7 @@ FocusScope {
                           ["Tab / Shift+Tab", i18n.t("ui.help_sheet_fields")],
                           ["Ctrl+G", i18n.t("ui.help_sheet_generate")],
                           ["Ctrl+R", i18n.t("ui.help_sheet_regenerate")],
+                          ["Ctrl+C", i18n.t("ui.help_sheet_copy_generated")],
                           ["Ctrl+Enter", i18n.t("ui.help_sheet_save_notes")],
                           ["o", i18n.t("ui.help_sheet_open_url")],
                           ["Ctrl+D / Ctrl+F", i18n.t("ui.help_sheet_choose")],

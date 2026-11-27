@@ -1545,6 +1545,9 @@ ui.help_sheet_generate:
 ui.help_sheet_regenerate:
   pt-BR: "Gerar outra, no gerador"
   en: "Generate another, in the generator"
+ui.help_sheet_copy_generated:
+  pt-BR: "Copiar a senha, no gerador"
+  en: "Copy the password, in the generator"
 ui.help_sheet_save_notes:
   pt-BR: "Salvar de dentro das notas"
   en: "Save from inside the notes"
