@@ -209,6 +209,10 @@ public:
     Q_INVOKABLE bool createGroup(const QString &name);
     Q_INVOKABLE bool createBitwardenCollection(const QString &organizationId, const QString &name);
     Q_INVOKABLE void selectSection(const QString &section);
+    // Why a sidebar group or collection cannot be deleted, or empty when it
+    // can: only one with no entries and no subgroups goes.
+    Q_INVOKABLE QString sidebarDeleteBlocker(const QString &id) const;
+    Q_INVOKABLE void deleteSidebarItem(const QString &id);
     Q_INVOKABLE void toggleSidebarNode(const QString &expandKey);
     Q_INVOKABLE void setSidebarNodeExpanded(const QString &expandKey, bool expanded);
     Q_INVOKABLE void restoreTrashEntry(const QString &cipherId);

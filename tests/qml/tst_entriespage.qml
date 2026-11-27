@@ -144,4 +144,47 @@ TestCase {
         compare(page.sidebarFocused, false);
         tryCompare(pane, "activeFocus", true);
     }
+
+    function test_sidebar_deletes_only_empty_groups_after_confirming() {
+        controller.sidebarItems = [
+            { "id": "all", "label": "Todos", "kind": "section", "count": 3 },
+            { "id": "group:Trabalho", "label": "Trabalho", "kind": "item", "depth": 0, "count": 3 },
+            { "id": "group:Vazio", "label": "Vazio", "kind": "item", "depth": 0, "count": 0 }
+        ];
+        controller.deletedSidebarId = "";
+        controller.lastMessage = "";
+        const component = Qt.createComponent("qrc:/EntriesPage.qml");
+        const page = createTemporaryObject(component, testCase, {width: 600, height: 300});
+        const sidebarList = findChild(page, "sidebarList");
+        try {
+            waitForRendering(page);
+            keyClick(Qt.Key_S, Qt.ControlModifier);
+            tryCompare(sidebarList, "activeFocus", true);
+
+            // A group with entries is refused, with no question asked.
+            page.sidebarCursor = 1;
+            keyClick(Qt.Key_Delete);
+            compare(page.mode, "list");
+            compare(controller.lastMessage, "not empty");
+            compare(controller.deletedSidebarId, "");
+
+            // An empty one asks first; "n" keeps it.
+            page.sidebarCursor = 2;
+            keyClick(Qt.Key_X, Qt.ControlModifier);
+            compare(page.mode, "confirmSidebarDelete");
+            keyClick(Qt.Key_N);
+            compare(page.mode, "list");
+            compare(controller.deletedSidebarId, "");
+            tryCompare(sidebarList, "activeFocus", true);
+
+            // "y" deletes it.
+            keyClick(Qt.Key_Delete);
+            compare(page.mode, "confirmSidebarDelete");
+            keyClick(Qt.Key_Y);
+            compare(page.mode, "list");
+            compare(controller.deletedSidebarId, "group:Vazio");
+        } finally {
+            controller.sidebarItems = [];
+        }
+    }
 }

@@ -318,6 +318,30 @@ app.group_deleted:
 app.entry_deleted:
   pt-BR: "Entrada excluída!"
   en: "Entry deleted!"
+app.group_not_empty:
+  pt-BR: "O grupo tem entradas. Mova ou exclua as entradas antes de excluir o grupo."
+  en: "The group has entries. Move or delete them before deleting the group."
+app.group_has_subgroups:
+  pt-BR: "O grupo tem subgrupos. Exclua os subgrupos antes."
+  en: "The group has subgroups. Delete them first."
+app.collection_not_empty:
+  pt-BR: "A coleção tem entradas. Tire as entradas dela antes de excluí-la."
+  en: "The collection has entries. Remove them from it before deleting it."
+app.collection_has_children:
+  pt-BR: "A coleção tem subcoleções. Exclua as subcoleções antes."
+  en: "The collection has subcollections. Delete them first."
+app.collection_not_found:
+  pt-BR: "Esta coleção não existe por si só; ela só agrupa as subcoleções."
+  en: "This collection does not exist on its own; it only groups subcollections."
+app.collection_ambiguous:
+  pt-BR: "Há mais de uma coleção com este nome. Exclua pelo cofre web do Bitwarden."
+  en: "More than one collection has this name. Delete it from the Bitwarden web vault."
+app.collection_deleted:
+  pt-BR: "Coleção excluída!"
+  en: "Collection deleted!"
+app.sidebar_not_deletable:
+  pt-BR: "Só grupos e coleções podem ser excluídos."
+  en: "Only groups and collections can be deleted."
 app.delete_error:
   pt-BR: "Erro ao excluir: %{err}"
   en: "Error deleting: %{err}"
@@ -637,6 +661,9 @@ common.ssh_public_key_label:
 ui.help_sidebar:
   pt-BR: "Mostrar ou ocultar menu lateral"
   en: "Toggle sidebar"
+ui.help_delete_sidebar_item:
+  pt-BR: "No menu lateral: excluir grupo ou coleção vazio"
+  en: "In the sidebar: delete an empty group or collection"
 ui.help_sync:
   pt-BR: "Sincronizar cofre Bitwarden"
   en: "Sync Bitwarden vault"
@@ -1069,6 +1096,12 @@ ui.mode_search_title:
 ui.confirm_delete:
   pt-BR: "Excluir “%{entry}”? Isso não pode ser desfeito."
   en: "Delete “%{entry}”? This can’t be undone."
+ui.confirm_delete_group:
+  pt-BR: "Excluir o grupo “%{name}”?"
+  en: "Delete the group “%{name}”?"
+ui.confirm_delete_collection:
+  pt-BR: "Excluir a coleção “%{name}”? Isso não pode ser desfeito."
+  en: "Delete the collection “%{name}”? This can’t be undone."
 ui.confirm_purge:
   pt-BR: "Excluir “%{entry}” permanentemente da lixeira? Isso não pode ser desfeito."
   en: "Permanently delete “%{entry}” from trash? This can’t be undone."

@@ -87,6 +87,8 @@ class FakeController : public QObject {
     Q_PROPERTY(QString query MEMBER m_query NOTIFY queryChanged)
     Q_PROPERTY(QString activeSection MEMBER m_activeSection NOTIFY queryChanged)
     Q_PROPERTY(QVariantList sidebarItems MEMBER m_sidebarItems NOTIFY sidebarChanged)
+    Q_PROPERTY(QString deletedSidebarId MEMBER m_deletedSidebarId)
+    Q_PROPERTY(QString lastMessage MEMBER m_lastMessage)
     Q_PROPERTY(QVariantList openDatabases READ openDatabases CONSTANT)
     Q_PROPERTY(QString vaultLabel READ vaultLabel CONSTANT)
     Q_PROPERTY(bool passBackend MEMBER m_passBackend CONSTANT)
@@ -140,6 +142,17 @@ public:
     Q_INVOKABLE void restoreTrashEntry(const QString &) {}
     Q_INVOKABLE void purgeTrashEntry(const QString &) {}
     Q_INVOKABLE void deleteBitwardenSend(const QString &) {}
+    // As the real one: a group or collection with entries says why it stays.
+    Q_INVOKABLE QString sidebarDeleteBlocker(const QString &id) const {
+        for (const QVariant &v : m_sidebarItems) {
+            const QVariantMap item = v.toMap();
+            if (item.value(QStringLiteral("id")).toString() == id)
+                return item.value(QStringLiteral("count")).toInt() > 0 ? QStringLiteral("not empty") : QString();
+        }
+        return QStringLiteral("not found");
+    }
+    Q_INVOKABLE void deleteSidebarItem(const QString &id) { m_deletedSidebarId = id; }
+    Q_INVOKABLE void showMessage(const QString &text, bool) { m_lastMessage = text; }
     Q_INVOKABLE QString sendUrlFor(const QString &) const { return QString(); }
     Q_INVOKABLE QVariantMap entryMenuFields(const QString &entry) const {
         return {{QStringLiteral("hasPassword"), entry == entryPathAt(0)},
@@ -287,6 +300,8 @@ private:
     QString m_query;
     QString m_activeSection = QStringLiteral("all");
     QVariantList m_sidebarItems;
+    QString m_deletedSidebarId;
+    QString m_lastMessage;
     bool m_passBackend = false;
     bool m_bitwardenBackend = false;
     bool m_onePasswordBackend = false;

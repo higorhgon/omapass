@@ -12,10 +12,13 @@ FocusScope {
     property int sidebarCursor: 0
     property string selectedEntry: ""
     property string selectedEntryLabel: ""
+    property string selectedSidebarId: ""
+    property string selectedSidebarLabel: ""
     property string iconEntry: ""
     property string iconRequest: ""
 
     readonly property bool menuOpen: actionsMenu.opened || databasesMenu.opened || sidebarAddMenu.opened
+                                     || sidebarItemMenu.opened
 
     Binding {
         target: window
@@ -162,6 +165,30 @@ FocusScope {
         Qt.callLater(sidebarList.forceActiveFocus);
     }
 
+    // Groups and collections go from the sidebar, once they are empty; the
+    // controller says why one cannot.
+    function confirmSidebarDelete(item) {
+        if (!item || !item.id)
+            return;
+        const blocker = controller.sidebarDeleteBlocker(item.id);
+        if (blocker.length > 0) {
+            controller.showMessage(blocker, true);
+            return;
+        }
+        page.selectedSidebarId = item.id;
+        page.selectedSidebarLabel = item.id.slice(item.id.indexOf(":") + 1);
+        page.mode = "confirmSidebarDelete";
+    }
+
+    // Back from a sheet opened from the sidebar, on the row it was opened on.
+    function returnToSidebar() {
+        if (!page.sidebarOpen)
+            return;
+        page.sidebarFocused = true;
+        sidebarList.forceActiveFocus();
+        Qt.callLater(sidebarList.forceActiveFocus);
+    }
+
     function leaveSidebar() {
         page.sidebarFocused = false;
         pane.claimKeyboard();
@@ -227,12 +254,21 @@ FocusScope {
                     event.accepted = true;
                     return;
                 }
-                if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
-                    return;
 
                 const items = controller.sidebarItems;
                 const item = (page.sidebarCursor >= 0 && page.sidebarCursor < items.length)
                     ? items[page.sidebarCursor] : null;
+
+                // Ctrl+X deletes in the list too; Delete is the key a mouse
+                // user reaches for.
+                if ((event.key === Qt.Key_X && event.modifiers === Qt.ControlModifier)
+                    || (event.key === Qt.Key_Delete && event.modifiers === Qt.NoModifier)) {
+                    page.confirmSidebarDelete(item);
+                    event.accepted = true;
+                    return;
+                }
+                if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
+                    return;
 
                 switch (event.key) {
                 case Qt.Key_Escape:
@@ -388,8 +424,21 @@ FocusScope {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
                             page.sidebarCursor = index;
+                            if (mouse.button === Qt.RightButton) {
+                                const id = modelData.id || "";
+                                if (!id.startsWith("group:") && !id.startsWith("collection:"))
+                                    return;
+                                const pt = hoverArea.mapToItem(page, mouse.x, mouse.y);
+                                sidebarItemMenu.item = modelData;
+                                sidebarItemMenu.anchorX = pt.x;
+                                sidebarItemMenu.anchorY = pt.y;
+                                sidebarItemMenu.selected = 0;
+                                sidebarItemMenu.open();
+                                return;
+                            }
                             controller.selectSection(modelData.id);
                             page.leaveSidebar();
                         }
@@ -888,6 +937,19 @@ FocusScope {
         onClosed: if (page.mode === "list") pane.claimKeyboard()
     }
 
+    ActionsMenu {
+        id: sidebarItemMenu
+        objectName: "sidebarItemMenu"
+        parent: page
+        property var item: null
+        options: [i18n.t("common.delete")]
+        onChosen: function(index) {
+            close();
+            page.confirmSidebarDelete(item);
+        }
+        onClosed: if (page.mode === "list") pane.claimKeyboard()
+    }
+
     Modal {
         id: createGroupModal
         visible: page.mode === "createGroup"
@@ -1007,6 +1069,25 @@ FocusScope {
         onDismissed: page.mode = "list"
     }
 
+    ConfirmModal {
+        objectName: "confirmSidebarDelete"
+        visible: page.mode === "confirmSidebarDelete"
+        acceptText: i18n.t("common.delete")
+        destructive: true
+        question: page.selectedSidebarId.startsWith("collection:")
+            ? i18n.t("ui.confirm_delete_collection", { "name": page.selectedSidebarLabel })
+            : i18n.t("ui.confirm_delete_group", { "name": page.selectedSidebarLabel })
+
+        onAccepted: {
+            controller.deleteSidebarItem(page.selectedSidebarId);
+            page.mode = "list";
+        }
+        onDismissed: {
+            page.mode = "list";
+            page.returnToSidebar();
+        }
+    }
+
     HelpModal {
         visible: page.mode === "help"
         sections: [
@@ -1024,6 +1105,7 @@ FocusScope {
                           ["Ctrl+X", i18n.t("ui.help_delete_entry")],
                           ["Ctrl+G", i18n.t("generator.help")],
                           ["Ctrl+S", i18n.t("ui.help_sidebar")],
+                          ["Ctrl+X / Delete", i18n.t("ui.help_delete_sidebar_item")],
                           ["Ctrl+Shift+S", i18n.t("bitwarden.send_help")],
                           ["Ctrl+R", i18n.t("ui.help_sync")],
                           ["Ctrl+I", i18n.t("pin.help")]]

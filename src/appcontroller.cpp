@@ -1533,6 +1533,100 @@ bool AppController::createBitwardenCollection(const QString &organizationId, con
     return true;
 }
 
+namespace {
+
+const QString groupSectionPrefix = QStringLiteral("group:");
+const QString collectionSectionPrefix = QStringLiteral("collection:");
+
+}
+
+QString AppController::sidebarDeleteBlocker(const QString &id) const {
+    const bool isGroup = id.startsWith(groupSectionPrefix);
+    const bool isCollection = id.startsWith(collectionSectionPrefix);
+    if (m_vault.isNull() || (!isGroup && !isCollection))
+        return I18n::t(QStringLiteral("app.sidebar_not_deletable"));
+
+    QVariantMap item;
+    for (const QVariant &v : m_sidebarItems) {
+        const QVariantMap candidate = v.toMap();
+        if (candidate.value(QStringLiteral("id")).toString() == id) {
+            item = candidate;
+            break;
+        }
+    }
+    if (item.isEmpty())
+        return I18n::t(QStringLiteral("app.sidebar_not_deletable"));
+
+    // The counts are of the entries at or below the item, so a parent of a
+    // non-empty group is not empty either.
+    if (item.value(QStringLiteral("count")).toInt() > 0)
+        return I18n::t(isGroup ? QStringLiteral("app.group_not_empty")
+                               : QStringLiteral("app.collection_not_empty"));
+    if (item.value(QStringLiteral("hasChildren")).toBool())
+        return I18n::t(isGroup ? QStringLiteral("app.group_has_subgroups")
+                               : QStringLiteral("app.collection_has_children"));
+
+    if (isCollection) {
+        auto *bw = dynamic_cast<BitwardenVault *>(m_vault.data());
+        if (!bw)
+            return I18n::t(QStringLiteral("app.sidebar_not_deletable"));
+        const QString name = id.mid(collectionSectionPrefix.size());
+        int matches = 0;
+        for (const BwCollectionItem &c : bw->collections()) {
+            if (c.name == name)
+                ++matches;
+        }
+        if (matches == 0)
+            return I18n::t(QStringLiteral("app.collection_not_found"));
+        if (matches > 1)
+            return I18n::t(QStringLiteral("app.collection_ambiguous"));
+    }
+    return {};
+}
+
+void AppController::deleteSidebarItem(const QString &id) {
+    const QString blocker = sidebarDeleteBlocker(id);
+    if (!blocker.isEmpty()) {
+        showMessage(blocker, true);
+        return;
+    }
+    if (!vaultReadyForChanges())
+        return;
+
+    const bool isGroup = id.startsWith(groupSectionPrefix);
+    QString collectionId;
+    if (!isGroup) {
+        const QString name = id.mid(collectionSectionPrefix.size());
+        for (const BwCollectionItem &c : static_cast<BitwardenVault *>(m_vault.data())->collections()) {
+            if (c.name == name)
+                collectionId = c.id;
+        }
+    }
+    const QString group = id.mid(groupSectionPrefix.size());
+    const Vault *vault = m_vault.data();
+    runInBackground(
+        [vault, isGroup, group, collectionId]() {
+            TaskResult r;
+            r.ok = isGroup ? vault->removeGroup(group, &r.error)
+                           : static_cast<const BitwardenVault *>(vault)->deleteCollection(collectionId,
+                                                                                          &r.error);
+            return r;
+        },
+        [this, id, isGroup](const TaskResult &r) {
+            if (!r.ok) {
+                showMessage(I18n::t(QStringLiteral("app.delete_error"), QStringLiteral("err"), r.error),
+                            true);
+                return;
+            }
+            if (m_activeSection == id)
+                m_activeSection = QStringLiteral("all");
+            showMessage(I18n::t(isGroup ? QStringLiteral("app.group_deleted")
+                                        : QStringLiteral("app.collection_deleted")),
+                        false);
+            refreshEntries();
+        });
+}
+
 void AppController::selectSection(const QString &section) {
     if (section.isEmpty() || m_activeSection == section)
         return;

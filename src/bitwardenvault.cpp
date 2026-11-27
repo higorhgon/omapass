@@ -654,6 +654,55 @@ bool BitwardenVault::createCollection(const QString &organizationId, const QStri
     return true;
 }
 
+bool BitwardenVault::deleteCollection(const QString &collectionId, QString *error) const {
+    QString organizationId;
+    {
+        const QMutexLocker locker(&m_mutex);
+        for (const BwCollectionItem &c : std::as_const(m_collections)) {
+            if (c.id == collectionId) {
+                organizationId = c.organizationId;
+                break;
+            }
+        }
+    }
+    if (collectionId.isEmpty() || organizationId.isEmpty()) {
+        if (error)
+            *error = I18n::t(QStringLiteral("app.collection_not_found"));
+        return false;
+    }
+
+    const BwResponse response = request(
+        "DELETE", QStringLiteral("/organizations/%1/collections/%2").arg(organizationId, collectionId),
+        error);
+    if (!response.ok())
+        return false;
+
+    // Items keep existing in the organization; only the link to the
+    // collection goes, here as on the server.
+    {
+        const QMutexLocker locker(&m_mutex);
+        removeById(&m_state.collections, collectionId);
+        for (int i = 0; i < m_state.ciphers.size(); ++i) {
+            QJsonObject cipher = m_state.ciphers.at(i).toObject();
+            QJsonArray ids = cipher.value(QStringLiteral("collectionIds")).toArray();
+            bool changed = false;
+            for (int j = ids.size() - 1; j >= 0; --j) {
+                if (ids.at(j).toString() == collectionId) {
+                    ids.removeAt(j);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                cipher.insert(QStringLiteral("collectionIds"), ids);
+                m_state.ciphers.replace(i, cipher);
+            }
+        }
+        rebuild();
+    }
+    persist();
+    return true;
+}
+
 bool BitwardenVault::createGroup(const QString &group, QString *error) const {
     const QString trimmed = group.trimmed();
     if (trimmed.isEmpty()) {

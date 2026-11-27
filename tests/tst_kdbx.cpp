@@ -2,6 +2,9 @@
 
 #include "support.h"
 
+#include "appcontroller.h"
+#include "config.h"
+#include "i18n.h"
 #include "kdbx.h"
 #include "kdbx2pass.h"
 #include "keepassvault.h"
@@ -41,6 +44,63 @@ class TestKdbx : public QObject {
     Q_OBJECT
 
 private slots:
+    // The sidebar deletes a group only once nothing is left in it: no entry,
+    // at any depth, and no subgroup.
+    void sidebarDeletesOnlyEmptyGroups() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("grupos.kdbx"));
+        {
+            auto db = KdbxDatabase::create(Secret(QStringLiteral("senha")), QStringLiteral("Grupos"));
+            KdbxEntry entry;
+            entry.title = QStringLiteral("Mail");
+            QVERIFY(db->addEntry(QStringLiteral("Cheio"), entry).isEmpty());
+            QVERIFY(db->createGroup(QStringLiteral("Vazio")).isEmpty());
+            QVERIFY(db->createGroup(QStringLiteral("Pai/Filho")).isEmpty());
+            QVERIFY(db->save(path).isEmpty());
+        }
+
+        AppConfig config;
+        config.autoSearch = true;
+        config.searchPath = dir.path();
+        config.recencyEnabled = false;
+        AppController app(config);
+        QTRY_VERIFY(!app.scanning());
+        app.setDatabaseQuery(QStringLiteral("grupos.kdbx"));
+        QCOMPARE(app.databases().size(), 1);
+        app.selectDatabase(0);
+        app.unlock(QStringLiteral("senha"));
+        QTRY_VERIFY(!app.busy());
+
+        const auto sidebarIds = [&]() {
+            QStringList ids;
+            for (const QVariant &v : app.sidebarItems())
+                ids.append(v.toMap().value(QStringLiteral("id")).toString());
+            return ids;
+        };
+        QVERIFY(sidebarIds().contains(QStringLiteral("group:Vazio")));
+
+        QCOMPARE(app.sidebarDeleteBlocker(QStringLiteral("group:Cheio")),
+                 I18n::t(QStringLiteral("app.group_not_empty")));
+        QCOMPARE(app.sidebarDeleteBlocker(QStringLiteral("group:Pai")),
+                 I18n::t(QStringLiteral("app.group_has_subgroups")));
+        QCOMPARE(app.sidebarDeleteBlocker(QStringLiteral("all")),
+                 I18n::t(QStringLiteral("app.sidebar_not_deletable")));
+        QVERIFY(app.sidebarDeleteBlocker(QStringLiteral("group:Vazio")).isEmpty());
+
+        // Refused even when asked directly, past the question.
+        app.deleteSidebarItem(QStringLiteral("group:Cheio"));
+        QTRY_VERIFY(!app.busy());
+        QVERIFY(sidebarIds().contains(QStringLiteral("group:Cheio")));
+        QCOMPARE(app.message(), I18n::t(QStringLiteral("app.group_not_empty")));
+
+        app.selectSection(QStringLiteral("group:Vazio"));
+        app.deleteSidebarItem(QStringLiteral("group:Vazio"));
+        QTRY_VERIFY(!sidebarIds().contains(QStringLiteral("group:Vazio")));
+        QCOMPARE(app.activeSection(), QStringLiteral("all"));
+        QCOMPARE(app.message(), I18n::t(QStringLiteral("app.group_deleted")));
+    }
+
 #ifdef Q_OS_UNIX
     void findsMiseFdWithARestrictedPath() {
         const QTemporaryDir home;

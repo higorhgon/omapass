@@ -125,6 +125,7 @@ public:
     QVector<BwTrashItem> trashItems() const;
     QVector<BwSendItem> sends() const;
     bool createCollection(const QString &organizationId, const QString &name, QString *error) const;
+    bool deleteCollection(const QString &collectionId, QString *error) const;
     bool restoreCipher(const QString &cipherId, QString *error) const;
     bool purgeCipher(const QString &cipherId, QString *error) const;
     bool deleteSend(const QString &sendId, QString *error) const;
