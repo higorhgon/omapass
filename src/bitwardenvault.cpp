@@ -458,6 +458,11 @@ bool BitwardenVault::createSend(const BwSendOptions &options, QString *shareUrl,
 
             BwResponse uploadResponse;
             if (uploadType == 1 && !uploadUrl.isEmpty()) {
+                if (!isBwAzureUploadUrl(uploadUrl)) {
+                    *error = I18n::t(QStringLiteral("bitwarden.send_error"), QStringLiteral("err"),
+                                     QStringLiteral("upload url"));
+                    return false;
+                }
                 uploadResponse = BwApi::putRaw(uploadUrl, *encFile,
                                                {{"x-ms-blob-type", "BlockBlob"},
                                                 {"x-ms-version", "2019-07-07"},

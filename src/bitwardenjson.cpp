@@ -44,6 +44,17 @@ std::optional<QString> normalizeBwServer(const QString &input) {
     return clean.toString();
 }
 
+bool isBwAzureUploadUrl(const QString &url) {
+    const QUrl parsed(url, QUrl::StrictMode);
+    if (!parsed.isValid() || parsed.scheme() != QLatin1String("https") || !parsed.userInfo().isEmpty())
+        return false;
+    if (parsed.port() != -1 && parsed.port() != 443)
+        return false;
+    const QString host = parsed.host().toLower();
+    static const QString suffix = QStringLiteral(".blob.core.windows.net");
+    return host.size() > suffix.size() && host.endsWith(suffix);
+}
+
 QString bwServerLabel(const QString &serverUrl) {
     return serverUrl.isEmpty() ? QStringLiteral("bitwarden.com") : serverUrl;
 }

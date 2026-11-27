@@ -58,6 +58,20 @@ class TestBitwarden : public QObject {
     Q_OBJECT
 
 private slots:
+    void azureUploadUrlIsOnlyHttpsBlobStorage() {
+        QVERIFY(isBwAzureUploadUrl(QStringLiteral(
+            "https://sendprod.blob.core.windows.net/sendfiles/abc/def?sv=2019-07-07&sig=x")));
+        QVERIFY(isBwAzureUploadUrl(QStringLiteral("https://SendProd.Blob.Core.Windows.Net:443/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("http://sendprod.blob.core.windows.net/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://evil.example/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://blob.core.windows.net.evil.example/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://evilblob.core.windows.net/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://.blob.core.windows.net/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://x.blob.core.windows.net@evil.example/a")));
+        QVERIFY(!isBwAzureUploadUrl(QStringLiteral("https://x.blob.core.windows.net:8443/a")));
+        QVERIFY(!isBwAzureUploadUrl(QString()));
+    }
+
     void bitwardenServerIsNormalised() {
         // bitwarden.com, however it is written, is bw's default.
         for (const char *cloud : {"", "  ", "bitwarden.com", "vault.bitwarden.com",

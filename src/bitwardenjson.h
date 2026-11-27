@@ -25,6 +25,11 @@ std::optional<QString> normalizeBwServer(const QString &input);
 // How the login sheet shows a normalised server: "bitwarden.com" for the
 // default, the address itself otherwise.
 QString bwServerLabel(const QString &serverUrl);
+// Whether a Send file may be PUT straight to this address. The server only
+// hands one out for Azure storage (fileUploadType 1, the official cloud), so
+// anything other than https on *.blob.core.windows.net is refused rather than
+// letting the server point the upload at a host of its choosing.
+bool isBwAzureUploadUrl(const QString &url);
 
 // One login item as the entry list knows it.
 struct BwItemRef {
